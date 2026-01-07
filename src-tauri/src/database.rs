@@ -30,7 +30,8 @@ impl DbState {
                 artist TEXT,
                 album TEXT,
                 duration INTEGER,
-                cover_path TEXT
+                cover_path TEXT,
+                added_at INTEGER
             )",
             [],
         )
@@ -106,6 +107,10 @@ impl DbState {
         }
         if !columns.contains(&"file_size".to_string()) {
             conn.execute("ALTER TABLE songs ADD COLUMN file_size INTEGER", [])
+                .ok();
+        }
+        if !columns.contains(&"added_at".to_string()) {
+            conn.execute("ALTER TABLE songs ADD COLUMN added_at INTEGER", [])
                 .ok();
         }
 

@@ -1,8 +1,41 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { Song } from '../../composables/player';
+import { usePlayer, Song } from '../../composables/player';
+
+const { playlistSortMode, setPlaylistSortMode } = usePlayer();
+
+const showSortMenu = ref(false);
+const sortMenuX = ref(0);
+const sortMenuY = ref(0);
+const sortMenuIsRightAligned = ref(false);
+
+const handleSortClick = (e: MouseEvent) => {
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  const windowWidth = window.innerWidth;
+  
+  if (rect.left > windowWidth / 2) {
+    sortMenuIsRightAligned.value = true;
+    sortMenuX.value = windowWidth - rect.right;
+  } else {
+    sortMenuIsRightAligned.value = false;
+    sortMenuX.value = rect.left;
+  }
+  
+  sortMenuY.value = rect.bottom + 8;
+  showSortMenu.value = !showSortMenu.value;
+};
+
+const handleGlobalClick = (e: MouseEvent) => {
+  const target = e.target as HTMLElement;
+  if (!target.closest('.sort-menu-trigger')) {
+    showSortMenu.value = false;
+  }
+};
+
+onMounted(() => window.addEventListener('click', handleGlobalClick));
+onUnmounted(() => window.removeEventListener('click', handleGlobalClick));
 
 const props = defineProps<{
   title: string;
@@ -113,6 +146,42 @@ const handlePlayAll = () => {
                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
              </svg>
            </button>
+
+           <!-- 排序方式按钮 -->
+           <button 
+             @click.stop="handleSortClick"
+             title="排序方式"
+             class="sort-menu-trigger bg-white/1 hover:bg-white/10 border border-white/1 text-gray-900 dark:text-gray-100 px-5 py-2 rounded-full text-sm font-medium transition flex items-center gap-2 active:scale-95 shadow-sm hover:border-gray-200 dark:hover:border-white/20"
+             :class="{ 'text-blue-500 border-blue-200 bg-blue-50/50 dark:bg-blue-500/10': playlistSortMode !== 'custom' }"
+           >
+             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+             </svg>
+           </button>
+
+           <!-- 排序菜单 -->
+           <Teleport to="body">
+             <div 
+               v-if="showSortMenu"
+               class="fixed z-[9999] bg-white dark:bg-[#2b2b2b] rounded-lg shadow-xl border border-gray-100 dark:border-white/10 py-1 min-w-[120px] isolate animate-in fade-in zoom-in-95 duration-100"
+               :style="sortMenuIsRightAligned 
+                 ? { right: sortMenuX + 'px', top: sortMenuY + 'px' }
+                 : { left: sortMenuX + 'px', top: sortMenuY + 'px' }"
+             >
+               <div 
+                 v-for="mode in (['title', 'name', 'artist', 'added_at', 'custom'] as const)" 
+                 :key="mode"
+                 @click="setPlaylistSortMode(mode); showSortMenu = false"
+                 class="px-3 py-2 text-xs cursor-pointer flex items-center justify-between hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                 :class="playlistSortMode === mode ? 'text-blue-500 font-medium' : 'text-gray-600 dark:text-gray-300'"
+               >
+                 <span>{{ { title: '歌曲名', name: '文件名', artist: '歌手', added_at: '添加时间', custom: '自定义' }[mode] }}</span>
+                 <svg v-if="playlistSortMode === mode" xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                   <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                 </svg>
+               </div>
+             </div>
+           </Teleport>
         </div>
       </div>
     </div>

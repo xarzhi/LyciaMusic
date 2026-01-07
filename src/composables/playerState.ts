@@ -71,6 +71,17 @@ export const albumSortMode = ref<'count' | 'name' | 'custom'>('count');
 export const artistCustomOrder = ref<string[]>([]);
 export const albumCustomOrder = ref<string[]>([]);
 
+// 🟢 文件夹排序状态
+export const folderSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'custom'>('title'); // title=歌曲名, name=文件名
+export const folderCustomOrder = ref<Record<string, string[]>>({}); // 每个文件夹的自定义排序
+
+// 🟢 本地音乐排序状态
+export const localSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'default'>('default');
+
+// 🟢 歌单排序状态
+export const playlistSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'custom'>('custom');
+
+
 // --- 设置 ---
 export const settings = ref<AppSettings>({
   organizeRoot: 'D:\\Music',

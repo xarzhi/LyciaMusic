@@ -20,6 +20,7 @@ pub struct Song {
     pub bit_depth: Option<u8>,
     pub format: String,
     pub file_size: u64,
+    pub added_at: Option<u64>,
 }
 
 #[derive(Serialize)]

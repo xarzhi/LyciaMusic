@@ -33,7 +33,7 @@ pub fn scan_single_directory_internal(
                     let path_str = normalize_path(&raw_path_str);
                     let format = ext_str.clone();
 
-                    let mut stmt = conn.prepare("SELECT title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size FROM songs WHERE path = ?1").unwrap();
+                    let mut stmt = conn.prepare("SELECT title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at FROM songs WHERE path = ?1").unwrap();
                     let db_song = stmt
                         .query_row([&path_str], |row| {
                             Ok((
@@ -50,6 +50,10 @@ pub fn scan_single_directory_internal(
                                     bit_depth: row.get::<_, Option<u8>>(7).unwrap_or(None),
                                     format: row.get(8).unwrap_or_else(|_| format.clone()),
                                     file_size: row.get::<_, i64>(9).unwrap_or(0) as u64,
+                                    added_at: row
+                                        .get::<_, Option<i64>>(10)
+                                        .unwrap_or(None)
+                                        .map(|v| v as u64),
                                 },
                                 row.get::<_, Option<u32>>(5).unwrap_or(None),
                             ))
@@ -89,6 +93,10 @@ pub fn scan_single_directory_internal(
                         let mut sample_rate = 0u32;
                         let mut bit_depth: Option<u8> = None;
                         let mut file_size = 0u64;
+                        let added_at = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs();
 
                         if let Ok(meta) = fs::metadata(path) {
                             file_size = meta.len();
@@ -121,8 +129,8 @@ pub fn scan_single_directory_internal(
                         let file_size_i64 = file_size as i64;
 
                         conn.execute(
-                            "INSERT OR REPLACE INTO songs (path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-                            (&path_str, &title, &artist, &album, &duration, &cover_path, &bitrate, &sample_rate, &bit_depth, &format, &file_size_i64),
+                            "INSERT OR REPLACE INTO songs (path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                            (&path_str, &title, &artist, &album, &duration, &cover_path, &bitrate, &sample_rate, &bit_depth, &format, &file_size_i64, &(added_at as i64)),
                         ).ok();
 
                         songs.push(Song {
@@ -138,6 +146,7 @@ pub fn scan_single_directory_internal(
                             bit_depth,
                             format,
                             file_size,
+                            added_at: Some(added_at),
                         });
                     }
                 }

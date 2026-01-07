@@ -1,6 +1,6 @@
 export interface Song {
   name: string;
-  title?: string; 
+  title?: string;
   path: string;
   artist: string;
   album: string;
@@ -13,18 +13,20 @@ export interface Song {
   sample_rate?: number;
   bit_depth?: number;
   format?: string;
+  file_size?: number;
+  added_at?: number;
 }
 
-export interface HistoryItem { 
-  song: Song; 
-  playedAt: number; 
+export interface HistoryItem {
+  song: Song;
+  playedAt: number;
 }
 
-export interface Playlist { 
-  id: string; 
-  name: string; 
-  songPaths: string[]; 
-  createdAt?: string; 
+export interface Playlist {
+  id: string;
+  name: string;
+  songPaths: string[];
+  createdAt?: string;
 }
 
 export interface ThemeSettings {
@@ -51,9 +53,9 @@ export interface SidebarSettings {
   showFolders: boolean;
 }
 
-export interface AppSettings { 
-  organizeRoot: string; 
-  enableAutoOrganize: boolean; 
+export interface AppSettings {
+  organizeRoot: string;
+  enableAutoOrganize: boolean;
   organizeRule: string;
   theme: ThemeSettings;
   sidebar: SidebarSettings;

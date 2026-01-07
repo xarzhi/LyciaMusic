@@ -8,14 +8,16 @@ export function useSongDrag(
     selectedPaths: Ref<Set<string>>,
     songTableRef: Ref<{ containerRef: HTMLElement | null } | null>
 ) {
-    const { 
-        songList, currentViewMode, addSongsToPlaylist 
+    const {
+        songList, currentViewMode, addSongsToPlaylist,
+        currentFolderFilter, updateFolderOrder // 🟢 导入文件夹排序函数
     } = usePlayer();
+
 
     let isMouseDown = false;
     let startX = 0;
     let startY = 0;
-    const ROW_HEIGHT = 60; 
+    const ROW_HEIGHT = 60;
 
     // 自动滚动
     let autoScrollTimer: number | null = null;
@@ -52,11 +54,11 @@ export function useSongDrag(
         if (isBatchMode.value) {
             const tr = event.currentTarget as HTMLElement;
             const rect = tr.getBoundingClientRect();
-            
+
             // 判断点击位置：如果点击在左侧 60% 区域，视为“选择操作”
             if ((event.clientX - rect.left) / rect.width < 0.6) {
                 isSelectionDragging.value = true;
-                
+
                 // Shift 连选逻辑
                 if (event.shiftKey && lastSelectedIndex.value !== -1) {
                     const start = Math.min(lastSelectedIndex.value, index);
@@ -73,7 +75,7 @@ export function useSongDrag(
                     }
                     lastSelectedIndex.value = index;
                 }
-                
+
                 dragSelectAction.value = selectedPaths.value.has(song.path) ? 'select' : 'deselect';
             } else {
                 // 点击右侧区域，视为“拖拽已选歌曲”
@@ -82,13 +84,13 @@ export function useSongDrag(
                 dragSession.songs = displaySongList.value.filter(s => selectedPaths.value.has(s.path));
                 dragSession.insertIndex = index;
             }
-        } 
+        }
         // --- 分支 B: 普通模式 ---
         else {
             if (['folder', 'playlist', 'all'].includes(currentViewMode.value)) {
                 dragSession.type = 'song';
                 dragSession.songs = [song];
-                dragSession.insertIndex = index; 
+                dragSession.insertIndex = index;
             }
         }
     };
@@ -101,12 +103,12 @@ export function useSongDrag(
         if (isBatchMode.value && isSelectionDragging.value) {
             const container = songTableRef.value?.containerRef;
             if (!container) return;
-            
+
             const rect = container.getBoundingClientRect();
             if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
                 const header = container.querySelector('thead') as HTMLElement | null;
                 const headerHeight = header ? header.offsetHeight : 0;
-                
+
                 const relativeY = e.clientY - rect.top + container.scrollTop;
                 let currentIndex = Math.floor((relativeY - headerHeight) / ROW_HEIGHT);
                 currentIndex = Math.max(0, Math.min(displaySongList.value.length - 1, currentIndex));
@@ -114,7 +116,7 @@ export function useSongDrag(
                 if (currentIndex !== lastSelectedIndex.value) {
                     const start = Math.min(lastSelectedIndex.value, currentIndex);
                     const end = Math.max(lastSelectedIndex.value, currentIndex);
-                    
+
                     for (let i = start; i <= end; i++) {
                         const s = displaySongList.value[i];
                         if (s) {
@@ -127,13 +129,13 @@ export function useSongDrag(
                     }
                     lastSelectedIndex.value = currentIndex;
                 }
-                
+
                 const threshold = 60;
                 if (e.clientY < rect.top + threshold) startAutoScroll('up');
                 else if (e.clientY > rect.bottom - threshold) startAutoScroll('down');
                 else stopAutoScroll();
             }
-            return; 
+            return;
         }
 
         // 拖拽激活判断
@@ -157,26 +159,26 @@ export function useSongDrag(
                 else if (e.clientY > rect.bottom - threshold) startAutoScroll('down');
                 else stopAutoScroll();
             }
-            
+
             const target = document.elementFromPoint(e.clientX, e.clientY);
             const folderEl = target?.closest('.folder-drop-target');
             if (folderEl) {
-                dragSession.targetFolder = { 
-                    path: folderEl.getAttribute('data-folder-path')!, 
-                    name: folderEl.getAttribute('data-folder-name')! 
+                dragSession.targetFolder = {
+                    path: folderEl.getAttribute('data-folder-path')!,
+                    name: folderEl.getAttribute('data-folder-name')!
                 };
                 dragSession.targetPlaylist = null;
                 dragSession.insertIndex = -1;
-                return; 
+                return;
             } else {
                 dragSession.targetFolder = null;
             }
 
             const playlistEl = target?.closest('.playlist-drop-target');
             if (playlistEl) {
-                dragSession.targetPlaylist = { 
-                    id: playlistEl.getAttribute('data-playlist-id')!, 
-                    name: playlistEl.getAttribute('data-playlist-name')! 
+                dragSession.targetPlaylist = {
+                    id: playlistEl.getAttribute('data-playlist-id')!,
+                    name: playlistEl.getAttribute('data-playlist-name')!
                 };
                 dragSession.targetFolder = null;
                 dragSession.insertIndex = -1;
@@ -209,7 +211,7 @@ export function useSongDrag(
                 } else {
                     dragSession.insertIndex = -1;
                 }
-            } 
+            }
         }
     };
 
@@ -223,9 +225,9 @@ export function useSongDrag(
         if (dragSession.active) {
             if (dragSession.targetFolder) {
                 dragSession.showGhost = false;
-                return; 
-            } 
-            
+                return;
+            }
+
             if (dragSession.targetPlaylist) {
                 const paths = dragSession.songs.map(s => s.path);
                 const count = addSongsToPlaylist(dragSession.targetPlaylist.id, paths);
@@ -244,7 +246,7 @@ export function useSongDrag(
                             const sourcePath = movingSongs[0].path;
                             const sourceIndex = pl.songPaths.indexOf(sourcePath);
                             const targetVisualSong = displaySongList.value[dragSession.insertIndex];
-                            
+
                             if (sourceIndex !== -1) {
                                 pl.songPaths.splice(sourceIndex, 1);
                                 if (targetVisualSong) {
@@ -259,14 +261,14 @@ export function useSongDrag(
                                 }
                             }
                         }
-                    } 
+                    }
                     // 处理全局排序
                     else {
                         const sourcePath = movingSongs[0].path;
                         const fullList = [...songList.value];
                         const sourceRealIndex = fullList.findIndex(s => s.path === sourcePath);
                         const targetVisualSong = displaySongList.value[dragSession.insertIndex];
-                        
+
                         if (sourceRealIndex !== -1 && targetVisualSong) {
                             const [item] = fullList.splice(sourceRealIndex, 1);
                             let newTargetIndex = fullList.findIndex(s => s.path === targetVisualSong.path);
@@ -276,10 +278,22 @@ export function useSongDrag(
                                 fullList.splice(newTargetIndex, 0, item);
                             }
                             songList.value = fullList;
+
+                            // 🟢 文件夹视图:保存自定义排序顺序
+                            if (currentViewMode.value === 'folder' && currentFolderFilter.value) {
+                                const newOrder = displaySongList.value.map(s => s.path);
+                                updateFolderOrder(currentFolderFilter.value, newOrder);
+                            }
                         } else if (sourceRealIndex !== -1) {
                             const [item] = fullList.splice(sourceRealIndex, 1);
                             fullList.push(item);
                             songList.value = fullList;
+
+                            // 🟢 文件夹视图:保存自定义排序顺序
+                            if (currentViewMode.value === 'folder' && currentFolderFilter.value) {
+                                const newOrder = displaySongList.value.map(s => s.path);
+                                updateFolderOrder(currentFolderFilter.value, newOrder);
+                            }
                         }
                     }
                 }

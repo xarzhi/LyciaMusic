@@ -690,21 +690,63 @@ export function usePlayer() {
     }
 
     if (State.currentViewMode.value === 'all') {
+      let base = [...librarySongs.value];
+      if (State.localMusicTab.value === 'artist' && State.currentArtistFilter.value) {
+        base = base.filter(s => s.artist === State.currentArtistFilter.value);
+      } else if (State.localMusicTab.value === 'album' && State.currentAlbumFilter.value) {
+        base = base.filter(s => s.album === State.currentAlbumFilter.value);
+      }
 
-      const base = librarySongs.value;
-
-      if (State.localMusicTab.value === 'artist' && State.currentArtistFilter.value) return base.filter(s => s.artist === State.currentArtistFilter.value);
-
-      if (State.localMusicTab.value === 'album' && State.currentAlbumFilter.value) return base.filter(s => s.album === State.currentAlbumFilter.value);
+      // 🟢 应用本地音乐排序
+      if (State.localSortMode.value === 'title') {
+        base.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'zh-CN'));
+      } else if (State.localSortMode.value === 'name') {
+        base.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+      } else if (State.localSortMode.value === 'artist') {
+        base.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
+      } else if (State.localSortMode.value === 'added_at') {
+        base.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
+      }
 
       return base;
-
     }
 
-    // 🟢 关键修改：文件夹视图只显示直属子歌曲，不递归
+    // 🟢 关键修改:文件夹视图只显示直属子歌曲,不递归,并支持排序
     if (State.currentViewMode.value === 'folder') {
       if (State.currentFolderFilter.value) {
-        return State.songList.value.filter(s => isDirectParent(State.currentFolderFilter.value, s.path));
+        let songs = State.songList.value.filter(s => isDirectParent(State.currentFolderFilter.value, s.path));
+
+        // 🟢 添加排序逻辑
+        if (State.folderSortMode.value === 'title') {
+          // 按歌曲名(title优先,否则用文件名)排序
+          songs.sort((a, b) => {
+            const titleA = a.title || a.name;
+            const titleB = b.title || b.name;
+            return titleA.localeCompare(titleB, 'zh-CN');
+          });
+        } else if (State.folderSortMode.value === 'name') {
+          // 按文件名排序
+          songs.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+        } else if (State.folderSortMode.value === 'artist') {
+          // 按歌手名排序
+          songs.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
+        } else if (State.folderSortMode.value === 'added_at') {
+          // 🟢 添加时间排序 (降序)
+          songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
+        } else if (State.folderSortMode.value === 'custom') {
+          // 自定义排序(拖拽后的顺序)
+          const customOrder = State.folderCustomOrder.value[State.currentFolderFilter.value] || [];
+          if (customOrder.length > 0) {
+            const orderMap = new Map(customOrder.map((path, i) => [path, i]));
+            songs.sort((a, b) => {
+              const ia = orderMap.has(a.path) ? orderMap.get(a.path)! : 999999;
+              const ib = orderMap.has(b.path) ? orderMap.get(b.path)! : 999999;
+              return ia - ib;
+            });
+          }
+        }
+
+        return songs;
       } else {
         return []; // 🟢 No folder selected = empty list
       }
@@ -712,18 +754,48 @@ export function usePlayer() {
 
 
 
-    if (State.currentViewMode.value === 'recent') return State.recentSongs.value.map(h => h.song);
+    if (State.currentViewMode.value === 'recent') {
+      let songs = State.recentSongs.value.map(h => h.song);
+
+      // 🟢 应用排序 (与本地音乐共享模式)
+      if (State.localSortMode.value === 'title') {
+        songs.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'zh-CN'));
+      } else if (State.localSortMode.value === 'name') {
+        songs.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+      } else if (State.localSortMode.value === 'artist') {
+        songs.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
+      } else if (State.localSortMode.value === 'added_at') {
+        // 最近播放本身就是按时间排的,但如果用户选了添加时间,则按扫描入库时间排
+        songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
+      }
+
+      return songs;
+    }
 
     if (State.currentViewMode.value === 'favorites') {
+      let songs = [];
+      if (State.favTab.value === 'songs') {
+        songs = [...favoriteSongList.value];
+      } else if (State.favTab.value === 'artists') {
+        songs = State.favDetailFilter.value?.type === 'artist' ? favoriteSongList.value.filter(s => s.artist === State.favDetailFilter.value!.name) : [];
+      } else if (State.favTab.value === 'albums') {
+        songs = State.favDetailFilter.value?.type === 'album' ? favoriteSongList.value.filter(s => s.album === State.favDetailFilter.value!.name) : [];
+      } else {
+        songs = [...favoriteSongList.value];
+      }
 
-      if (State.favTab.value === 'songs') return favoriteSongList.value;
+      // 🟢 应用排序
+      if (State.localSortMode.value === 'title') {
+        songs.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'zh-CN'));
+      } else if (State.localSortMode.value === 'name') {
+        songs.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+      } else if (State.localSortMode.value === 'artist') {
+        songs.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
+      } else if (State.localSortMode.value === 'added_at') {
+        songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
+      }
 
-      if (State.favTab.value === 'artists') return State.favDetailFilter.value?.type === 'artist' ? favoriteSongList.value.filter(s => s.artist === State.favDetailFilter.value!.name) : [];
-
-      if (State.favTab.value === 'albums') return State.favDetailFilter.value?.type === 'album' ? favoriteSongList.value.filter(s => s.album === State.favDetailFilter.value!.name) : [];
-
-      return favoriteSongList.value;
-
+      return songs;
     }
 
     if (State.currentViewMode.value === 'playlist') {
@@ -736,9 +808,23 @@ export function usePlayer() {
         if (!songMap.has(s.path)) songMap.set(s.path, s);
       });
 
-      return pl.songPaths
+      let songs = pl.songPaths
         .map(path => songMap.get(path))
         .filter((s): s is State.Song => !!s);
+
+      // 🟢 应用歌单排序
+      if (State.playlistSortMode.value === 'title') {
+        songs.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'zh-CN'));
+      } else if (State.playlistSortMode.value === 'name') {
+        songs.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+      } else if (State.playlistSortMode.value === 'artist') {
+        songs.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
+      } else if (State.playlistSortMode.value === 'added_at') {
+        songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
+      }
+      // 'custom' 模式不需要排序,因为它已经通过 map(path => ...) 维持了 songPaths 的顺序
+
+      return songs;
     }
 
     return librarySongs.value.filter(s => (s.artist || 'Unknown') === State.filterCondition.value || (s.album || 'Unknown') === State.filterCondition.value || (s.genre || 'Unknown') === State.filterCondition.value || ((s.year?.substring(0, 4)) || 'Unknown') === State.filterCondition.value);
@@ -1473,6 +1559,20 @@ export function usePlayer() {
       if (State.albumSortMode.value !== 'custom') State.albumSortMode.value = 'custom';
       if (State.albumSortMode.value !== 'custom') State.albumSortMode.value = 'custom';
     }, // 🟢 comma added
+    // 🟢 文件夹排序相关
+    updateFolderOrder: (folderPath: string, newOrder: string[]) => {
+      State.folderCustomOrder.value[folderPath] = newOrder;
+      if (State.folderSortMode.value !== 'custom') State.folderSortMode.value = 'custom';
+    },
+    setFolderSortMode: (mode: 'title' | 'name' | 'artist' | 'added_at' | 'custom') => {
+      State.folderSortMode.value = mode;
+    },
+    setLocalSortMode: (mode: 'title' | 'name' | 'artist' | 'added_at' | 'default') => {
+      State.localSortMode.value = mode;
+    },
+    setPlaylistSortMode: (mode: 'title' | 'name' | 'artist' | 'added_at' | 'custom') => {
+      State.playlistSortMode.value = mode;
+    },
 
     // Sidebar (Decoupled)
     folderTree: State.folderTree,
@@ -1481,6 +1581,12 @@ export function usePlayer() {
     moveFilePhysical, // 🟢 Export
     fetchFolderTree: fetchSidebarTree,
     addSidebarFolder,
-    removeSidebarFolder
+    removeSidebarFolder,
+
+    // 🟢 导出排序状态
+    folderSortMode: computed(() => State.folderSortMode.value),
+    folderCustomOrder: computed(() => State.folderCustomOrder.value),
+    localSortMode: computed(() => State.localSortMode.value),
+    playlistSortMode: computed(() => State.playlistSortMode.value),
   };
 }

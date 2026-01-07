@@ -15,11 +15,44 @@ const {
   setLocalSortMode,
 } = usePlayer();
 
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 const showSortMenu = ref(false);
 const sortMenuX = ref(0);
 const sortMenuY = ref(0);
 const sortMenuIsRightAligned = ref(false);
+
+// --- Tab Underline Logic ---
+const tabsContainer = ref<HTMLElement | null>(null);
+const underlineStyle = ref({ transform: 'translateX(0)', width: '0px' });
+
+const updateUnderline = async () => {
+  await nextTick();
+  if (!tabsContainer.value) return;
+  
+  const activeBtn = tabsContainer.value.querySelector('.tab-active') as HTMLElement;
+  if (activeBtn) {
+    const containerRect = tabsContainer.value.getBoundingClientRect();
+    const btnRect = activeBtn.getBoundingClientRect();
+    
+    // 我们想要底线居中于按钮文字
+    // 假设底线宽度固定或根据文字宽度
+    const underlineWidth = 16; 
+    const left = (btnRect.left - containerRect.left) + (btnRect.width / 2) - (underlineWidth / 2);
+    
+    underlineStyle.value = {
+      transform: `translateX(${left}px)`,
+      width: `${underlineWidth}px`
+    };
+  }
+};
+
+watch(() => localMusicTab.value, updateUnderline);
+onMounted(() => {
+  window.addEventListener('resize', updateUnderline);
+  updateUnderline();
+});
+onUnmounted(() => window.removeEventListener('resize', updateUnderline));
+// ---------------------------
 
 const handleSortClick = (e: MouseEvent) => {
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -38,7 +71,6 @@ const handleSortClick = (e: MouseEvent) => {
 };
 
 // 全局点击关闭菜单
-import { onMounted, onUnmounted } from 'vue';
 const handleGlobalClick = (e: MouseEvent) => {
   const target = e.target as HTMLElement;
   if (!target.closest('.sort-menu-trigger')) {
@@ -92,25 +124,34 @@ const handleEnterBatchMode = () => {
     <!-- 正常模式 -->
     <div v-else class="flex items-center justify-between">
       <!-- 左侧 Tab 切换 -->
-      <div class="flex items-center gap-6 text-base font-medium pb-1">
+      <div class="flex items-center gap-6 relative pb-1" ref="tabsContainer">
         <button 
           @click="switchLocalTab('default')" 
-          :class="localMusicTab === 'default' ? 'text-gray-900 dark:text-white font-bold text-xl relative after:content-[\'\'] after:absolute after:-bottom-2 after:left-1/2 after:-translate-x-1/2 after:w-4 after:h-1 after:bg-[#EC4141] after:rounded-full' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'"
+          class="tab-item transition-all duration-300 ease-out active:scale-90"
+          :class="localMusicTab === 'default' ? 'tab-active text-gray-900 dark:text-white font-bold text-xl' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-lg'"
         >
           单曲
         </button>
         <button 
           @click="switchLocalTab('artist')" 
-          :class="localMusicTab === 'artist' ? 'text-gray-900 dark:text-white font-bold text-xl relative after:content-[\'\'] after:absolute after:-bottom-2 after:left-1/2 after:-translate-x-1/2 after:w-4 after:h-1 after:bg-[#EC4141] after:rounded-full' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'"
+          class="tab-item transition-all duration-300 ease-out active:scale-90"
+          :class="localMusicTab === 'artist' ? 'tab-active text-gray-900 dark:text-white font-bold text-xl' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-lg'"
         >
           歌手
         </button>
         <button 
           @click="switchLocalTab('album')" 
-          :class="localMusicTab === 'album' ? 'text-gray-900 dark:text-white font-bold text-xl relative after:content-[\'\'] after:absolute after:-bottom-2 after:left-1/2 after:-translate-x-1/2 after:w-4 after:h-1 after:bg-[#EC4141] after:rounded-full' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'"
+          class="tab-item transition-all duration-300 ease-out active:scale-90"
+          :class="localMusicTab === 'album' ? 'tab-active text-gray-900 dark:text-white font-bold text-xl' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-lg'"
         >
           专辑
         </button>
+        
+        <!-- 滑动底线 -->
+        <div 
+          class="absolute -bottom-1 h-1 bg-[#EC4141] rounded-full transition-all duration-300 ease-out pointer-events-none"
+          :style="underlineStyle"
+        ></div>
       </div>
 
       <!-- 右侧操作按钮 -->

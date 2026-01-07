@@ -15,6 +15,7 @@ export interface Song {
   format?: string;
   file_size?: number;
   added_at?: number;
+  file_modified_at?: number;
 }
 
 export interface HistoryItem {

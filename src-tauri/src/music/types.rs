@@ -21,6 +21,7 @@ pub struct Song {
     pub format: String,
     pub file_size: u64,
     pub added_at: Option<u64>,
+    pub file_modified_at: Option<u64>,
 }
 
 #[derive(Serialize)]

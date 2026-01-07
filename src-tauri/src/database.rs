@@ -113,6 +113,10 @@ impl DbState {
             conn.execute("ALTER TABLE songs ADD COLUMN added_at INTEGER", [])
                 .ok();
         }
+        if !columns.contains(&"file_modified_at".to_string()) {
+            conn.execute("ALTER TABLE songs ADD COLUMN file_modified_at INTEGER", [])
+                .ok();
+        }
 
         Ok(DbState {
             conn: Arc::new(Mutex::new(conn)),

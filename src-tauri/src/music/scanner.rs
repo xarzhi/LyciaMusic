@@ -12,147 +12,273 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, State};
 use walkdir::WalkDir;
 
-/// 内部扫描核心逻辑
+/// 数据库中歌曲的快照信息
+struct DbSongSnapshot {
+    file_modified_at: Option<i64>,
+    file_size: i64,
+}
+
+/// 从文件解析歌曲信息
+fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Song> {
+    let mut artist = String::from("未知歌手");
+    let mut album = String::from("未知专辑");
+    let mut title = String::new();
+    let mut duration = 0u32;
+    let mut bitrate = 0u32;
+    let mut sample_rate = 0u32;
+    let mut bit_depth: Option<u8> = None;
+    let mut file_size = 0u64;
+    let mut file_modified_at: Option<u64> = None;
+
+    if let Ok(meta) = fs::metadata(path) {
+        file_size = meta.len();
+        if let Ok(modified) = meta.modified() {
+            file_modified_at = modified
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()
+                .map(|d| d.as_secs());
+        }
+    }
+
+    if let Ok(tagged_file) = Probe::open(path)
+        .map_err(|e| e.to_string())
+        .and_then(|p| p.read().map_err(|e| e.to_string()))
+    {
+        let props = tagged_file.properties();
+        duration = props.duration().as_secs() as u32;
+        bitrate = props.audio_bitrate().unwrap_or(0);
+        sample_rate = props.sample_rate().unwrap_or(0);
+        bit_depth = props.bit_depth().map(|b| b as u8);
+
+        if let Some(tag) = tagged_file.primary_tag() {
+            if let Some(art) = tag.artist() {
+                artist = art.to_string();
+            }
+            if let Some(alb) = tag.album() {
+                album = alb.to_string();
+            }
+            if let Some(tit) = tag.title() {
+                title = tit.to_string();
+            }
+        }
+    }
+
+    Some(Song {
+        name: path.file_name()?.to_string_lossy().to_string(),
+        path: path_str.to_string(),
+        title,
+        artist,
+        album,
+        duration,
+        cover: None,
+        bitrate,
+        sample_rate,
+        bit_depth,
+        format: format.to_string(),
+        file_size,
+        added_at: Some(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        ),
+        file_modified_at,
+    })
+}
+
+/// 内部扫描核心逻辑 - 差异化批量同步
 pub fn scan_single_directory_internal(
     folder_path: String,
     conn: &rusqlite::Connection,
 ) -> Result<Vec<Song>, String> {
-    let mut songs = Vec::new();
     let normalized_folder = normalize_path(&folder_path);
+
+    // ========== 第一步：获取内存快照（仅限当前文件夹） ==========
+    let mut db_snapshot: HashMap<String, DbSongSnapshot> = HashMap::new();
+    {
+        let pattern = format!("{}%", normalized_folder);
+        let mut stmt = conn
+            .prepare("SELECT path, file_modified_at, file_size FROM songs WHERE path LIKE ?1")
+            .map_err(|e| e.to_string())?;
+
+        let rows = stmt
+            .query_map([&pattern], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<i64>>(1)?,
+                    row.get::<_, i64>(2).unwrap_or(0),
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+
+        for row in rows.flatten() {
+            db_snapshot.insert(
+                row.0,
+                DbSongSnapshot {
+                    file_modified_at: row.1,
+                    file_size: row.2,
+                },
+            );
+        }
+    }
+
+    let original_db_count = db_snapshot.len();
+
+    // ========== 第二步：遍历磁盘文件，分类处理 ==========
+    let mut songs: Vec<Song> = Vec::new();
+    let mut to_add: Vec<Song> = Vec::new();
+    let mut to_update: Vec<Song> = Vec::new();
+    let mut disk_paths: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for entry in WalkDir::new(&normalized_folder)
         .into_iter()
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
-        if path.is_file() {
-            if let Some(ext) = path.extension() {
-                let ext_str = ext.to_string_lossy().to_lowercase();
-                if ["mp3", "flac", "wav"].contains(&ext_str.as_str()) {
-                    let raw_path_str = path.to_string_lossy().to_string();
-                    let path_str = normalize_path(&raw_path_str);
-                    let format = ext_str.clone();
+        if !path.is_file() {
+            continue;
+        }
 
-                    let mut stmt = conn.prepare("SELECT title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at FROM songs WHERE path = ?1").unwrap();
-                    let db_song = stmt
-                        .query_row([&path_str], |row| {
-                            Ok((
-                                Song {
-                                    name: path.file_name().unwrap().to_string_lossy().to_string(),
-                                    path: path_str.clone(),
-                                    title: row.get(0).unwrap_or_default(),
-                                    artist: row.get(1).unwrap_or_default(),
-                                    album: row.get(2).unwrap_or_default(),
-                                    duration: row.get(3).unwrap_or_default(),
-                                    cover: row.get(4).unwrap_or_default(),
-                                    bitrate: row.get(5).unwrap_or(0),
-                                    sample_rate: row.get(6).unwrap_or(0),
-                                    bit_depth: row.get::<_, Option<u8>>(7).unwrap_or(None),
-                                    format: row.get(8).unwrap_or_else(|_| format.clone()),
-                                    file_size: row.get::<_, i64>(9).unwrap_or(0) as u64,
-                                    added_at: row
-                                        .get::<_, Option<i64>>(10)
-                                        .unwrap_or(None)
-                                        .map(|v| v as u64),
-                                },
-                                row.get::<_, Option<u32>>(5).unwrap_or(None),
-                            ))
-                        })
-                        .optional()
-                        .unwrap_or(None);
+        let ext = match path.extension() {
+            Some(e) => e.to_string_lossy().to_lowercase(),
+            None => continue,
+        };
 
-                    if let Some((mut song, db_bitrate)) = db_song {
-                        if db_bitrate.is_none() {
-                            if let Some(tagged_file) =
-                                Probe::open(path).ok().and_then(|p| p.read().ok())
-                            {
-                                let props = tagged_file.properties();
-                                song.bitrate = props.audio_bitrate().unwrap_or(0);
-                                song.sample_rate = props.sample_rate().unwrap_or(0);
-                                song.bit_depth = props.bit_depth().map(|b| b as u8);
-                                song.format = format.clone();
+        if !["mp3", "flac", "wav"].contains(&ext.as_str()) {
+            continue;
+        }
 
-                                if let Ok(meta) = fs::metadata(path) {
-                                    song.file_size = meta.len();
-                                }
+        let raw_path_str = path.to_string_lossy().to_string();
+        let path_str = normalize_path(&raw_path_str);
+        disk_paths.insert(path_str.clone());
 
-                                let file_size_i64 = song.file_size as i64;
-                                conn.execute(
-                                    "UPDATE songs SET bitrate = ?1, sample_rate = ?2, bit_depth = ?3, format = ?4, file_size = ?5 WHERE path = ?6",
-                                    (&song.bitrate, &song.sample_rate, &song.bit_depth, &song.format, &file_size_i64, &path_str),
-                                ).ok();
-                            }
-                        }
-                        songs.push(song);
-                    } else {
-                        let mut artist = String::from("未知歌手");
-                        let mut album = String::from("未知专辑");
-                        let mut title = String::new();
-                        let mut duration = 0u32;
-                        let mut bitrate = 0u32;
-                        let mut sample_rate = 0u32;
-                        let mut bit_depth: Option<u8> = None;
-                        let mut file_size = 0u64;
-                        let added_at = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs();
+        // 获取磁盘文件的 mtime 和 size
+        let (disk_mtime, disk_size) = match fs::metadata(path) {
+            Ok(meta) => {
+                let mtime = meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64);
+                let size = meta.len() as i64;
+                (mtime, size)
+            }
+            Err(_) => continue,
+        };
 
-                        if let Ok(meta) = fs::metadata(path) {
-                            file_size = meta.len();
-                        }
-
-                        if let Ok(tagged_file) = Probe::open(path)
-                            .map_err(|e| e.to_string())
-                            .and_then(|p| p.read().map_err(|e| e.to_string()))
-                        {
-                            let props = tagged_file.properties();
-                            duration = props.duration().as_secs() as u32;
-                            bitrate = props.audio_bitrate().unwrap_or(0);
-                            sample_rate = props.sample_rate().unwrap_or(0);
-                            bit_depth = props.bit_depth().map(|b| b as u8);
-
-                            if let Some(tag) = tagged_file.primary_tag() {
-                                if let Some(art) = tag.artist() {
-                                    artist = art.to_string();
-                                }
-                                if let Some(alb) = tag.album() {
-                                    album = alb.to_string();
-                                }
-                                if let Some(tit) = tag.title() {
-                                    title = tit.to_string();
-                                }
-                            }
-                        }
-
-                        let cover_path: Option<String> = None;
-                        let file_size_i64 = file_size as i64;
-
-                        conn.execute(
-                            "INSERT OR REPLACE INTO songs (path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-                            (&path_str, &title, &artist, &album, &duration, &cover_path, &bitrate, &sample_rate, &bit_depth, &format, &file_size_i64, &(added_at as i64)),
-                        ).ok();
-
-                        songs.push(Song {
-                            name: path.file_name().unwrap().to_string_lossy().to_string(),
-                            path: path_str,
-                            title,
-                            artist,
-                            album,
-                            duration,
-                            cover: cover_path,
-                            bitrate,
-                            sample_rate,
-                            bit_depth,
-                            format,
-                            file_size,
-                            added_at: Some(added_at),
-                        });
-                    }
+        if let Some(db_info) = db_snapshot.remove(&path_str) {
+            // Case B: 数据库中存在，对比 mtime 和 size
+            if db_info.file_modified_at != disk_mtime || db_info.file_size != disk_size {
+                // 文件已修改 → 重新解析
+                if let Some(song) = parse_song_from_file(path, &path_str, &ext) {
+                    to_update.push(song.clone());
+                    songs.push(song);
                 }
+            } else {
+                // 文件未修改 → 从数据库读取完整信息
+                let mut stmt = conn
+                    .prepare("SELECT title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at, file_modified_at FROM songs WHERE path = ?1")
+                    .map_err(|e| e.to_string())?;
+
+                if let Ok(song) = stmt.query_row([&path_str], |row| {
+                    Ok(Song {
+                        name: path.file_name().unwrap().to_string_lossy().to_string(),
+                        path: path_str.clone(),
+                        title: row.get(0).unwrap_or_default(),
+                        artist: row.get(1).unwrap_or_default(),
+                        album: row.get(2).unwrap_or_default(),
+                        duration: row.get(3).unwrap_or_default(),
+                        cover: row.get(4).unwrap_or_default(),
+                        bitrate: row.get(5).unwrap_or(0),
+                        sample_rate: row.get(6).unwrap_or(0),
+                        bit_depth: row.get::<_, Option<u8>>(7).unwrap_or(None),
+                        format: row.get(8).unwrap_or_else(|_| ext.clone()),
+                        file_size: row.get::<_, i64>(9).unwrap_or(0) as u64,
+                        added_at: row
+                            .get::<_, Option<i64>>(10)
+                            .unwrap_or(None)
+                            .map(|v| v as u64),
+                        file_modified_at: row
+                            .get::<_, Option<i64>>(11)
+                            .unwrap_or(None)
+                            .map(|v| v as u64),
+                    })
+                }) {
+                    songs.push(song);
+                }
+            }
+        } else {
+            // Case A: 新歌曲
+            if let Some(song) = parse_song_from_file(path, &path_str, &ext) {
+                to_add.push(song.clone());
+                songs.push(song);
             }
         }
     }
+
+    // ========== 第三步：处理残留（幽灵歌曲） ==========
+    let to_delete: Vec<String> = db_snapshot.keys().cloned().collect();
+
+    // ========== 第四步：空阈值保护 ==========
+    // 只有当磁盘上完全没有音频文件时才触发保护
+    // 如果磁盘上有新文件（比如重命名场景），则允许刷新
+    if disk_paths.is_empty() && original_db_count > 0 {
+        return Err("文件夹可能已断开连接或路径错误，未执行删除操作".to_string());
+    }
+
+    // ========== 第五步：事务批量提交 ==========
+    conn.execute("BEGIN TRANSACTION", [])
+        .map_err(|e| e.to_string())?;
+
+    // INSERT 新歌曲
+    for song in &to_add {
+        let file_size_i64 = song.file_size as i64;
+        let added_at_i64 = song.added_at.map(|v| v as i64);
+        let mtime_i64 = song.file_modified_at.map(|v| v as i64);
+
+        conn.execute(
+            "INSERT OR REPLACE INTO songs (path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at, file_modified_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            rusqlite::params![
+                &song.path, &song.title, &song.artist, &song.album, &song.duration,
+                &song.cover, &song.bitrate, &song.sample_rate, &song.bit_depth,
+                &song.format, &file_size_i64, &added_at_i64, &mtime_i64
+            ],
+        ).ok();
+    }
+
+    // UPDATE 已修改的歌曲
+    for song in &to_update {
+        let file_size_i64 = song.file_size as i64;
+        let mtime_i64 = song.file_modified_at.map(|v| v as i64);
+
+        conn.execute(
+            "UPDATE songs SET title = ?1, artist = ?2, album = ?3, duration = ?4, bitrate = ?5, sample_rate = ?6, bit_depth = ?7, format = ?8, file_size = ?9, file_modified_at = ?10 WHERE path = ?11",
+            rusqlite::params![
+                &song.title, &song.artist, &song.album, &song.duration,
+                &song.bitrate, &song.sample_rate, &song.bit_depth, &song.format,
+                &file_size_i64, &mtime_i64, &song.path
+            ],
+        ).ok();
+    }
+
+    // DELETE 已删除的歌曲
+    for path in &to_delete {
+        conn.execute("DELETE FROM songs WHERE path = ?1", [path])
+            .ok();
+    }
+
+    conn.execute("COMMIT", []).map_err(|e| e.to_string())?;
+
+    // 日志输出
+    if !to_add.is_empty() || !to_update.is_empty() || !to_delete.is_empty() {
+        println!(
+            "[刷新] 新增: {} 首, 更新: {} 首, 删除: {} 首",
+            to_add.len(),
+            to_update.len(),
+            to_delete.len()
+        );
+    }
+
     Ok(songs)
 }
 

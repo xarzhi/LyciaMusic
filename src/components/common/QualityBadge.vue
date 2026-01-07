@@ -22,16 +22,16 @@ const badgeType = computed(() => {
   const losslessFormats = ['flac', 'wav', 'alac', 'ape'];
   const isLossless = losslessFormats.includes(props.format.toLowerCase());
   
-  // HR: 无损格式 + (采样率 > 44.1kHz 或 位深 > 16bit)
-  if (isLossless && (props.sampleRate > 44100 || (props.bitDepth && props.bitDepth > 16))) {
+  // HR: 无损格式 + (位深 ≥ 24bit 且 采样率 ≥ 48kHz) - Hi-Res 高解析音质标准
+  if (isLossless && props.bitDepth && props.bitDepth >= 24 && props.sampleRate >= 48000) {
     return 'HR';
   }
   // SQ: 无损格式 (标准采样率/位深)
   if (isLossless) {
     return 'SQ';
   }
-  // HQ: 有损格式 >= 320kbps (lofty returns kbps)
-  if (props.bitrate >= 320) {
+  // HQ: 有损格式 >= 256kbps (AAC/OGG/Opus 256kbps ≈ MP3 320kbps)
+  if (props.bitrate >= 256) {
     return 'HQ';
   }
   return null; // 其他情况不显示
@@ -103,8 +103,8 @@ const tooltipContent = computed(() => {
     };
   }
 
-  // Priority 3: HQ (bitrate >= 320k, lofty returns kbps)
-  if (props.bitrate >= 320) {
+  // Priority 3: HQ (bitrate >= 256k for modern codecs)
+  if (props.bitrate >= 256) {
     return {
       emoji: '🎵',
       title: '高品质音乐',

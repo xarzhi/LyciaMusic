@@ -2,12 +2,15 @@
 import { computed, ref } from 'vue';
 
 // 接收父组件传来的参数
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   bitrate: number;
   sampleRate: number;
   bitDepth?: number;
   format: string;
-}>();
+  variant?: 'simple' | 'detailed';
+}>(), {
+  variant: 'simple'
+});
 
 // 控制悬浮提示的显示与隐藏
 const isHovered = ref(false);
@@ -32,6 +35,16 @@ const badgeType = computed(() => {
     return 'HQ';
   }
   return null; // 其他情况不显示
+});
+
+// 1.1 详细标签文本 (仅用于 detailed variant)
+const detailedLabel = computed(() => {
+  switch (badgeType.value) {
+    case 'HR': return 'HI-RES LOSSLESS';
+    case 'SQ': return 'LOSSLESS'; // 或根据偏好改为 CD LOSSLESS
+    case 'HQ': return 'HIGH QUALITY';
+    default: return '';
+  }
 });
 
 // 2. 定义颜色样式
@@ -110,6 +123,7 @@ const tooltipContent = computed(() => {
 });
 
 const showTooltip = () => {
+    if (props.variant === 'detailed') return;
     isHovered.value = true;
     updateTooltipPosition();
 };
@@ -139,11 +153,20 @@ const updateTooltipPosition = () => {
     @mouseleave="hideTooltip"
   >
     <span 
+      v-if="variant === 'simple'"
       class="text-[6px] font-medium border px-0.5 rounded-[3px] cursor-help select-none flex items-center justify-center h-[10px] leading-none transition-colors"
       :class="badgeColorClass"
     >
       {{ badgeType }}
     </span>
+
+    <!-- Detailed Style for Player Detail View -->
+    <div 
+      v-else
+      class="flex items-center gap-1 bg-white/10 px-1.5 py-0.5 rounded-[3px] text-[9px] font-bold text-white/50 tracking-tight select-none"
+    >
+      {{ detailedLabel }}
+    </div>
 
     <Teleport to="body">
         <Transition 

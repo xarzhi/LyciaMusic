@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { usePlayer } from '../../composables/player';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import FooterContextMenu from "../overlays/FooterContextMenu.vue";
+import QualityBadge from '../common/QualityBadge.vue';
 
 const { 
   currentSong, isPlaying, currentTime, playMode, volume,
@@ -176,11 +177,16 @@ const remainingTime = computed(() => {
       <div class="flex justify-between items-center px-0.5">
         <span class="text-[11px] font-semibold text-white/40 tabular-nums">{{ formatDuration(isDraggingProgress ? dragTime : currentTime) }}</span>
         
-        <!-- Quality Label -->
-        <div class="flex items-center gap-1 bg-white/10 px-1.5 py-0.5 rounded-[3px] text-[9px] font-bold text-white/50 tracking-tight">
-          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="mr-0.5"><path d="M12 2v10"/><path d="m16 8-4 4-4-4"/><path d="M4 20h16"/></svg>
-          HI-RES LOSSLESS
-        </div>
+        <!-- Quality Label (Always Shown in Detail View) -->
+        <QualityBadge
+          v-if="currentSong"
+          :variant="'detailed'"
+          :bitrate="currentSong.bitrate || 0"
+          :sample-rate="currentSong.sample_rate || 0"
+          :bit-depth="currentSong.bit_depth || 0"
+          :format="currentSong.format || ''"
+          class="!mt-0"
+        />
 
         <span class="text-[11px] font-semibold text-white/40 tabular-nums">{{ remainingTime }}</span>
       </div>

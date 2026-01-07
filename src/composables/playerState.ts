@@ -2,57 +2,79 @@ import { ref, reactive } from 'vue';
 import { Song, Playlist, HistoryItem, AppSettings } from '../types';
 export type { Song, Playlist, HistoryItem, AppSettings };
 
+// --- Interface Definitions ---
+export interface LibraryFolder {
+  path: string;
+  song_count: number;
+}
+
+export interface FolderNode {
+  name: string;
+  path: string;
+  children: FolderNode[];
+  song_count: number;
+  cover_song_path: string | null;
+  is_expanded: boolean;
+}
+
 // --- 全局播放状态 ---
 export const isPlaying = ref(false);
 export const volume = ref(100);
 export const currentTime = ref(0);
-export const playMode = ref(0); 
+export const playMode = ref(0);
 export const showPlaylist = ref(false);
 export const isSongLoaded = ref(false);
-export const showPlayerDetail = ref(false); 
+export const showPlayerDetail = ref(false);
 export const showQueue = ref(false);
-export const AUDIO_DELAY = ref(0.45); 
+export const AUDIO_DELAY = ref(0.45);
 
 // --- 自定义拖拽状态 ---
 export const dragSession = reactive({
-  active: false,      
-  type: 'song' as 'song' | 'playlist' | 'folder' | 'artist' | 'album', // 🟢 新增：拖拽类型
-  songs: [] as Song[], 
-  data: null as any, // 🟢 新增：通用数据载体 (用于存储正在拖拽的 folder/playlist/artist/album 对象)
-  mouseX: 0,          
-  mouseY: 0,          
-  
-  targetFolder: null as { name: string, path: string } | null,   
-  targetPlaylist: null as { id: string, name: string } | null,   
-  
-  insertIndex: -1,    
-  sortLineTop: -1,    
+  active: false,
+  showGhost: false, // 🟢 独立控制 DragGhost 显示
+  type: 'song' as 'song' | 'playlist' | 'folder' | 'artist' | 'album',
+  songs: [] as Song[],
+  data: null as any,
+  mouseX: 0,
+  mouseY: 0,
+  targetFolder: null as { name: string, path: string } | null,
+  targetPlaylist: null as { id: string, name: string } | null,
+  insertIndex: -1,
+  sortLineTop: -1,
 });
 
-// 弹窗状态
+// --- 弹窗状态 ---
 export const showAddToPlaylistModal = ref(false);
-export const playlistAddTargetSongs = ref<string[]>([]); 
-export const songList = ref<Song[]>([]); 
+export const playlistAddTargetSongs = ref<string[]>([]);
+
+// --- 数据列表 ---
+export const songList = ref<Song[]>([]);
+export const librarySongs = ref<Song[]>([]); // 🟢 New: Library Songs (Exclusive for Local Music)
+export const libraryFolders = ref<LibraryFolder[]>([]); // 🟢 New: Library Folders
+export const folderTree = ref<FolderNode[]>([]); // 🟢 New: Folder Tree
+export const originalSongList = ref<Song[]>([]); // Backup
+
 export const playQueue = ref<Song[]>([]);
 export const tempQueue = ref<Song[]>([]);
 export const currentSong = ref<Song | null>(null);
-export const currentCover = ref<string>(''); 
-export const dominantColors = ref<string[]>(['transparent', 'transparent', 'transparent', 'transparent']); 
-export const playlistCover = ref<string>(''); 
-export const watchedFolders = ref<string[]>([]); 
+export const currentCover = ref<string>('');
+export const dominantColors = ref<string[]>(['transparent', 'transparent', 'transparent', 'transparent']);
+export const playlistCover = ref<string>('');
+export const watchedFolders = ref<string[]>([]); // Legacy/Folder View
 export const favoritePaths = ref<string[]>([]);
 export const playlists = ref<Playlist[]>([]);
 export const recentSongs = ref<HistoryItem[]>([]);
 
-// 🟢 新增：排序状态
+// --- 排序状态 ---
 export const artistSortMode = ref<'count' | 'name' | 'custom'>('count');
 export const albumSortMode = ref<'count' | 'name' | 'custom'>('count');
-export const artistCustomOrder = ref<string[]>([]); // 存储歌手名字的顺序
-export const albumCustomOrder = ref<string[]>([]); // 存储专辑名字的顺序
+export const artistCustomOrder = ref<string[]>([]);
+export const albumCustomOrder = ref<string[]>([]);
 
-export const settings = ref<AppSettings>({ 
-  organizeRoot: 'D:\\Music', 
-  enableAutoOrganize: true, 
+// --- 设置 ---
+export const settings = ref<AppSettings>({
+  organizeRoot: 'D:\\Music',
+  enableAutoOrganize: true,
   organizeRule: '{Artist}/{Album}/{Title}',
   theme: {
     mode: 'light',
@@ -78,8 +100,9 @@ export const settings = ref<AppSettings>({
   }
 });
 
-export const currentViewMode = ref<'all' | 'folder' | 'artist' | 'album' | 'genre' | 'year' | 'playlist' | 'recent' | 'favorites'>('all'); 
-export const filterCondition = ref<string>(''); 
+// --- 视图状态 ---
+export const currentViewMode = ref<'all' | 'folder' | 'artist' | 'album' | 'genre' | 'year' | 'playlist' | 'recent' | 'favorites'>('all');
+export const filterCondition = ref<string>('');
 export const searchQuery = ref<string>('');
 export const localMusicTab = ref<'default' | 'artist' | 'album'>('default');
 export const currentArtistFilter = ref<string>('');
@@ -88,3 +111,4 @@ export const currentFolderFilter = ref<string>('');
 export const favTab = ref<'songs' | 'artists' | 'albums'>('songs');
 export const favDetailFilter = ref<{ type: 'artist' | 'album', name: string } | null>(null);
 export const recentTab = ref<'songs' | 'playlists' | 'albums'>('songs');
+export const activeRootPath = ref<string | null>(null); // 🟢 Sidebar Root Capsule State

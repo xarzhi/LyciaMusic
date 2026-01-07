@@ -67,16 +67,16 @@ const bgImageSrc = computed(() => {
     <transition name="fade">
       <div v-if="activeBackgroundInfo?.isDynamic" class="absolute inset-0 overflow-hidden bg-white dark:bg-[#1a1a1a]">
         <!-- 基础色层 (降低不透明度，透出白底) -->
-        <div class="absolute inset-0 transition-colors duration-[1500ms] opacity-20" :style="{ backgroundColor: dominantColors[0] }"></div>
+        <div class="absolute inset-0 transition-colors duration-[1500ms] opacity-40" :style="{ backgroundColor: dominantColors[0] }"></div>
         
         <!-- 动画色块 -->
-        <div class="absolute inset-0 filter blur-[120px] opacity-50">
+        <div class="absolute inset-0 filter blur-[120px] opacity-60">
           <div 
-            class="absolute top-[-10%] left-[-10%] w-[80%] h-[80%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-1 transition-colors duration-[1500ms]"
+            class="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-1 transition-colors duration-[1500ms]"
             :style="{ backgroundColor: dominantColors[1] }"
           ></div>
           <div 
-            class="absolute bottom-[-10%] right-[-10%] w-[80%] h-[80%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-2 transition-colors duration-[1500ms]"
+            class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-2 transition-colors duration-[1500ms]"
             :style="{ backgroundColor: dominantColors[2] || dominantColors[0] }"
           ></div>
           <div 
@@ -86,7 +86,7 @@ const bgImageSrc = computed(() => {
         </div>
 
         <!-- 噪点层 -->
-        <div class="absolute inset-0 opacity-[0.015] pointer-events-none z-10 bg-noise"></div>
+        <div class="absolute inset-0 opacity-[0.025] pointer-events-none z-10 bg-noise"></div>
         
         <!-- 环境光遮罩 (在浅色模式下极淡) -->
         <div class="absolute inset-0 bg-white/5 dark:bg-black/40 z-20"></div>
@@ -154,27 +154,30 @@ const bgImageSrc = computed(() => {
 }
 
 @keyframes mesh-1 {
-  0% { transform: translate(0, 0) scale(1) rotate(0deg); }
-  33% { transform: translate(10%, 10%) scale(1.1) rotate(120deg); }
-  66% { transform: translate(-5%, 15%) scale(0.9) rotate(240deg); }
-  100% { transform: translate(0, 0) scale(1) rotate(360deg); }
+  0% { transform: translate(-20%, 15%) scale(1) rotate(0deg); }
+  25% { transform: translate(30%, -10%) scale(1.1) rotate(90deg); }
+  50% { transform: translate(-15%, -25%) scale(0.9) rotate(180deg); }
+  75% { transform: translate(25%, 20%) scale(1.05) rotate(270deg); }
+  100% { transform: translate(-20%, 15%) scale(1) rotate(360deg); }
 }
 
 @keyframes mesh-2 {
-  0% { transform: translate(0, 0) scale(1.1) rotate(0deg); }
-  33% { transform: translate(-15%, 5%) scale(0.9) rotate(-120deg); }
-  66% { transform: translate(10%, -10%) scale(1.2) rotate(-240deg); }
-  100% { transform: translate(0, 0) scale(1.1) rotate(-360deg); }
+  0% { transform: translate(25%, -20%) scale(1.1) rotate(0deg); }
+  25% { transform: translate(-30%, -15%) scale(0.9) rotate(-90deg); }
+  50% { transform: translate(20%, 25%) scale(1.2) rotate(-180deg); }
+  75% { transform: translate(-25%, 10%) scale(1) rotate(-270deg); }
+  100% { transform: translate(25%, -20%) scale(1.1) rotate(-360deg); }
 }
 
 @keyframes mesh-3 {
-  0% { transform: translate(0, 0) scale(0.9) rotate(0deg); }
-  33% { transform: translate(5%, -15%) scale(1.2) rotate(120deg); }
-  66% { transform: translate(-10%, 5%) scale(1) rotate(240deg); }
-  100% { transform: translate(0, 0) scale(0.9) rotate(360deg); }
+  0% { transform: translate(10%, 30%) scale(0.9) rotate(0deg); }
+  25% { transform: translate(-25%, -20%) scale(1.2) rotate(90deg); }
+  50% { transform: translate(30%, 15%) scale(1) rotate(180deg); }
+  75% { transform: translate(-15%, -30%) scale(1.1) rotate(270deg); }
+  100% { transform: translate(10%, 30%) scale(0.9) rotate(360deg); }
 }
 
-.animate-mesh-1 { animation: mesh-1 7s linear infinite; }
-.animate-mesh-2 { animation: mesh-2 9s linear infinite; }
-.animate-mesh-3 { animation: mesh-3 11s linear infinite; }
+.animate-mesh-1 { animation: mesh-1 6s linear infinite; }
+.animate-mesh-2 { animation: mesh-2 8s linear infinite; }
+.animate-mesh-3 { animation: mesh-3 10s linear infinite; }
 </style>

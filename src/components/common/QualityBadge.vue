@@ -16,17 +16,19 @@ const tooltipStyle = ref({});
 
 // 1. 判断音质等级 (HR / SQ / HQ)
 const badgeType = computed(() => {
-  // HR: 采样率 > 44.1kHz 或 位深 > 16bit
-  if (props.sampleRate > 44100 || (props.bitDepth && props.bitDepth > 16)) {
+  const losslessFormats = ['flac', 'wav', 'alac', 'ape'];
+  const isLossless = losslessFormats.includes(props.format.toLowerCase());
+  
+  // HR: 无损格式 + (采样率 > 44.1kHz 或 位深 > 16bit)
+  if (isLossless && (props.sampleRate > 44100 || (props.bitDepth && props.bitDepth > 16))) {
     return 'HR';
   }
-  // SQ: 无损格式 (flac, wav, alac, ape)
-  const losslessFormats = ['flac', 'wav', 'alac', 'ape'];
-  if (losslessFormats.includes(props.format.toLowerCase())) {
+  // SQ: 无损格式 (标准采样率/位深)
+  if (isLossless) {
     return 'SQ';
   }
-  // HQ: 320k mp3/aac
-  if (props.bitrate >= 320000) {
+  // HQ: 有损格式 >= 320kbps (lofty returns kbps)
+  if (props.bitrate >= 320) {
     return 'HQ';
   }
   return null; // 其他情况不显示
@@ -59,7 +61,7 @@ const badgeColorClass = computed(() => {
 // 4. 生成分级提示内容 (Tiered Tooltip Content)
 const tooltipContent = computed(() => {
   const fmt = props.format?.toUpperCase() || '';
-  const kbps = Math.round((props.bitrate || 0) / 1000);
+  const kbps = props.bitrate || 0; // lofty already returns kbps
   
   // Format technical subtitle: e.g. "24bit / 96kHz · FLAC"
   let sub = '';
@@ -88,8 +90,8 @@ const tooltipContent = computed(() => {
     };
   }
 
-  // Priority 3: HQ (bitrate >= 320k)
-  if (props.bitrate >= 320000) {
+  // Priority 3: HQ (bitrate >= 320k, lofty returns kbps)
+  if (props.bitrate >= 320) {
     return {
       emoji: '🎵',
       title: '高品质音乐',

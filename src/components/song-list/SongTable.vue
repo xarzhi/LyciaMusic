@@ -96,8 +96,13 @@ const handleMouseDown = (e: MouseEvent, song: Song, index: number) => {
 };
 
 const toggleSelectAll = () => {
-  if (props.selectedPaths.size === props.songs.length) props.selectedPaths.clear();
-  else props.songs.forEach(s => props.selectedPaths.add(s.path));
+  const newSet = new Set(props.selectedPaths);
+  if (newSet.size === props.songs.length) {
+    newSet.clear();
+  } else {
+    props.songs.forEach(s => newSet.add(s.path));
+  }
+  emit('update:selectedPaths', newSet);
 };
 
 const showDragIcon = computed(() => ['folder', 'playlist', 'all'].includes(currentViewMode.value));
@@ -190,6 +195,7 @@ const getRowStyle = (songIndex: number, songPath: string) => {
           @mousedown="handleMouseDown($event, song, song.virtualIndex)" 
           @dblclick="!isBatchMode && emit('play', song)"
           @contextmenu.prevent="emit('contextmenu', $event, song)"
+          @dragstart.prevent
           class="group border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 select-none cursor-default relative" 
           :class="{ 'bg-red-500/10 dark:bg-red-500/20': selectedPaths.has(song.path) }"
           :style="getRowStyle(song.virtualIndex, song.path)"
@@ -229,10 +235,10 @@ const getRowStyle = (songIndex: number, songPath: string) => {
               <span class="text-gray-900 dark:text-gray-100 font-medium truncate">{{ song.title || song.name.replace(/\.[^/.]+$/, "") }}</span>
               <QualityBadge
                 v-if="settings.showQualityBadges"
-                :bitrate="song.bitrate"
-                :sample-rate="song.sample_rate"
-                :bit-depth="song.bit_depth"
-                :format="song.format"
+                :bitrate="song.bitrate || 0"
+                :sample-rate="song.sample_rate || 0"
+                :bit-depth="song.bit_depth || 0"
+                :format="song.format || ''"
               />
             </div>
           </td>
@@ -253,6 +259,8 @@ const getRowStyle = (songIndex: number, songPath: string) => {
       </tbody>
     </table>
     
-    <div v-if="songs.length === 0" class="py-20 text-center select-none text-gray-500 dark:text-white/60">列表为空</div>
+    <div v-if="songs.length === 0" class="py-20 text-center select-none text-gray-500 dark:text-white/60">
+      {{ currentViewMode === 'folder' ? '该文件夹内暂无歌曲' : (currentViewMode === 'playlist' ? '歌单暂无歌曲' : '列表为空') }}
+    </div>
   </div>
 </template>

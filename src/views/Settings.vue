@@ -4,14 +4,16 @@ import SettingsGeneral from "../components/settings/SettingsGeneral.vue";
 import SettingsTheme from "../components/settings/SettingsTheme.vue";
 import SettingsToolbox from "../components/settings/SettingsToolbox.vue";
 import SettingsAbout from "../components/settings/SettingsAbout.vue";
+import SettingsLibrary from "../components/settings/SettingsLibrary.vue"; // Added import
 
 // 定义 Tabs
-const activeTab = ref<'general' | 'theme' | 'toolbox' | 'shortcuts' | 'about'>('general');
+const activeTab = ref<'general' | 'theme' | 'toolbox' | 'library' | 'shortcuts' | 'about'>('general'); // Updated type
 
 const tabs = [
   { id: 'general', name: '常规' },
   { id: 'theme', name: '主题' },
   { id: 'toolbox', name: '工具箱' },
+  { id: 'library', name: '音乐库' }, // Added tab
   { id: 'shortcuts', name: '快捷键' },
   { id: 'about', name: '关于' }
 ];
@@ -44,6 +46,7 @@ const tabs = [
       <SettingsGeneral v-if="activeTab === 'general'" />
       <SettingsTheme v-else-if="activeTab === 'theme'" />
       <SettingsToolbox v-else-if="activeTab === 'toolbox'" />
+      <SettingsLibrary v-else-if="activeTab === 'library'" />
       <SettingsAbout v-else-if="activeTab === 'about'" />
       
       <div v-else class="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">

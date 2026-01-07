@@ -21,6 +21,7 @@ impl DbState {
         let db_path = app_dir.join("library.db");
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
 
+        // Create songs table
         conn.execute(
             "CREATE TABLE IF NOT EXISTS songs (
                 id INTEGER PRIMARY KEY,
@@ -30,6 +31,49 @@ impl DbState {
                 album TEXT,
                 duration INTEGER,
                 cover_path TEXT
+            )",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+
+        // Create library_folders table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS library_folders (
+                path TEXT PRIMARY KEY,
+                added_at INTEGER
+            )",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+
+        // Migration: Add path column to library_folders if missing (fix for older DBs)
+        let lib_columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(library_folders)")
+            .map_err(|e| e.to_string())?
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if !lib_columns.contains(&"path".to_string()) {
+            // Old table without path column - recreate it
+            conn.execute("DROP TABLE IF EXISTS library_folders", [])
+                .ok();
+            conn.execute(
+                "CREATE TABLE library_folders (
+                    path TEXT PRIMARY KEY,
+                    added_at INTEGER
+                )",
+                [],
+            )
+            .ok();
+        }
+
+        // Create sidebar_folders table (New for Decoupling)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS sidebar_folders (
+                path TEXT PRIMARY KEY,
+                added_at INTEGER
             )",
             [],
         )
@@ -58,6 +102,10 @@ impl DbState {
         }
         if !columns.contains(&"format".to_string()) {
             conn.execute("ALTER TABLE songs ADD COLUMN format TEXT", [])
+                .ok();
+        }
+        if !columns.contains(&"file_size".to_string()) {
+            conn.execute("ALTER TABLE songs ADD COLUMN file_size INTEGER", [])
                 .ok();
         }
 

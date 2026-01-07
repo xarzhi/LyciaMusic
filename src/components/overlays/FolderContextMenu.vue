@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue';
 
+
+// const { isManagementMode } = usePlayer();
+
 const props = defineProps<{
   visible: boolean;
   x: number;
   y: number;
   folderPath: string;
   selectedCount?: number; // 新增：选中数量
+  isManagementMode?: boolean; // 🟢 Prop
 }>();
 
-const emit = defineEmits(['close', 'play', 'addToQueue', 'createPlaylist', 'openFolder', 'remove', 'refresh', 'cancel']);
+const emit = defineEmits(['close', 'play', 'addToQueue', 'createPlaylist', 'openFolder', 'remove', 'refresh', 'cancel', 'delete-disk']);
 
 const menuRef = ref<HTMLElement | null>(null);
 
@@ -133,11 +137,17 @@ const itemClass = "px-4 py-2.5 hover:bg-gray-100 cursor-pointer flex items-cente
           <span>刷新文件夹内容</span>
         </div>
 
-        <div @click="emit('remove')" class="px-4 py-2.5 hover:bg-gray-100 cursor-pointer text-[#EC4141] flex items-center group transition-colors">
+
+
+        <!-- 🟢 Physical Delete (Management Mode) -->
+        <div v-if="isManagementMode" @click="emit('delete-disk')" class="px-4 py-2.5 hover:bg-red-50 cursor-pointer text-[#EC4141] font-bold flex items-center group transition-colors border-t border-red-100 mt-1">
           <div class="w-5 h-5 mr-3 flex items-center justify-center text-[#EC4141]">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 11v6m4-6v6" />
+            </svg>
           </div>
-          <span>从列表删除</span>
+          <span>从磁盘彻底删除</span>
         </div>
       </template>
     </div>

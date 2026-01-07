@@ -1,28 +1,62 @@
 <script setup lang="ts">
 import { usePlayer, dragSession } from '../../composables/player';
-import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'; // 🟢 Added computed
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core'; // 🟢 1. 引入转换工具
+import FolderTreeItem from '../common/FolderTreeItem.vue'; // 🟢 Import
 import FolderContextMenu from '../overlays/FolderContextMenu.vue';
 import ModernModal from '../common/ModernModal.vue'; 
 import { useToast } from '../../composables/toast';
+
+import { FolderNode } from '../../composables/playerState';
+
+const props = defineProps<{
+  isManagementMode: boolean; // 🟢 Prop
+}>();
 
 const { 
   currentViewMode, localMusicTab, currentArtistFilter, currentAlbumFilter,
   artistList, albumList, folderList, currentFolderFilter,
   isLocalMusic, isFolderMode,
-  playSong, openInFinder, createPlaylist, removeFolder,
+  playSong, openInFinder, createPlaylist, 
   getSongsInFolder, moveFilesToFolder,
-  refreshFolder,
+  refreshFolder, // 🟢 Ensure imported
   addSongsToQueue,
-  reorderWatchedFolders, // 🟢 引入排序函数
+  reorderWatchedFolders, 
   updateArtistOrder,
-  updateAlbumOrder
+  updateAlbumOrder,
+  folderTree, // 🟢 New
+  activeRootPath, // 🟢 New Global State
+  fetchFolderTree, // 🟢 New
+  removeSidebarFolder, // 🟢 Decoupled Sidebar
+  deleteFolder, // 🟢 Import
+  // isManagementMode, 
+  libraryFolders, // 🟢 新增
+  addLibraryFolderPath, // 🟢 新增
 } = usePlayer();
 
 const sidebarImageCache = ref<Map<string, string>>(new Map());
 const dragOverId = ref<string | null>(null);
 const dragPosition = ref<'top' | 'bottom' | null>(null);
+
+const activeTreeNodes = computed(() => {
+    if (!activeRootPath.value) return [];
+    const root = folderTree.value.find(n => n.path === activeRootPath.value);
+    return root ? root.children : [];
+});
+
+// Auto-select first capsule if none selected
+watch(() => folderTree.value, (newVal) => {
+    // Logic to ensure an active root is selected
+    if (newVal.length > 0) {
+       // If no selection, or selection invalid, select first
+       if (!activeRootPath.value || !newVal.find(n => n.path === activeRootPath.value)) {
+           activeRootPath.value = newVal[0].path;
+       }
+    } else {
+        activeRootPath.value = null;
+    }
+}, { immediate: true });
 
 // --- Custom Drag & Drop for Folders/Artists/Albums ---
 let mouseDownInfo: { x: number, y: number, index: number, item: any, type: 'folder' | 'artist' | 'album' } | null = null;
@@ -71,9 +105,17 @@ const handleGlobalMouseUp = () => {
         list.splice(to, 0, removed);
         updateAlbumOrder(list.map(a => a.name));
     });
+  } else if (dragSession.type === 'song' && dragSession.targetFolder) {
+      // 🟢 Handle Song Drop on Folder - Show Modal, Do NOT reset state yet
+      handleDropEvent();
+      // Reset state will happen in executeMove or when modal is cancelled
+      mouseDownInfo = null;
+      dragOverId.value = null;
+      dragPosition.value = null;
+      return; // Exit early, don't reset dragSession
   }
   
-  // Reset
+  // Reset for non-song-drop cases
   mouseDownInfo = null;
   if (['folder', 'artist', 'album'].includes(dragSession.type)) {
      dragSession.active = false;
@@ -105,6 +147,10 @@ const handleDropLogic = (list: any[], key: string, callback: (from: number, to: 
     }
 };
 
+// ...
+
+
+
 const handleItemMouseMove = (e: MouseEvent, id: string, type: 'folder' | 'artist' | 'album') => {
   if (dragSession.active && dragSession.type === type) {
     const target = e.currentTarget as HTMLElement;
@@ -116,16 +162,7 @@ const handleItemMouseMove = (e: MouseEvent, id: string, type: 'folder' | 'artist
   }
 };
 
-onMounted(() => {
-  window.addEventListener('custom-drop-trigger', handleDropEvent);
-  window.addEventListener('mousemove', handleGlobalMouseMove);
-  window.addEventListener('mouseup', handleGlobalMouseUp);
-});
-onUnmounted(() => {
-  window.removeEventListener('custom-drop-trigger', handleDropEvent);
-  window.removeEventListener('mousemove', handleGlobalMouseMove);
-  window.removeEventListener('mouseup', handleGlobalMouseUp);
-});
+
 // ------------------------------
 
 // 🟢 2. 修改加载逻辑：路径 -> Asset URL
@@ -158,55 +195,9 @@ const menuY = ref(0);
 const targetFolder = ref<{ name: string, path: string } | null>(null);
 
 // 🟢 批量选择逻辑
+// 🟢 批量选择逻辑
 const selectedFolderPaths = ref<Set<string>>(new Set());
 const lastSelectedFolderPath = ref<string | null>(null);
-
-const handleFolderClick = (e: MouseEvent, folder: { name: string, path: string }) => {
-  e.stopPropagation(); // 阻止冒泡，防止触发背景点击
-  // 总是设为当前过滤条件
-  currentFolderFilter.value = folder.path;
-
-  // 1. Shift 连选
-  if (e.shiftKey && lastSelectedFolderPath.value) {
-    const list = folderList.value;
-    const lastIndex = list.findIndex(f => f.path === lastSelectedFolderPath.value);
-    const currentIndex = list.findIndex(f => f.path === folder.path);
-    
-    if (lastIndex !== -1 && currentIndex !== -1) {
-      const start = Math.min(lastIndex, currentIndex);
-      const end = Math.max(lastIndex, currentIndex);
-      // 清空旧选区还是追加？通常 Shift 是追加或重置范围。这里简化为追加范围。
-      // 但为了符合直觉，通常 Shift 会重置为锚点到当前的范围。
-      // 这里采用简单追加逻辑
-      for (let i = start; i <= end; i++) {
-        selectedFolderPaths.value.add(list[i].path);
-      }
-    }
-  } 
-  // 2. Ctrl/Cmd 加选
-  else if (e.ctrlKey || e.metaKey) {
-    if (selectedFolderPaths.value.has(folder.path)) {
-      selectedFolderPaths.value.delete(folder.path);
-    } else {
-      selectedFolderPaths.value.add(folder.path);
-    }
-    lastSelectedFolderPath.value = folder.path;
-  } 
-  // 3. 普通单选
-  else {
-    selectedFolderPaths.value.clear();
-    selectedFolderPaths.value.add(folder.path);
-    lastSelectedFolderPath.value = folder.path;
-  }
-};
-
-const handleBackgroundClick = () => {
-  // 点击空白处，重置为单选当前文件夹（如果存在）
-  if (currentFolderFilter.value) {
-    selectedFolderPaths.value.clear();
-    selectedFolderPaths.value.add(currentFolderFilter.value);
-  }
-};
 
 const handleContextMenu = (e: MouseEvent, folder: { name: string, path: string }) => { 
   e.preventDefault(); 
@@ -237,26 +228,97 @@ const handleMenuCancel = () => {
 
 const playFolder = () => { if (targetFolder.value) { const s = getSongsInFolder(targetFolder.value.path); if (s.length > 0) { playSong(s[0]); currentFolderFilter.value = targetFolder.value.path; } showMenu.value = false; } };
 const addToQueue = () => { if (targetFolder.value) { const s = getSongsInFolder(targetFolder.value.path); addSongsToQueue(s); showMenu.value = false; } };
-const createPlaylistFromFolder = () => { if (targetFolder.value) { const s = getSongsInFolder(targetFolder.value.path); if (s.length > 0) createPlaylist(targetFolder.value.name, s.map(song => song.path)); showMenu.value = false; } };
+const showAddToLibraryConfirm = ref(false);
+const pendingFolderToPlaylist = ref<{ name: string, path: string } | null>(null);
+
+const createPlaylistFromFolder = () => { 
+  if (targetFolder.value) { 
+    // 🟢 检查策略：判断该文件夹或其父级是否已经在库里
+    // 由于 libraryFolders 存储的是根路径，我们检查 targetFolder 的路径是否以某个库根路径开头
+    const isInLibrary = libraryFolders.value.some(f => {
+        const root = f.path.replace(/\\/g, '/').toLowerCase();
+        const target = targetFolder.value!.path.replace(/\\/g, '/').toLowerCase();
+        return target.startsWith(root);
+    });
+
+    if (!isInLibrary) {
+      pendingFolderToPlaylist.value = { ...targetFolder.value };
+      showAddToLibraryConfirm.value = true;
+      showMenu.value = false;
+      return;
+    }
+
+    const s = getSongsInFolder(targetFolder.value.path); 
+    if (s.length > 0) createPlaylist(targetFolder.value.name, s.map(song => song.path)); 
+    showMenu.value = false; 
+  } 
+};
+
+const executeAddToLibraryAndCreate = async () => {
+  if (pendingFolderToPlaylist.value) {
+    const folder = pendingFolderToPlaylist.value;
+    await addLibraryFolderPath(folder.path);
+    // 等待扫描完成（addLibraryFolderPath 已经包含了 scanLibrary 等待）
+    const s = getSongsInFolder(folder.path);
+    if (s.length > 0) {
+      createPlaylist(folder.name, s.map(song => song.path));
+      useToast().showToast(`已将 ${folder.name} 添加到库并创建歌单`, "success");
+    } else {
+      useToast().showToast("文件夹中未发现歌曲", "info");
+    }
+  }
+  showAddToLibraryConfirm.value = false;
+};
 const openFolder = () => { if (targetFolder.value) { openInFinder(targetFolder.value.path); showMenu.value = false; } };
 
 // 🟢 批量删除逻辑
 const showDeleteConfirm = ref(false);
+const showPhysicalDeleteConfirm = ref(false); // 🟢 Physical Delete State
 const foldersToDelete = ref<string[]>([]);
+const folderToPhysicalDelete = ref<string | null>(null); // 🟢 Target for physical deletion
 
-const removeFolderItem = () => { 
+const removeFolderItem = () => {
   if (selectedFolderPaths.value.size > 0) {
     foldersToDelete.value = Array.from(selectedFolderPaths.value);
     showDeleteConfirm.value = true;
-  } else if (targetFolder.value) { 
+  } else if (targetFolder.value) {
     foldersToDelete.value = [targetFolder.value.path];
     showDeleteConfirm.value = true;
   }
-  showMenu.value = false; 
+  showMenu.value = false;
 };
 
-const executeDeleteFolders = () => {
-  foldersToDelete.value.forEach(path => removeFolder(path));
+// 🟢 Physical Delete Handlers
+const handlePhysicalDelete = () => {
+    if (targetFolder.value) {
+        folderToPhysicalDelete.value = targetFolder.value.path;
+        showPhysicalDeleteConfirm.value = true;
+        showMenu.value = false;
+    }
+};
+
+const executePhysicalDelete = async () => {
+    if (folderToPhysicalDelete.value) {
+        try {
+            await deleteFolder(folderToPhysicalDelete.value);
+            useToast().showToast("文件夹已永久删除", "success");
+            await refreshFolder(activeRootPath.value || '');
+        } catch(e) {
+            useToast().showToast("删除失败: " + e, "error");
+        }
+    }
+    showPhysicalDeleteConfirm.value = false;
+};
+
+const handleTreeContextMenu = ({ event, node }: { event: MouseEvent, node: FolderNode }) => {
+    handleContextMenu(event, { name: node.name, path: node.path });
+};
+
+const executeDeleteFolders = async () => {
+  // Use removeSidebarFolder for decoupled removal
+  for (const path of foldersToDelete.value) {
+      await removeSidebarFolder(path);
+  }
   selectedFolderPaths.value.clear();
   foldersToDelete.value = [];
   showDeleteConfirm.value = false;
@@ -274,16 +336,24 @@ const handleRefreshFolder = async () => {
   }
 };
 
-// --- 模拟拖拽逻辑 ---
+// --- Move Confirmation Logic ---
 const showMoveConfirm = ref(false);
 const dragPendingFiles = ref<string[]>([]);
 const moveTarget = ref<{ name: string, path: string } | null>(null);
 
 const handleDropEvent = () => {
+  if (!props.isManagementMode) return;
+
   if (dragSession.targetFolder && dragSession.targetFolder.path !== currentFolderFilter.value) {
-    dragPendingFiles.value = dragSession.songs.map(s => s.path);
-    moveTarget.value = { ...dragSession.targetFolder };
-    showMoveConfirm.value = true;
+    const songsToMove = dragSession.songs && dragSession.songs.length > 0 
+        ? dragSession.songs 
+        : (dragSession.data ? [dragSession.data] : []);
+
+    if (songsToMove.length > 0) {
+        dragPendingFiles.value = songsToMove.map(s => s.path);
+        moveTarget.value = { ...dragSession.targetFolder };
+        showMoveConfirm.value = true;
+    }
   }
 };
 
@@ -291,26 +361,107 @@ const executeMove = async () => {
   if (moveTarget.value && dragPendingFiles.value.length > 0) {
     try {
       await moveFilesToFolder(dragPendingFiles.value, moveTarget.value.path);
-      dragPendingFiles.value = [];
-      showMoveConfirm.value = false;
       useToast().showToast("移动成功", "success");
     } catch (e) {
       useToast().showToast("移动失败: " + e, "error");
     }
   }
+  // Always reset state after move (success or failure)
+  resetMoveState();
 };
 
-onMounted(() => {
+const cancelMove = () => {
+  resetMoveState();
+};
+
+const resetMoveState = () => {
+  dragPendingFiles.value = [];
+  showMoveConfirm.value = false;
+  moveTarget.value = null;
+  // Reset dragSession
+  dragSession.showGhost = false;
+  dragSession.active = false;
+  dragSession.targetFolder = null;
+  dragSession.songs = [];
+};
+
+// 🟢 New Handlers
+const handleTreeSelect = (node: FolderNode) => {
+    currentFolderFilter.value = node.path;
+};
+
+// 🟢 Auto-fetch songs when selecting a folder
+watch(currentFolderFilter, async (newPath) => {
+    if (newPath) {
+        try {
+           await refreshFolder(newPath);
+        } catch (e) {
+           console.error("Failed to load songs for folder:", e);
+        }
+    }
+});
+
+onMounted(async () => {
   window.addEventListener('custom-drop-trigger', handleDropEvent);
+  window.addEventListener('mousemove', handleGlobalMouseMove);
+  window.addEventListener('mouseup', handleGlobalMouseUp);
+  // Initial fetch
+  await fetchFolderTree();
 });
 onUnmounted(() => {
   window.removeEventListener('custom-drop-trigger', handleDropEvent);
 });
 
+// 🟢 Sidebar Resizing Logic
+const sidebarWidth = ref(240); // Default width
+const isResizing = ref(false);
+let resizeStartX = 0;
+let resizeStartWidth = 0;
+
+const startResize = (e: MouseEvent) => {
+  isResizing.value = true;
+  resizeStartX = e.clientX;
+  resizeStartWidth = sidebarWidth.value;
+  
+  document.addEventListener('mousemove', handleResize);
+  document.addEventListener('mouseup', stopResize);
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none'; 
+};
+
+const handleResize = (e: MouseEvent) => {
+  if (isResizing.value) {
+    const delta = e.clientX - resizeStartX;
+    const newWidth = Math.max(150, Math.min(500, resizeStartWidth + delta));
+    sidebarWidth.value = newWidth;
+  }
+};
+
+const stopResize = () => {
+  isResizing.value = false;
+  document.removeEventListener('mousemove', handleResize);
+  document.removeEventListener('mouseup', stopResize);
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+};
+
 </script>
 
 <template>
-  <aside v-if="(isLocalMusic && localMusicTab !== 'default') || isFolderMode" class="w-60 h-full border-r border-white/10 overflow-y-auto custom-scrollbar bg-transparent shrink-0 select-none">
+  <aside 
+    v-if="(isLocalMusic && localMusicTab !== 'default') || isFolderMode" 
+    class="h-full border-r border-white/10 bg-transparent shrink-0 select-none relative group/sidebar"
+    :style="{ width: sidebarWidth + 'px' }"
+  >
+    <!-- Resizer Handle -->
+    <div 
+        class="absolute right-0 top-0 w-1 h-full cursor-col-resize hover:bg-[#EC4141] transition-colors z-10"
+        :class="{ 'bg-[#EC4141]': isResizing }"
+        @mousedown="startResize"
+    ></div>
+
+    <!-- Scrollable Content -->
+    <div class="h-full overflow-y-auto custom-scrollbar">
     
     <ul v-if="isLocalMusic && localMusicTab === 'artist'" class="p-2 space-y-1">
         <li 
@@ -358,37 +509,36 @@ onUnmounted(() => {
         </li>
     </ul>
 
-    <ul v-show="isFolderMode" @click="handleBackgroundClick" class="p-2 space-y-1 transition-all duration-300 min-h-full">
-        <li 
-          v-for="(item, index) in folderList" 
-          :key="item.path" 
-          @mousedown="handleMouseDown($event, index, item, 'folder')"
-          @mousemove="handleItemMouseMove($event, item.path, 'folder')"
-          :data-folder-path="item.path"
-          :data-folder-name="item.name"
-          @click="handleFolderClick($event, item)" 
-          @contextmenu="handleContextMenu($event, item)" 
-          class="folder-drop-target flex items-center p-2 rounded-lg cursor-pointer transition-all border-t-2 border-transparent border-b-2 select-none"
-          :class="[
-            selectedFolderPaths.has(item.path) ? 'bg-white/40 dark:bg-white/20 shadow-sm' : 'hover:bg-white/20 dark:hover:bg-white/10',
-            (dragSession.active && dragSession.type === 'folder' && dragSession.data?.path === item.path) ? 'opacity-50 bg-gray-100 dark:bg-white/5' : '',
-            (dragSession.active && dragSession.targetFolder?.path === item.path && currentFolderFilter !== item.path && dragSession.type === 'song') ? 'ring-2 ring-[#EC4141] bg-red-50/50 dark:bg-red-500/10' : '',
-            (dragSession.type === 'folder' && dragOverId === item.path && dragPosition === 'top') ? '!border-t-[#EC4141]' : '',
-            (dragSession.type === 'folder' && dragOverId === item.path && dragPosition === 'bottom') ? '!border-b-[#EC4141]' : ''
-          ]"
-        >
-          <div class="w-10 h-10 rounded bg-blue-50/50 dark:bg-blue-500/10 border border-blue-100/50 dark:border-blue-500/20 flex items-center justify-center text-blue-400 dark:text-blue-300 mr-3 shrink-0 overflow-hidden relative">
-            <img v-if="sidebarImageCache.get(item.firstSongPath)" :src="sidebarImageCache.get(item.firstSongPath)" class="w-full h-full object-cover" />
-            <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate" :title="item.path">{{ item.name }}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">{{ item.count }} 首</div>
-          </div>
-        </li>
-        <li v-if="folderList.length === 0" class="text-xs text-gray-400 dark:text-gray-500 text-center py-4">暂无文件夹，请点击右上角添加</li>
-    </ul>
+    <div v-show="isFolderMode" class="flex flex-col h-full bg-transparent">
+        <div class="flex-1 overflow-y-auto custom-scrollbar px-2 pb-4 space-y-0.5 mt-1">
+             <div v-if="activeTreeNodes && activeTreeNodes.length > 0">
+                 <FolderTreeItem 
+                    v-for="node in activeTreeNodes" 
+                    :key="node.path"
+                    :node="node"
+                    :depth="0"
+                    :selectedPath="currentFolderFilter"
+                    @select="handleTreeSelect"
+                    @contextmenu="handleTreeContextMenu"
+                 />
+             </div>
+             
+             <!-- Empty State for Active Root -->
+             <div v-else-if="activeRootPath" class="flex flex-col items-center justify-center py-10 text-gray-400 dark:text-gray-500 space-y-2">
+                 <span class="text-xs">该文件夹为空</span>
+             </div>
 
+             <!-- Empty State for No Roots -->
+             <div v-if="folderTree.length === 0" class="flex flex-col items-center justify-center py-10 text-gray-400 dark:text-gray-500 space-y-2">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 00-2-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" /></svg>
+                 <span class="text-xs">点击右上角 "..." 添加文件夹</span>
+             </div>
+        </div>
+    </div>
+
+    </div> <!-- End Scrollable Content -->
+
+    <!-- ... Context Menus ... -->
     <FolderContextMenu 
       :visible="showMenu" 
       :x="menuX" 
@@ -403,6 +553,8 @@ onUnmounted(() => {
       @open-folder="openFolder" 
       @refresh="handleRefreshFolder" 
       @remove="removeFolderItem" 
+      @delete-disk="handlePhysicalDelete"
+      :isManagementMode="isManagementMode"
     />
 
     <ModernModal 
@@ -410,6 +562,7 @@ onUnmounted(() => {
       title="物理移动文件" 
       :content="`确定将这 ${dragPendingFiles.length} 个文件物理移动到文件夹 '${moveTarget?.name}' 吗？`" 
       @confirm="executeMove" 
+      @cancel="cancelMove"
     />
 
     <ModernModal 
@@ -419,6 +572,24 @@ onUnmounted(() => {
       type="danger"
       confirm-text="移除"
       @confirm="executeDeleteFolders" 
+    />
+
+    <!-- 🟢 Physical Delete Modal -->
+    <ModernModal 
+      v-model:visible="showPhysicalDeleteConfirm" 
+      title="⚠️ 永久删除文件夹" 
+      :content="`确定要从磁盘中永久删除文件夹 '${folderToPhysicalDelete}' 吗？此操作不可恢复！`" 
+      type="danger"
+      confirm-text="永久删除"
+      @confirm="executePhysicalDelete" 
+    />
+
+    <ModernModal 
+      v-model:visible="showAddToLibraryConfirm" 
+      title="添加到音乐库" 
+      :content="`文件夹 '${pendingFolderToPlaylist?.name}' 尚未添加到音乐库，无法直接创建歌单。要先将其添加到音乐库吗？`" 
+      confirm-text="添加到库并创建"
+      @confirm="executeAddToLibraryAndCreate" 
     />
 
   </aside>

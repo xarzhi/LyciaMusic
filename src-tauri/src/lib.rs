@@ -1,27 +1,47 @@
 mod database;
+pub mod error;
 mod music;
 mod player;
 mod toolbox;
-pub mod error;
 
 use database::DbState;
-use toolbox::{preview_rename, apply_rename};
 use music::{
-    scan_music_folder, scan_folder_as_playlists, get_song_cover_thumbnail, 
-    get_song_cover, get_song_lyrics, 
-    batch_move_music_files, move_music_file, show_in_folder, delete_music_file,
-    run_cache_cleanup, ImageConcurrencyLimit // 引入新组件
+    add_library_folder,
+    add_sidebar_folder,
+    batch_move_music_files,
+    delete_folder,
+    delete_music_file,
+    get_folder_first_song, // 🟢 New: Get first song for cover
+    get_library_folders,
+    get_library_hierarchy, // 引入新命令
+    // Sidebar Commands
+    get_sidebar_folders,
+    get_sidebar_hierarchy,
+    get_song_cover,
+    get_song_cover_thumbnail,
+    get_song_lyrics,
+    move_file_to_folder, // Added this line
+    move_music_file,
+    remove_library_folder,
+    remove_sidebar_folder,
+    run_cache_cleanup,
+    scan_folder_as_playlists,
+    scan_library,
+    scan_music_folder,
+    show_in_folder,
+    ImageConcurrencyLimit, // 引入新组件
 };
 use player::{
-    init_player, play_audio, pause_audio, resume_audio, seek_audio, set_volume, get_playback_progress,
-    get_output_devices, set_output_device
+    get_output_devices, get_playback_progress, init_player, pause_audio, play_audio, resume_audio,
+    seek_audio, set_output_device, set_volume,
 };
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager,
 };
-use tokio::sync::Semaphore; // 引入信号量
+use tokio::sync::Semaphore;
+use toolbox::{apply_rename, preview_rename}; // 引入信号量
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -71,7 +91,8 @@ pub fn run() {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
                         ..
-                    } = event {
+                    } = event
+                    {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
@@ -84,25 +105,38 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            scan_music_folder, 
-            scan_folder_as_playlists, 
-            get_song_cover_thumbnail, 
-            get_song_cover, 
-            get_song_lyrics, 
-            batch_move_music_files, 
-            move_music_file, 
-            show_in_folder, 
+            scan_music_folder,
+            scan_folder_as_playlists,
+            get_song_cover_thumbnail,
+            get_song_cover,
+            get_song_lyrics,
+            batch_move_music_files,
+            move_music_file,
+            show_in_folder,
             delete_music_file,
-            play_audio, 
-            pause_audio, 
-            resume_audio, 
-            seek_audio, 
-            set_volume, 
+            play_audio,
+            pause_audio,
+            resume_audio,
+            seek_audio,
+            set_volume,
             get_playback_progress,
             preview_rename,
             apply_rename,
             get_output_devices,
-            set_output_device
+            set_output_device,
+            get_library_folders,
+            add_library_folder,
+            remove_library_folder,
+            scan_library,
+            get_library_hierarchy,
+            // Sidebar Commands
+            get_sidebar_folders,
+            add_sidebar_folder,
+            remove_sidebar_folder,
+            get_sidebar_hierarchy,
+            delete_folder,
+            move_file_to_folder,
+            get_folder_first_song
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

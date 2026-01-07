@@ -14,6 +14,11 @@ import DragGhost from '../common/DragGhost.vue';
 import MoveToFolderModal from '../overlays/MoveToFolderModal.vue';
 import { useToast } from '../../composables/toast';
 
+// 🟢 新增 props: 允许隐藏内部 header
+defineProps<{
+  hideHeader?: boolean;
+}>();
+
 const route = useRoute();
 const router = useRouter();
 
@@ -179,6 +184,7 @@ const handleTableDragStart = ({ event, song, index }: { event: MouseEvent; song:
   // --- 分支 B: 单曲/普通模式 (应用了新的锁定修复) ---
   else {
     if (['folder', 'playlist', 'all'].includes(currentViewMode.value)) {
+       dragSession.type = 'song';
        dragSession.songs = [song];
        // 🔥 关键修复：按下瞬间，锁定当前位置为“空白坑位”
        // 这保证了拖拽开始时列表不会乱跳
@@ -240,6 +246,7 @@ const onGlobalMouseMove = (e: MouseEvent) => {
     const dist = Math.sqrt(Math.pow(e.clientX - startX, 2) + Math.pow(e.clientY - startY, 2));
     if (dist > 5) {
       dragSession.active = true;
+      dragSession.showGhost = true; // 🟢 显示拖拽幽灵
     }
   }
 
@@ -329,13 +336,23 @@ const onGlobalMouseUp = () => {
 
   if (dragSession.active) {
     if (dragSession.targetFolder) {
-      showMoveToFolderModal.value = true;
-      selectedPaths.value = new Set(dragSession.songs.map(s => s.path));
-    } else if (dragSession.targetPlaylist) {
+      // 🟢 Yield to Sidebar: Do not handle here, and DO NOT reset active immediately.
+      // SongListSidebar will handle the drop and reset active.
+      
+      // 🟢 但是立即隐藏拖拽幽灵
+      dragSession.showGhost = false;
+      
+      // We do NOT reset dragSession.active here.
+      return; 
+    } 
+    
+    if (dragSession.targetPlaylist) {
       const paths = dragSession.songs.map(s => s.path);
       const count = addSongsToPlaylist(dragSession.targetPlaylist.id, paths);
       const msg = count > 0 ? `已添加 ${count} 首歌曲到 ${dragSession.targetPlaylist.name}` : '歌曲已存在于歌单';
       useToast().showToast(msg, count > 0 ? 'success' : 'info');
+      dragSession.showGhost = false;
+      dragSession.active = false;
     } else if (dragSession.insertIndex > -1) {
       // 🔥 Drop 逻辑：精确修复
       const movingSongs = dragSession.songs;
@@ -414,12 +431,19 @@ const onGlobalMouseUp = () => {
             }
         }
       }
+      dragSession.showGhost = false;
+      dragSession.active = false;
+    } else {
+      // Nothing
+      dragSession.showGhost = false;
+      dragSession.active = false;
     }
     
-    dragSession.active = false;
     dragSession.insertIndex = -1;
     setTimeout(() => { 
-      dragSession.targetFolder = null; 
+      // dragSession.targetFolder = null; // Do not clear immediately if yielded? 
+      // Actually SongListSidebar will clear it or we clear it later.
+      // But we should clear playlist/other
       dragSession.targetPlaylist = null;
     }, 100);
   }
@@ -460,12 +484,43 @@ watch(() => route.path, (path) => {
     }
   }
 }, { immediate: true });
+
+// 🟢 Song Physical Delete Logic
+const showSongPhysicalDeleteConfirm = ref(false);
+const songToPhysicalDelete = ref<any>(null);
+
+const { deleteFromDisk } = usePlayer(); // Import action
+
+const handleSongPhysicalDelete = (song: any) => {
+    songToPhysicalDelete.value = song;
+    showSongPhysicalDeleteConfirm.value = true;
+    showContextMenu.value = false;
+};
+
+const executeSongPhysicalDelete = async () => {
+    if (songToPhysicalDelete.value) {
+        await deleteFromDisk(songToPhysicalDelete.value);
+        showSongPhysicalDeleteConfirm.value = false;
+        songToPhysicalDelete.value = null;
+    }
+};
+
+// 🟢 暴露给父组件使用的方法和状态
+defineExpose({
+  isBatchMode,
+  selectedPaths,
+  handleBatchPlay,
+  requestBatchDelete,
+  handleBatchMove,
+  showAddToPlaylistModal
+});
 </script>
 
 <template>
   <div class="flex-1 flex flex-col h-full bg-transparent relative transition-colors duration-500">
     <DragGhost /> 
     <SongListHeader 
+      v-if="!hideHeader"
       v-model:isBatchMode="isBatchMode" 
       @batchPlay="handleBatchPlay" 
       @openAddToPlaylist="showAddToPlaylistModal = true" 
@@ -494,9 +549,27 @@ watch(() => route.path, (path) => {
     
     <AddToPlaylistModal :visible="showAddToPlaylistModal" :selectedCount="isBatchMode ? selectedPaths.size : 1" @close="showAddToPlaylistModal = false" @add="handleAddToPlaylist"/>
     <MoveToFolderModal :visible="showMoveToFolderModal" :selectedCount="selectedPaths.size" @close="showMoveToFolderModal = false" @confirm="confirmBatchMove" />
-    <SongContextMenu :visible="showContextMenu" :x="contextMenuX" :y="contextMenuY" :song="contextMenuTargetSong" :is-playlist-view="currentViewMode === 'playlist'" @close="showContextMenu = false" @add-to-playlist="showAddToPlaylistModal = true" />
+    <SongContextMenu 
+      :visible="showContextMenu" 
+      :x="contextMenuX" 
+      :y="contextMenuY" 
+      :song="contextMenuTargetSong" 
+      :is-playlist-view="currentViewMode === 'playlist'" 
+      @close="showContextMenu = false" 
+      @add-to-playlist="showAddToPlaylistModal = true"
+      @delete-disk="handleSongPhysicalDelete"
+    />
     <ModernModal :visible="showConfirm" title="移除歌曲" :content="confirmMessage" type="danger" confirm-text="移除" @confirm="executeBatchDelete" @cancel="showConfirm = false" />
 
+    <!-- 🟢 Song Physical Delete Modal -->
+    <ModernModal 
+      v-model:visible="showSongPhysicalDeleteConfirm" 
+      title="⚠️ 永久删除文件" 
+      :content="`确定要从磁盘中永久删除歌曲 '${songToPhysicalDelete?.title}' 吗？此操作不可恢复！`" 
+      type="danger"
+      confirm-text="永久删除"
+      @confirm="executeSongPhysicalDelete" 
+    />
   </div>
 </template>
 

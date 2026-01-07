@@ -7,13 +7,14 @@ const props = defineProps<{
   x: number,
   y: number,
   song: Song | null,
-  isPlaylistView: boolean
+  isPlaylistView: boolean,
+  isManagementMode?: boolean // 🟢 Prop
 }>();
 
-const emit = defineEmits(['close', 'addToPlaylist']);
+const emit = defineEmits(['close', 'addToPlaylist', 'delete-disk']);
 
 // 引入需要的操作
-const { playSong, playNext, addSongToQueue, removeSongFromList, removeFromPlaylist, openInFinder, deleteFromDisk, filterCondition } = usePlayer();
+const { playSong, playNext, addSongToQueue, removeSongFromList, removeFromPlaylist, openInFinder, filterCondition } = usePlayer();
 
 const menuRef = ref<HTMLElement | null>(null);
 
@@ -101,7 +102,7 @@ const handleAction = (action: string) => {
       openInFinder(props.song.path);
       break;
     case 'deleteFromDisk':
-      deleteFromDisk(props.song);
+      emit('delete-disk', props.song);
       break;
   }
   emit('close');
@@ -186,7 +187,7 @@ const handleAction = (action: string) => {
           <span>打开文件所在目录</span>
         </div>
 
-        <div @click="handleAction('deleteFromDisk')" class="px-4 py-2.5 hover:bg-gray-100 cursor-pointer flex items-center group transition-colors text-red-500 hover:text-red-600 border-t border-gray-100 mt-1">
+        <div v-if="isManagementMode" @click="handleAction('deleteFromDisk')" class="px-4 py-2.5 hover:bg-gray-100 cursor-pointer flex items-center group transition-colors text-red-500 hover:text-red-600 border-t border-gray-100 mt-1">
           <div class="w-5 h-5 mr-3 flex items-center justify-center text-red-500 group-hover:text-red-600">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
               <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" />

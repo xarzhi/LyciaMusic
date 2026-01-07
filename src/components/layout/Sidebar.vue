@@ -40,7 +40,7 @@ let mouseDownInfo: { x: number, y: number, index: number, playlist: any } | null
 const handleMouseDown = (e: MouseEvent, index: number, playlist: any) => {
   // Only left click
   if (e.button !== 0) return;
-mousedownInfo = { x: e.clientX, y: e.clientY, index, playlist };
+  mouseDownInfo = { x: e.clientX, y: e.clientY, index, playlist };
 };
 
 const handleGlobalMouseMove = (e: MouseEvent) => {
@@ -116,7 +116,8 @@ onUnmounted(() => {
 });
 // ---------------------------------
 
-// --- Context Menu & Selection State ---const showContextMenu = ref(false);
+// --- Context Menu & Selection State ---
+const showContextMenu = ref(false);
 const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 const targetPlaylist = ref<{id: string, name: string} | null>(null);
@@ -367,12 +368,12 @@ watch([songList, playlists], () => {
 
       <div class="mt-6">
           <div class="px-4 pr-3 py-2 flex items-center justify-between group">
-            <div class="flex items-center gap-1 cursor-pointer text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors" @click.stop="isPlaylistOpen = !isPlaylistOpen">
+            <div class="flex items-center gap-1 cursor-pointer text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors" @click.stop="isPlaylistOpen = !isPlaylistOpen">
               <svg xmlns="http://www.w3.org/2000/svg" :class="['h-3 w-3 transition-transform duration-200', isPlaylistOpen ? 'rotate-90' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
               <span class="text-xs font-bold tracking-wide">我的歌单</span>
-              <span class="text-xs text-gray-400 dark:text-gray-500 font-normal ml-0.5">{{ playlists.length }}</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400 font-normal ml-0.5">{{ playlists.length }}</span>
             </div>
-            <button @click.stop="handleCreatePlaylist" class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded p-0.5 transition-colors" title="新建歌单"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg></button>
+            <button @click.stop="handleCreatePlaylist" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded p-0.5 transition-colors" title="新建歌单"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg></button>
           </div>
           
           <ul v-show="isPlaylistOpen" class="space-y-0.5 mt-1">

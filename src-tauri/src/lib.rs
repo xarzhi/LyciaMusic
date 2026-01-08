@@ -36,7 +36,7 @@ use player::{
     get_output_devices, get_playback_progress, init_player, pause_audio, play_audio, resume_audio,
     seek_audio, set_output_device, set_volume,
 };
-use statistics::get_library_stats;
+use statistics::{get_library_stats, get_statistics};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -140,7 +140,8 @@ pub fn run() {
             move_file_to_folder,
             get_folder_first_song,
             // Statistics Commands
-            get_library_stats
+            get_library_stats,
+            get_statistics
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

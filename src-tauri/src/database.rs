@@ -118,6 +118,13 @@ impl DbState {
                 .ok();
         }
 
+        // --- Index for time range queries (v1.2.0) ---
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_songs_added_at ON songs(added_at)",
+            [],
+        )
+        .ok();
+
         Ok(DbState {
             conn: Arc::new(Mutex::new(conn)),
         })

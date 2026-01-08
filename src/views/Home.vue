@@ -35,7 +35,12 @@
     />
     <StatisticsHeader
       v-else-if="currentViewMode === 'statistics'"
+      :current-scope="statisticsPageRef?.currentScope || 'All'"
+      :current-scope-value="statisticsPageRef?.currentScopeValue || ''"
+      :current-time-range="statisticsPageRef?.currentTimeRange || 'All'"
       @refresh="handleRefreshStats"
+      @scope-change="handleStatsScopeChange"
+      @time-range-change="handleStatsTimeRangeChange"
     />
     <LocalMusicHeader
       v-else
@@ -323,6 +328,23 @@ const handleRefreshAll = async () => {
 // 刷新统计数据
 const handleRefreshStats = () => {
   statisticsPageRef.value?.fetchStats();
+};
+
+// 统计 scope 变化
+const handleStatsScopeChange = (scope: string, value: string) => {
+  if (statisticsPageRef.value) {
+    statisticsPageRef.value.currentScope = scope;
+    statisticsPageRef.value.currentScopeValue = value;
+    statisticsPageRef.value.fetchStats();
+  }
+};
+
+// 统计 timeRange 变化
+const handleStatsTimeRangeChange = (range: string) => {
+  if (statisticsPageRef.value) {
+    statisticsPageRef.value.currentTimeRange = range;
+    statisticsPageRef.value.fetchStats();
+  }
 };
 
 // 重命名歌单

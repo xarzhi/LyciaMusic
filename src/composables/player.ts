@@ -1204,7 +1204,41 @@ export function usePlayer() {
     }, 1000);
   }
 
+
+  // 🟢 播放时长统计状态
+  let sessionStartTime: number | null = null;
+  let accumulatedTime = 0;
+
+  // 🟢 辅助：结算并记录播放时长
+  const flushPlaySession = () => {
+    const song = State.currentSong.value;
+    if (!song) return;
+
+    let currentSession = 0;
+    // 如果正在播放，加上当前这段时间
+    if (State.isPlaying.value && sessionStartTime) {
+      currentSession = (Date.now() - sessionStartTime) / 1000;
+    }
+
+    const totalDuration = accumulatedTime + currentSession;
+
+    // Anti-cheat: 只有超过 10 秒才记录
+    if (totalDuration >= 10) {
+      invoke('record_play', {
+        songPath: song.path,
+        duration: Math.floor(totalDuration)
+      }).catch(e => console.warn('record_play failed:', e));
+    }
+
+    // Reset
+    accumulatedTime = 0;
+    sessionStartTime = null;
+  };
+
   async function playSong(song: State.Song) {
+    // 🟢 切歌前：结算上一首
+    flushPlaySession();
+
     State.currentSong.value = song;
 
     // 🟢 核心逻辑：播放时更新播放队列
@@ -1226,10 +1260,15 @@ export function usePlayer() {
     State.isSongLoaded.value = true;
     State.currentTime.value = 0;
     State.currentCover.value = '';
+
+    // 🟢 开始新会话计时
+    accumulatedTime = 0;
+    sessionStartTime = Date.now();
+
     addToHistory(song);
 
-    // 🟢 记录播放事件到数据库
-    invoke('record_play', { songPath: song.path }).catch(e => console.warn('record_play failed:', e));
+    // 🟢 移除旧的 record_play (改为在结束/切歌时记录)
+    // invoke('record_play', { songPath: song.path }).catch(e => console.warn('record_play failed:', e));
 
     loadLyrics();
     startTimer();
@@ -1250,12 +1289,43 @@ export function usePlayer() {
   }
 
   async function pauseSong() {
+    // 🟢 暂停：累计时间，清除 sessionStart
+    if (State.isPlaying.value && sessionStartTime) {
+      accumulatedTime += (Date.now() - sessionStartTime) / 1000;
+      sessionStartTime = null;
+    }
+
     State.isPlaying.value = false;
     await invoke('pause_audio');
     stopTimer();
   }
 
-  async function togglePlay() { if (!State.currentSong.value) return; if (State.isPlaying.value) { await invoke('pause_audio'); State.isPlaying.value = false; stopTimer(); } else { if (!State.isSongLoaded.value) { await playSong(State.currentSong.value); } else { await invoke('resume_audio'); } State.isPlaying.value = true; startTimer(); } }
+  async function togglePlay() {
+    if (!State.currentSong.value) return;
+
+    if (State.isPlaying.value) {
+      // Pausing
+      if (sessionStartTime) {
+        accumulatedTime += (Date.now() - sessionStartTime) / 1000;
+        sessionStartTime = null;
+      }
+
+      await invoke('pause_audio');
+      State.isPlaying.value = false;
+      stopTimer();
+    } else {
+      // Playing
+      if (!State.isSongLoaded.value) {
+        await playSong(State.currentSong.value);
+      } else {
+        await invoke('resume_audio');
+        // Resuming: start session
+        sessionStartTime = Date.now();
+      }
+      State.isPlaying.value = true;
+      startTimer();
+    }
+  }
 
   function nextSong() {
     if (State.tempQueue.value.length > 0) { const next = State.tempQueue.value.shift(); if (next) { playSong(next); return; } }

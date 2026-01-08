@@ -144,6 +144,24 @@ impl DbState {
         )
         .ok();
 
+        // --- Migration: Add played_seconds column (vNext) ---
+        let ph_columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(play_history)")
+            .map_err(|e| e.to_string())?
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if !ph_columns.contains(&"played_seconds".to_string()) {
+            // Default to 0 for existing rows (safe for calculation)
+            conn.execute(
+                "ALTER TABLE play_history ADD COLUMN played_seconds INTEGER DEFAULT 0",
+                [],
+            )
+            .ok();
+        }
+
         Ok(DbState {
             conn: Arc::new(Mutex::new(conn)),
         })

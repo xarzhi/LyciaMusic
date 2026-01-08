@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { usePlayer } from '../../composables/player';
 import StatsOverviewCards from './StatsOverviewCards.vue';
@@ -16,11 +16,14 @@ interface LibraryStats {
 interface TopSong {
   song_path: string;
   play_count: number;
+  value: number;
 }
 
 interface BehaviorStats {
-  total_plays_7d: number;
-  top_songs_7d: TopSong[];
+  total_plays: number;
+  total_duration: number;
+  top_songs: TopSong[];
+  top_songs_by_duration: TopSong[];
   hour_distribution: number[];
 }
 
@@ -92,13 +95,52 @@ async function fetchStats() {
   }
 }
 
+// 行为统计的独立时间范围
+const currentBehaviorTimeRange = ref<TimeRangeType>('Days7');
+const behaviorTimeOptions: { label: string; value: TimeRangeType }[] = [
+  { label: '近7天', value: 'Days7' },
+  { label: '近30天', value: 'Days30' },
+  { label: '今年', value: 'ThisYear' },
+  { label: '全部', value: 'All' },
+];
+
+function updateBehaviorTime(range: TimeRangeType) {
+  currentBehaviorTimeRange.value = range;
+  // watcher will handle fetch
+}
+
 async function fetchBehaviorStats() {
   try {
-    behaviorStats.value = await invoke<BehaviorStats>('get_behavior_stats');
+    const scope = buildScope();
+    const timeRange: TimeRange = { type: currentBehaviorTimeRange.value };
+    behaviorStats.value = await invoke<BehaviorStats>('get_behavior_stats', { 
+      scope, 
+      timeRange 
+    });
   } catch (e) {
     console.warn('Failed to fetch behavior stats:', e);
   }
 }
+
+// 监听 scope 变化，刷新两边
+// 监听 behaviorTime 变化，只刷新行为
+watch([currentScope, currentScopeValue], () => {
+  fetchStats();
+  fetchBehaviorStats();
+});
+
+watch(currentBehaviorTimeRange, () => {
+  fetchBehaviorStats();
+});
+// 我们可以共用一个 watch，或者在 fetchStats 调用时顺便调用 fetchBehaviorStats?
+// 为了解耦 UI 部分刷新，我们可以分别 watch。
+// 但 StatisticsPage 目前的逻辑是：StatsOverviewCards 用 fetchStats，BehaviorStatsSection 用 fetchBehaviorStats。
+// 它们都依赖 currentScope。
+
+watch([currentScope, currentScopeValue], () => {
+  fetchStats();
+  fetchBehaviorStats();
+});
 
 // 暴露方法和状态供父组件调用
 defineExpose({ 
@@ -146,20 +188,94 @@ onMounted(() => {
 
       <!-- Stats Content -->
       <template v-else-if="stats">
-        <StatsOverviewCards
-          :total-songs="stats.total_songs"
-          :total-duration="stats.total_duration"
-          :total-file-size="stats.total_file_size"
-          :favorite-rate="favoriteRate"
-        />
+        
+        <!-- Section 1: 曲库概览 -->
+        <section class="mb-10">
+          <div class="flex items-center gap-2 mb-4">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">曲库概览</h2>
+            
+            <!-- 语义标签: 入库语义 -->
+            <div class="group relative flex items-center">
+              <span class="px-2 py-0.5 rounded text-xs font-medium bg-blue-100/50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800/30">
+                入库
+              </span>
+              <!-- Tooltip -->
+              <div class="absolute bottom-full left-0 mb-2 w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 hidden group-hover:block">
+                基于歌曲入库时间 (added_at) 统计，用于观察曲库规模变化。
+              </div>
+            </div>
+            
+            <div class="ml-auto">
+               <!-- 这里复用 DetailHeader 传递下来的时间选择器逻辑吗？ 
+                    目前 StatisticsHeader 把 currentTimeRange 传下来了。
+                    所以不需要在这里重复放 Selector，主要依靠顶部的 Selector。
+               -->
+               <span class="text-xs text-gray-400">时间范围：顶部控制</span>
+            </div>
+          </div>
 
-        <!-- 行为统计 -->
-        <BehaviorStatsSection
-          v-if="behaviorStats"
-          :total-plays7d="behaviorStats.total_plays_7d"
-          :top-songs7d="behaviorStats.top_songs_7d"
-          :hour-distribution="behaviorStats.hour_distribution"
-        />
+          <StatsOverviewCards
+            :total-songs="stats.total_songs"
+            :total-duration="stats.total_duration"
+            :total-file-size="stats.total_file_size"
+            :favorite-rate="favoriteRate"
+          />
+        </section>
+
+        <!-- Divider -->
+        <hr class="border-gray-100 dark:border-gray-800 mb-10" />
+
+        <!-- Section 2: 听歌行为 -->
+        <section>
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">
+                听歌行为
+              </h2>
+
+              <!-- 语义标签: 播放语义 -->
+              <div class="group relative flex items-center">
+                <span class="px-2 py-0.5 rounded text-xs font-medium bg-purple-100/50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-800/30">
+                  播放
+                </span>
+                <!-- Tooltip -->
+                <div class="absolute bottom-full left-0 mb-2 w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 hidden group-hover:block">
+                  基于实际播放时间 (played_at) 统计，反映您的听歌习惯。
+                </div>
+              </div>
+            </div>
+
+            <!-- 独立时间选择器 -->
+             <div class="flex items-center bg-gray-100 dark:bg-white/5 rounded-lg p-0.5">
+              <button 
+                v-for="range in behaviorTimeOptions" 
+                :key="range.value"
+                @click="updateBehaviorTime(range.value)"
+                class="px-3 py-1 text-xs rounded-md transition-all duration-200"
+                :class="currentBehaviorTimeRange === range.value 
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
+              >
+                {{ range.label }}
+              </button>
+            </div>
+          </div>
+          
+          <div class="mb-4 text-xs text-gray-400">
+             范围：{{ currentScope === 'All' ? '全库' : (currentScope === 'Folder' ? '当前文件夹' : currentScope) }}
+             <span class="mx-1">|</span>
+             时间：按播放记录统计（独立于上方入库时间）
+          </div>
+
+          <BehaviorStatsSection
+            v-if="behaviorStats"
+            :total-plays7d="behaviorStats.total_plays"
+            :total-duration="behaviorStats.total_duration"
+            :top-songs7d="behaviorStats.top_songs"
+            :top-songs-by-duration="behaviorStats.top_songs_by_duration"
+            :hour-distribution="behaviorStats.hour_distribution"
+          />
+        </section>
       </template>
     </div>
   </div>

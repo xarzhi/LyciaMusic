@@ -5,11 +5,14 @@ import { usePlayer } from '../../composables/player';
 interface TopSong {
   song_path: string;
   play_count: number;
+  value: number; // Generic value (count or duration)
 }
 
 const props = defineProps<{
   totalPlays7d: number;
+  totalDuration: number;
   topSongs7d: TopSong[];
+  topSongsByDuration: TopSong[];
   hourDistribution: number[];
 }>();
 
@@ -20,6 +23,25 @@ function getSongInfo(path: string) {
   const song = songList.value.find(s => s.path === path);
   return song ? { title: song.title || '未知歌曲', artist: song.artist || '未知艺术家' } : { title: path.split(/[/\\]/).pop() || '未知', artist: '未知艺术家' };
 }
+
+// 格式化时长
+function formatDuration(seconds: number) {
+  if (!seconds) return "0秒";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  
+  if (hours > 0) return `${hours}小时 ${minutes}分钟`;
+  return `${minutes}分钟 ${Math.floor(seconds % 60)}秒`;
+}
+
+function formatDurationShort(seconds: number) {
+    if (seconds < 60) return `${seconds}s`;
+    const mins = Math.floor(seconds / 60);
+    return `${mins}m`;
+}
+
+// Top Songs
+// (Split into two columns, no longer need tab switching state)
 
 // 小时分布的最大值（用于计算柱状图高度）
 const maxHourCount = computed(() => Math.max(...props.hourDistribution, 1));
@@ -57,11 +79,25 @@ const peakTimeDesc = computed(() => {
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
       </svg>
-      近 7 天听歌行为
+      听歌习惯分析
     </h3>
 
-    <!-- 播放次数卡片 -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <!-- 顶层卡片网格 -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <!-- 播放总时长 (新) -->
+      <div class="stat-card relative overflow-hidden rounded-xl p-4 backdrop-blur-md bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg">
+        <div class="absolute inset-0 opacity-10 dark:opacity-20 bg-gradient-to-br from-pink-500 to-rose-400"></div>
+        <div class="relative z-10">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3 bg-gradient-to-br from-pink-500 to-rose-400 text-white shadow-md">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">总听歌时长</p>
+          <p class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{{ formatDuration(totalDuration) }}</p>
+        </div>
+      </div>
+
       <!-- 播放次数 -->
       <div class="stat-card relative overflow-hidden rounded-xl p-4 backdrop-blur-md bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg">
         <div class="absolute inset-0 opacity-10 dark:opacity-20 bg-gradient-to-br from-green-500 to-emerald-400"></div>
@@ -83,7 +119,7 @@ const peakTimeDesc = computed(() => {
         <div class="relative z-10">
           <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3 bg-gradient-to-br from-indigo-500 to-violet-400 text-white shadow-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
           </div>
           <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">最活跃时段</p>
@@ -92,44 +128,89 @@ const peakTimeDesc = computed(() => {
       </div>
     </div>
 
-    <!-- Top 3 歌曲 -->
-    <div v-if="topSongs7d.length > 0" class="rounded-xl p-4 backdrop-blur-md bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg">
-      <h4 class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3 flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-        </svg>
-        最常播放
-      </h4>
-      <div class="space-y-2">
-        <div
-          v-for="(song, index) in topSongs7d"
-          :key="song.song_path"
-          class="flex items-center gap-3 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-        >
-          <!-- 排名 -->
-          <div :class="[
-            'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold',
-            index === 0 ? 'bg-yellow-400 text-yellow-900' :
-            index === 1 ? 'bg-gray-300 text-gray-700' :
-            'bg-amber-600 text-amber-100'
-          ]">
-            {{ index + 1 }}
-          </div>
-          <!-- 歌曲信息 -->
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
-              {{ getSongInfo(song.song_path).title }}
-            </p>
-            <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
-              {{ getSongInfo(song.song_path).artist }}
-            </p>
-          </div>
-          <!-- 播放次数 -->
-          <div class="text-sm text-gray-500 dark:text-gray-400">
-            {{ song.play_count }} 次
+    <!-- Top 3 歌曲 (双栏布局) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      
+      <!-- 左侧: 按次数 -->
+      <div v-if="topSongs7d.length > 0" class="rounded-xl p-4 backdrop-blur-md bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg">
+        <h4 class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3 flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+          </svg>
+          最常播放 (按次数)
+        </h4>
+        <div class="space-y-2">
+          <div
+            v-for="(song, index) in topSongs7d"
+            :key="song.song_path"
+            class="flex items-center gap-3 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+          >
+            <!-- 排名 -->
+            <div :class="[
+              'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold',
+              index === 0 ? 'bg-yellow-400 text-yellow-900' :
+              index === 1 ? 'bg-gray-300 text-gray-700' :
+              'bg-amber-600 text-amber-100'
+            ]">
+              {{ index + 1 }}
+            </div>
+            <!-- 歌曲信息 -->
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+                {{ getSongInfo(song.song_path).title }}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                {{ getSongInfo(song.song_path).artist }}
+              </p>
+            </div>
+            <!-- 数值展示 -->
+            <div class="text-sm text-gray-500 dark:text-gray-400 text-right">
+              {{ song.value }} 次
+            </div>
           </div>
         </div>
       </div>
+
+      <!-- 右侧: 按时长 -->
+      <div v-if="topSongsByDuration.length > 0" class="rounded-xl p-4 backdrop-blur-md bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg">
+        <h4 class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3 flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          最常播放 (按时长)
+        </h4>
+        <div class="space-y-2">
+          <div
+            v-for="(song, index) in topSongsByDuration"
+            :key="song.song_path"
+            class="flex items-center gap-3 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+          >
+            <!-- 排名 -->
+            <div :class="[
+              'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold',
+              index === 0 ? 'bg-pink-400 text-pink-900' :
+              index === 1 ? 'bg-gray-300 text-gray-700' :
+              'bg-pink-700 text-pink-100'
+            ]">
+              {{ index + 1 }}
+            </div>
+            <!-- 歌曲信息 -->
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+                {{ getSongInfo(song.song_path).title }}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                {{ getSongInfo(song.song_path).artist }}
+              </p>
+            </div>
+            <!-- 数值展示 -->
+            <div class="text-sm text-gray-500 dark:text-gray-400 text-right">
+              {{ formatDurationShort(song.value) }}
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- 小时分布图 -->

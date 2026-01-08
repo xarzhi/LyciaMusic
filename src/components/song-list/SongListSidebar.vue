@@ -10,9 +10,11 @@ import { useToast } from '../../composables/toast';
 
 import { FolderNode } from '../../composables/playerState';
 
-const props = defineProps<{
-  isManagementMode: boolean; // 🟢 Prop
-}>();
+const props = withDefaults(defineProps<{
+  isManagementMode?: boolean; // 🟢 Prop, now optional
+}>(), {
+  isManagementMode: false
+});
 
 const { 
   currentViewMode, localMusicTab, currentArtistFilter, currentAlbumFilter,

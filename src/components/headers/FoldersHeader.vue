@@ -11,7 +11,7 @@ const props = defineProps<{
   isBatchMode: boolean;
   selectedCount: number;
   folderTree: any[];
-  activeRootPath: string;
+  activeRootPath: string | null;
   currentFolderFilter: string;
   isManagementMode: boolean; // 🟢 Prop
 }>();

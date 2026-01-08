@@ -5,7 +5,7 @@
     <FoldersHeader
       v-if="currentViewMode === 'folder'"
       v-model:isBatchMode="isBatchMode"
-      v-model:activeRootPath="(activeRootPath as any)"
+      v-model:activeRootPath="activeRootPath"
       :selectedCount="selectedPaths.size"
       :folderTree="folderTree"
       :currentFolderFilter="currentFolderFilter"

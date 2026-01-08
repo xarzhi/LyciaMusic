@@ -207,3 +207,125 @@ pub fn get_library_stats(
         favorite_count,
     })
 }
+
+// =====================================================
+// 播放历史与行为统计
+// =====================================================
+
+/// 记录一次播放事件
+#[tauri::command]
+pub fn record_play(db: State<DbState>, song_path: String) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    conn.execute(
+        "INSERT INTO play_history (song_path, played_at, event) VALUES (?1, ?2, 'play')",
+        rusqlite::params![song_path, now],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// 行为统计结果
+#[derive(Serialize)]
+pub struct BehaviorStats {
+    pub total_plays_7d: i64,
+    pub top_songs_7d: Vec<TopSong>,
+    pub hour_distribution: Vec<i64>, // 24 个元素，索引 0-23 代表小时
+}
+
+#[derive(Serialize)]
+pub struct TopSong {
+    pub song_path: String,
+    pub play_count: i64,
+}
+
+/// 获取行为统计数据
+#[tauri::command]
+pub fn get_behavior_stats(db: State<DbState>) -> Result<BehaviorStats, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    // 计算 7 天前的时间戳
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let seven_days_ago = now - 7 * 24 * 60 * 60;
+
+    // 指标 A: 最近 7 天播放次数
+    let total_plays_7d: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM play_history WHERE played_at >= ?1",
+            rusqlite::params![seven_days_ago],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    // 指标 B: 最近 7 天 Top 3 歌曲
+    let mut top_songs_7d: Vec<TopSong> = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT song_path, COUNT(*) as cnt 
+                 FROM play_history 
+                 WHERE played_at >= ?1 
+                 GROUP BY song_path 
+                 ORDER BY cnt DESC 
+                 LIMIT 3",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let rows = stmt
+            .query_map(rusqlite::params![seven_days_ago], |row| {
+                Ok(TopSong {
+                    song_path: row.get(0)?,
+                    play_count: row.get(1)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+
+        for row in rows {
+            if let Ok(song) = row {
+                top_songs_7d.push(song);
+            }
+        }
+    }
+
+    // 指标 C: 最近 7 天小时分布
+    let mut hour_distribution: Vec<i64> = vec![0; 24];
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT CAST(strftime('%H', played_at, 'unixepoch', 'localtime') AS INTEGER) as hour, 
+                        COUNT(*) as cnt 
+                 FROM play_history 
+                 WHERE played_at >= ?1 
+                 GROUP BY hour",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let rows = stmt
+            .query_map(rusqlite::params![seven_days_ago], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+
+        for row in rows {
+            if let Ok((hour, count)) = row {
+                if hour >= 0 && hour < 24 {
+                    hour_distribution[hour as usize] = count;
+                }
+            }
+        }
+    }
+
+    Ok(BehaviorStats {
+        total_plays_7d,
+        top_songs_7d,
+        hour_distribution,
+    })
+}

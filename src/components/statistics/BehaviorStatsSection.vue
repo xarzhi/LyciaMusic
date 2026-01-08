@@ -1,0 +1,178 @@
+<script setup lang="ts">
+import { computed } from 'vue';
+import { usePlayer } from '../../composables/player';
+
+interface TopSong {
+  song_path: string;
+  play_count: number;
+}
+
+const props = defineProps<{
+  totalPlays7d: number;
+  topSongs7d: TopSong[];
+  hourDistribution: number[];
+}>();
+
+const { songList } = usePlayer();
+
+// 根据路径查找歌曲信息
+function getSongInfo(path: string) {
+  const song = songList.value.find(s => s.path === path);
+  return song ? { title: song.title || '未知歌曲', artist: song.artist || '未知艺术家' } : { title: path.split(/[/\\]/).pop() || '未知', artist: '未知艺术家' };
+}
+
+// 小时分布的最大值（用于计算柱状图高度）
+const maxHourCount = computed(() => Math.max(...props.hourDistribution, 1));
+
+// 找出最活跃的时段
+const peakHour = computed(() => {
+  let maxIdx = 0;
+  for (let i = 1; i < props.hourDistribution.length; i++) {
+    if (props.hourDistribution[i] > props.hourDistribution[maxIdx]) {
+      maxIdx = i;
+    }
+  }
+  return maxIdx;
+});
+
+// 时段描述
+function getHourLabel(hour: number): string {
+  if (hour >= 6 && hour < 12) return '上午';
+  if (hour >= 12 && hour < 14) return '中午';
+  if (hour >= 14 && hour < 18) return '下午';
+  if (hour >= 18 && hour < 22) return '晚上';
+  return '深夜';
+}
+
+const peakTimeDesc = computed(() => {
+  const h = peakHour.value;
+  return `${getHourLabel(h)} ${h}:00 - ${h + 1}:00`;
+});
+</script>
+
+<template>
+  <div class="behavior-stats mt-6 space-y-6">
+    <!-- 标题 -->
+    <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+      近 7 天听歌行为
+    </h3>
+
+    <!-- 播放次数卡片 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- 播放次数 -->
+      <div class="stat-card relative overflow-hidden rounded-xl p-4 backdrop-blur-md bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg">
+        <div class="absolute inset-0 opacity-10 dark:opacity-20 bg-gradient-to-br from-green-500 to-emerald-400"></div>
+        <div class="relative z-10">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3 bg-gradient-to-br from-green-500 to-emerald-400 text-white shadow-md">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">播放次数</p>
+          <p class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{{ totalPlays7d }}</p>
+        </div>
+      </div>
+
+      <!-- 最活跃时段 -->
+      <div class="stat-card relative overflow-hidden rounded-xl p-4 backdrop-blur-md bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg">
+        <div class="absolute inset-0 opacity-10 dark:opacity-20 bg-gradient-to-br from-indigo-500 to-violet-400"></div>
+        <div class="relative z-10">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3 bg-gradient-to-br from-indigo-500 to-violet-400 text-white shadow-md">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">最活跃时段</p>
+          <p class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{{ peakTimeDesc }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top 3 歌曲 -->
+    <div v-if="topSongs7d.length > 0" class="rounded-xl p-4 backdrop-blur-md bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg">
+      <h4 class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3 flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+        </svg>
+        最常播放
+      </h4>
+      <div class="space-y-2">
+        <div
+          v-for="(song, index) in topSongs7d"
+          :key="song.song_path"
+          class="flex items-center gap-3 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+        >
+          <!-- 排名 -->
+          <div :class="[
+            'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold',
+            index === 0 ? 'bg-yellow-400 text-yellow-900' :
+            index === 1 ? 'bg-gray-300 text-gray-700' :
+            'bg-amber-600 text-amber-100'
+          ]">
+            {{ index + 1 }}
+          </div>
+          <!-- 歌曲信息 -->
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+              {{ getSongInfo(song.song_path).title }}
+            </p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
+              {{ getSongInfo(song.song_path).artist }}
+            </p>
+          </div>
+          <!-- 播放次数 -->
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            {{ song.play_count }} 次
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 小时分布图 -->
+    <div class="rounded-xl p-4 backdrop-blur-md bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg">
+      <h4 class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-4 flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+        24 小时播放分布
+      </h4>
+      <div class="flex items-end gap-1 h-24">
+        <div
+          v-for="(count, hour) in hourDistribution"
+          :key="hour"
+          class="flex-1 flex flex-col items-center gap-1"
+        >
+          <div
+            :style="{ height: `${(count / maxHourCount) * 100}%` }"
+            :class="[
+              'w-full rounded-t transition-all duration-300 min-h-[2px]',
+              hour === peakHour ? 'bg-gradient-to-t from-green-500 to-emerald-400' : 'bg-gradient-to-t from-blue-400/60 to-cyan-300/60 dark:from-blue-500/40 dark:to-cyan-400/40'
+            ]"
+            :title="`${hour}:00 - ${count} 次`"
+          ></div>
+        </div>
+      </div>
+      <!-- 时间轴标签 -->
+      <div class="flex justify-between mt-2 text-xs text-gray-400">
+        <span>0</span>
+        <span>6</span>
+        <span>12</span>
+        <span>18</span>
+        <span>23</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.stat-card {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+}
+.stat-card:hover {
+  transform: scale(1.02);
+}
+</style>

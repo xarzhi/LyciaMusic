@@ -65,7 +65,7 @@ const handleGlobalMouseUp = () => {
   }
 };
 
-const handleItemMouseMove = (e: MouseEvent, albumName: string) => {
+const handleItemMouseMove = (_e: MouseEvent, albumName: string) => {
   if (dragSession.active && dragSession.type === 'album') {
     dragOverName.value = albumName;
   }

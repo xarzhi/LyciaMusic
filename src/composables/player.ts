@@ -1227,6 +1227,10 @@ export function usePlayer() {
     State.currentTime.value = 0;
     State.currentCover.value = '';
     addToHistory(song);
+
+    // 🟢 记录播放事件到数据库
+    invoke('record_play', { songPath: song.path }).catch(e => console.warn('record_play failed:', e));
+
     loadLyrics();
     startTimer();
     try {

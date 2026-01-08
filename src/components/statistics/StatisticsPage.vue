@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { usePlayer } from '../../composables/player';
 import StatsOverviewCards from './StatsOverviewCards.vue';
+import BehaviorStatsSection from './BehaviorStatsSection.vue';
 
 // 类型定义
 interface LibraryStats {
@@ -10,6 +11,17 @@ interface LibraryStats {
   total_duration: number;  // 秒
   total_file_size: number; // 字节
   favorite_count: number;
+}
+
+interface TopSong {
+  song_path: string;
+  play_count: number;
+}
+
+interface BehaviorStats {
+  total_plays_7d: number;
+  top_songs_7d: TopSong[];
+  hour_distribution: number[];
 }
 
 type ScopeType = 'All' | 'Playlist' | 'Folder' | 'Artist';
@@ -27,6 +39,7 @@ type TimeRange = { type: TimeRangeType };
 const { favoritePaths, playlists } = usePlayer();
 
 const stats = ref<LibraryStats | null>(null);
+const behaviorStats = ref<BehaviorStats | null>(null);
 const loading = ref(true);
 const error = ref<string | null>(null);
 
@@ -79,7 +92,13 @@ async function fetchStats() {
   }
 }
 
-
+async function fetchBehaviorStats() {
+  try {
+    behaviorStats.value = await invoke<BehaviorStats>('get_behavior_stats');
+  } catch (e) {
+    console.warn('Failed to fetch behavior stats:', e);
+  }
+}
 
 // 暴露方法和状态供父组件调用
 defineExpose({ 
@@ -91,6 +110,7 @@ defineExpose({
 
 onMounted(() => {
   fetchStats();
+  fetchBehaviorStats();
 });
 </script>
 
@@ -125,13 +145,22 @@ onMounted(() => {
       </div>
 
       <!-- Stats Content -->
-      <StatsOverviewCards
-        v-else-if="stats"
-        :total-songs="stats.total_songs"
-        :total-duration="stats.total_duration"
-        :total-file-size="stats.total_file_size"
-        :favorite-rate="favoriteRate"
-      />
+      <template v-else-if="stats">
+        <StatsOverviewCards
+          :total-songs="stats.total_songs"
+          :total-duration="stats.total_duration"
+          :total-file-size="stats.total_file_size"
+          :favorite-rate="favoriteRate"
+        />
+
+        <!-- 行为统计 -->
+        <BehaviorStatsSection
+          v-if="behaviorStats"
+          :total-plays7d="behaviorStats.total_plays_7d"
+          :top-songs7d="behaviorStats.top_songs_7d"
+          :hour-distribution="behaviorStats.hour_distribution"
+        />
+      </template>
     </div>
   </div>
 </template>

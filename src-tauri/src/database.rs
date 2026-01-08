@@ -125,6 +125,25 @@ impl DbState {
         )
         .ok();
 
+        // --- Play History Table (v1.3.0) ---
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS play_history (
+                id INTEGER PRIMARY KEY,
+                song_path TEXT NOT NULL,
+                played_at INTEGER NOT NULL,
+                event TEXT DEFAULT 'play'
+            )",
+            [],
+        )
+        .ok();
+
+        // Index for time-based queries on play_history
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_play_history_played_at ON play_history(played_at)",
+            [],
+        )
+        .ok();
+
         Ok(DbState {
             conn: Arc::new(Mutex::new(conn)),
         })

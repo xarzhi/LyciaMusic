@@ -65,7 +65,7 @@ const handleGlobalMouseUp = () => {
   }
 };
 
-const handleItemMouseMove = (e: MouseEvent, artistName: string) => {
+const handleItemMouseMove = (_e: MouseEvent, artistName: string) => {
   if (dragSession.active && dragSession.type === 'artist') {
     dragOverName.value = artistName;
   }

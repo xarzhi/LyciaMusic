@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import RenamePreviewModal, { RenamePreview } from './RenamePreviewModal.vue';
@@ -9,7 +9,8 @@ const toast = useToast();
 
 const targetPath = ref('');
 const mode = ref<'tags' | 'rules' | 'auto'>('auto');
-const customTemplate = ref('{track}. {title}');
+const TOOLBOX_TEMPLATE_KEY = 'toolbox_default_template';
+const customTemplate = ref('');
 const removeTrackPrefix = ref(true);
 const removeSourcePrefix = ref(false);
 
@@ -89,6 +90,20 @@ const variables = [
   { code: '{year}', name: '年份' },
   { code: '{track}', name: '轨道号' },
 ];
+
+// 从 localStorage 加载默认模板
+onMounted(() => {
+  const saved = localStorage.getItem(TOOLBOX_TEMPLATE_KEY);
+  if (saved) {
+    customTemplate.value = saved;
+  }
+});
+
+// 设为默认模板
+const setAsDefault = () => {
+  localStorage.setItem(TOOLBOX_TEMPLATE_KEY, customTemplate.value);
+  toast.showToast('已设为默认模板', 'success');
+};
 </script>
 
 <template>
@@ -139,7 +154,7 @@ const variables = [
           >
             <div class="flex items-center gap-2">
               <input type="radio" v-model="mode" value="rules" class="text-[#EC4141] focus:ring-[#EC4141]" />
-              <span class="font-bold text-gray-800 dark:text-gray-200">文件名清洗</span>
+              <span class="font-bold text-gray-800 dark:text-gray-200">文件名修改</span>
             </div>
             <p class="text-xs text-gray-500 dark:text-gray-400 pl-6">仅对当前文件名进行修剪（如去前缀），不依赖标签。</p>
           </label>
@@ -175,13 +190,20 @@ const variables = [
             </button>
           </div>
 
-          <div class="relative">
+          <div class="flex gap-3">
             <input 
               type="text" 
               v-model="customTemplate" 
               placeholder="输入自定义模板..." 
-              class="w-full pl-4 pr-4 py-3 rounded-lg bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-[#EC4141] focus:border-transparent text-gray-800 dark:text-gray-100 font-mono text-sm"
+              class="flex-1 pl-4 pr-4 py-3 rounded-lg bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-[#EC4141] focus:border-transparent text-gray-800 dark:text-gray-100 font-mono text-sm"
             />
+            <button
+              @click="setAsDefault"
+              :disabled="!customTemplate"
+              class="px-4 py-2 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 text-gray-700 dark:text-gray-300 text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              设为默认
+            </button>
           </div>
           
           <div class="space-y-3">

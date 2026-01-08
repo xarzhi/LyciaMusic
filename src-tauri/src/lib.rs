@@ -2,6 +2,7 @@ mod database;
 pub mod error;
 mod music;
 mod player;
+mod statistics;
 mod toolbox;
 
 use database::DbState;
@@ -35,13 +36,14 @@ use player::{
     get_output_devices, get_playback_progress, init_player, pause_audio, play_audio, resume_audio,
     seek_audio, set_output_device, set_volume,
 };
+use statistics::get_library_stats;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager,
 };
 use tokio::sync::Semaphore;
-use toolbox::{apply_rename, preview_rename}; // 引入信号量
+use toolbox::{apply_rename, preview_rename};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -136,7 +138,9 @@ pub fn run() {
             get_sidebar_hierarchy,
             delete_folder,
             move_file_to_folder,
-            get_folder_first_song
+            get_folder_first_song,
+            // Statistics Commands
+            get_library_stats
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

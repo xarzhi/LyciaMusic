@@ -33,6 +33,10 @@
       @batchDelete="requestBatchDelete"
       @rename="handleRenamePlaylist"
     />
+    <StatisticsHeader
+      v-else-if="currentViewMode === 'statistics'"
+      @refresh="handleRefreshStats"
+    />
     <LocalMusicHeader
       v-else
       v-model:isBatchMode="isBatchMode"
@@ -54,9 +58,12 @@
       
       <!-- 歌曲列表区域 -->
       <section class="flex-1 flex overflow-hidden">
+        <!-- Statistics View -->
+        <StatisticsPage v-if="currentViewMode === 'statistics'" ref="statisticsPageRef" />
+
         <!-- Show grid view for favorites (artists/albums tabs) -->
         <FavoritesGrid 
-          v-if="shouldShowGrid" 
+          v-else-if="shouldShowGrid" 
           @enterDetail="enterFavDetail"
         />
         
@@ -143,6 +150,7 @@ import { useToast } from '../composables/toast';
 import LocalMusicHeader from '../components/headers/LocalMusicHeader.vue';
 import FoldersHeader from '../components/headers/FoldersHeader.vue';
 import DetailHeader from '../components/headers/DetailHeader.vue';
+import StatisticsHeader from '../components/headers/StatisticsHeader.vue';
 import SongListSidebar from '../components/song-list/SongListSidebar.vue';
 import SongTable from '../components/song-list/SongTable.vue';
 import FavoritesGrid from '../components/common/FavoritesGrid.vue';
@@ -152,6 +160,7 @@ import MoveToFolderModal from '../components/overlays/MoveToFolderModal.vue';
 import SongContextMenu from '../components/overlays/SongContextMenu.vue';
 import ModernModal from '../components/common/ModernModal.vue';
 import ModernInputModal from '../components/common/ModernInputModal.vue';
+import StatisticsPage from '../components/statistics/StatisticsPage.vue';
 import { useSongDrag } from '../composables/useSongDrag';
 
 const route = useRoute();
@@ -187,6 +196,7 @@ const isBatchMode = ref(false);
 const isManagementMode = ref(false); // 🟢 Local Management Mode State
 const selectedPaths = ref<Set<string>>(new Set());
 const songTableRef = ref<any>(null);
+const statisticsPageRef = ref<any>(null); // 统计页面引用
 
 // 初始化拖拽逻辑
 const { handleTableDragStart } = useSongDrag(displaySongList, isBatchMode, selectedPaths, songTableRef);
@@ -308,6 +318,11 @@ const handleAddToPlaylist = (playlistId: string) => {
 const handleRefreshAll = async () => {
   await refreshAllFolders();
   useToast().showToast('刷新完成', 'success');
+};
+
+// 刷新统计数据
+const handleRefreshStats = () => {
+  statisticsPageRef.value?.fetchStats();
 };
 
 // 重命名歌单

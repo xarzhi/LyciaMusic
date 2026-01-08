@@ -112,7 +112,7 @@ export const settings = ref<AppSettings>({
 });
 
 // --- 视图状态 ---
-export const currentViewMode = ref<'all' | 'folder' | 'artist' | 'album' | 'genre' | 'year' | 'playlist' | 'recent' | 'favorites'>('all');
+export const currentViewMode = ref<'all' | 'folder' | 'artist' | 'album' | 'genre' | 'year' | 'playlist' | 'recent' | 'favorites' | 'statistics'>('all');
 export const filterCondition = ref<string>('');
 export const searchQuery = ref<string>('');
 export const localMusicTab = ref<'default' | 'artist' | 'album'>('default');

@@ -1088,6 +1088,8 @@ export function usePlayer() {
 
   function switchToFavorites() { State.currentViewMode.value = 'favorites'; State.searchQuery.value = ''; }
 
+  function switchToStatistics() { State.currentViewMode.value = 'statistics'; State.searchQuery.value = ''; }
+
   function setSearch(q: string) { State.searchQuery.value = q; }
 
   function switchLocalTab(tab: 'default' | 'artist' | 'album') { State.localMusicTab.value = tab; State.currentArtistFilter.value = ''; State.currentAlbumFilter.value = ''; if (tab === 'artist' && artistList.value.length > 0) State.currentArtistFilter.value = artistList.value[0].name; if (tab === 'album' && albumList.value.length > 0) State.currentAlbumFilter.value = albumList.value[0].name; }
@@ -1526,7 +1528,7 @@ export function usePlayer() {
     playSong,
     pauseSong,
     togglePlay, nextSong, prevSong, handleSeek, handleVolume, toggleMute, handleScan, toggleMode, togglePlaylist,
-    addFolder, addLibraryFolderPath, switchViewToAll, switchViewToFolder, switchToFolderView, switchToRecent, switchToFavorites, switchLocalTab, switchFavTab,
+    addFolder, addLibraryFolderPath, switchViewToAll, switchViewToFolder, switchToFolderView, switchToRecent, switchToFavorites, switchToStatistics, switchLocalTab, switchFavTab,
     removeFolder, addToHistory, clearHistory, clearLocalMusic, clearFavorites, addSongsToPlaylist, isFavorite, toggleFavorite,
     viewArtist, viewAlbum, viewGenre, viewYear, setSearch, createPlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist, viewPlaylist,
     moveFile, generateOrganizedPath, playNext, removeSongFromList, openInFinder, deleteFromDisk,

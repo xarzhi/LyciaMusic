@@ -33,17 +33,9 @@
       @batchDelete="requestBatchDelete"
       @rename="handleRenamePlaylist"
     />
-    <StatisticsHeader
-      v-else-if="currentViewMode === 'statistics'"
-      :current-scope="statisticsPageRef?.currentScope || 'All'"
-      :current-scope-value="statisticsPageRef?.currentScopeValue || ''"
-      :current-time-range="statisticsPageRef?.currentTimeRange || 'All'"
-      @refresh="handleRefreshStats"
-      @scope-change="handleStatsScopeChange"
-      @time-range-change="handleStatsTimeRangeChange"
-    />
+
     <LocalMusicHeader
-      v-else
+      v-else-if="currentViewMode !== 'statistics'"
       v-model:isBatchMode="isBatchMode"
       :selectedCount="selectedPaths.size"
       @playAll="handlePlayAll"
@@ -64,7 +56,7 @@
       <!-- 歌曲列表区域 -->
       <section class="flex-1 flex overflow-hidden">
         <!-- Statistics View -->
-        <StatisticsPage v-if="currentViewMode === 'statistics'" ref="statisticsPageRef" />
+        <StatisticsPage v-if="currentViewMode === 'statistics'" />
 
         <!-- Show grid view for favorites (artists/albums tabs) -->
         <FavoritesGrid 
@@ -139,7 +131,7 @@
       :visible="showRenameModal"
       title="重命名歌单"
       :initial-value="renameInitialValue"
-      @close="showRenameModal = false"
+      @cancel="showRenameModal = false"
       @confirm="confirmRename"
     />
   </div>
@@ -155,7 +147,7 @@ import { useToast } from '../composables/toast';
 import LocalMusicHeader from '../components/headers/LocalMusicHeader.vue';
 import FoldersHeader from '../components/headers/FoldersHeader.vue';
 import DetailHeader from '../components/headers/DetailHeader.vue';
-import StatisticsHeader from '../components/headers/StatisticsHeader.vue';
+
 import SongListSidebar from '../components/song-list/SongListSidebar.vue';
 import SongTable from '../components/song-list/SongTable.vue';
 import FavoritesGrid from '../components/common/FavoritesGrid.vue';
@@ -201,7 +193,7 @@ const isBatchMode = ref(false);
 const isManagementMode = ref(false); // 🟢 Local Management Mode State
 const selectedPaths = ref<Set<string>>(new Set());
 const songTableRef = ref<any>(null);
-const statisticsPageRef = ref<any>(null); // 统计页面引用
+
 
 // 初始化拖拽逻辑
 const { handleTableDragStart } = useSongDrag(displaySongList, isBatchMode, selectedPaths, songTableRef);
@@ -325,27 +317,7 @@ const handleRefreshAll = async () => {
   useToast().showToast('刷新完成', 'success');
 };
 
-// 刷新统计数据
-const handleRefreshStats = () => {
-  statisticsPageRef.value?.fetchStats();
-};
 
-// 统计 scope 变化
-const handleStatsScopeChange = (scope: string, value: string) => {
-  if (statisticsPageRef.value) {
-    statisticsPageRef.value.currentScope = scope;
-    statisticsPageRef.value.currentScopeValue = value;
-    statisticsPageRef.value.fetchStats();
-  }
-};
-
-// 统计 timeRange 变化
-const handleStatsTimeRangeChange = (range: string) => {
-  if (statisticsPageRef.value) {
-    statisticsPageRef.value.currentTimeRange = range;
-    statisticsPageRef.value.fetchStats();
-  }
-};
 
 // 重命名歌单
 const handleRenamePlaylist = () => {

@@ -23,6 +23,10 @@ let playbackAnchorTime = 0;
 
 let playbackStartOffset = 0;
 
+// 🟢 播放时长统计状态（模块顶层，确保跨调用共享）
+let sessionStartTime: number | null = null;
+let accumulatedTime = 0;
+
 
 
 // 🟢 辅助函数：判断是否为直属父目录 (非递归)
@@ -1205,9 +1209,7 @@ export function usePlayer() {
   }
 
 
-  // 🟢 播放时长统计状态
-  let sessionStartTime: number | null = null;
-  let accumulatedTime = 0;
+  // 🟢 播放时长统计状态（已移到模块顶层）
 
   // 🟢 辅助：结算并记录播放时长
   const flushPlaySession = () => {

@@ -1,210 +1,148 @@
 use crate::database::DbState;
+use crate::music::utils::normalize_path;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
-/// 路径规范化：统一使用正斜杠，避免跨平台路径匹配问题
-#[inline]
-fn normalize_path(path: &str) -> String {
-    path.replace('\\', "/")
+// =====================================================
+// 辅助函数
+// =====================================================
+
+/// 判断是否为无效的专辑/歌手名（用于统计时排除）
+fn is_invalid_name(name: &str) -> bool {
+    let normalized = name.trim().to_lowercase();
+    normalized.is_empty()
+        || normalized == "未知"
+        || normalized == "未知专辑"
+        || normalized == "未知歌手"
+        || normalized == "unknown"
+        || normalized == "unknown album"
+        || normalized == "unknown artist"
 }
 
-/// 统计范围
-#[derive(Deserialize, Debug)]
-#[serde(tag = "type")]
-pub enum StatisticsScope {
-    All,                                  // 全库
-    Playlist { song_paths: Vec<String> }, // 歌单（前端传入路径列表）
-    Folder { path: String },              // 文件夹路径
-    Artist { name: String },              // 歌手名
+/// 判断是否为无损格式
+fn is_lossless_format(format: &str) -> bool {
+    let f = format.to_lowercase();
+    f == "flac" || f == "wav" || f == "alac" || f == "ape" || f == "dsd"
 }
 
-/// 时间范围（基于入库时间 added_at）
-#[derive(Deserialize, Debug)]
-#[serde(tag = "type")]
-pub enum TimeRange {
-    All,      // 全部
-    Days7,    // 最近7天
-    Days30,   // 最近30天
-    ThisYear, // 今年
+/// 判断是否为 Hi-Res (24bit + >=48kHz)
+fn is_hires(bit_depth: Option<i64>, sample_rate: i64) -> bool {
+    bit_depth.unwrap_or(0) >= 24 && sample_rate >= 48000
 }
 
-/// 统计结果
+// =====================================================
+// 曲库统计
+// =====================================================
+
+/// 曲库统计结果（简化版）
 #[derive(Serialize)]
 pub struct LibraryStats {
     pub total_songs: i64,
-    pub total_duration: i64,  // 秒
-    pub total_file_size: i64, // 字节
-    pub favorite_count: i64,
+    pub total_duration: i64,   // 秒
+    pub total_file_size: i64,  // 字节
+    pub album_count: i64,      // 专辑数（排除空/未知）
+    pub artist_count: i64,     // 歌手数（排除空/未知）
+    pub lossless_count: i64,   // 无损数量
+    pub hires_count: i64,      // Hi-Res 数量 (24bit + >=48k)
+    pub this_month_added: i64, // 本月首次入库数量
 }
 
-impl TimeRange {
-    /// 转换为 [from, to) 时间戳范围（秒），None 表示无限制
-    fn to_timestamp_range(&self) -> (Option<i64>, Option<i64>) {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-
-        match self {
-            TimeRange::All => (None, None),
-            TimeRange::Days7 => {
-                let from = now - 7 * 24 * 60 * 60;
-                (Some(from), None)
-            }
-            TimeRange::Days30 => {
-                let from = now - 30 * 24 * 60 * 60;
-                (Some(from), None)
-            }
-            TimeRange::ThisYear => {
-                // 简化实现：使用365天近似一年
-                // TODO: 如需精确计算年初时间戳，可引入 chrono 库
-                let from = now - 365 * 24 * 60 * 60;
-                (Some(from), None)
-            }
-        }
-    }
-}
-
-/// 获取统计数据（支持 scope + time_range 过滤）
+/// 获取曲库统计（全库，无 scope/time_range 参数）
 #[tauri::command]
-pub fn get_statistics(
-    db: State<DbState>,
-    scope: StatisticsScope,
-    time_range: TimeRange,
-    favorite_paths: Vec<String>,
-) -> Result<LibraryStats, String> {
+pub fn get_library_stats(db: State<DbState>) -> Result<LibraryStats, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
-    // 构建 WHERE 子句
-    let mut conditions: Vec<String> = Vec::new();
-    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
-
-    // 时间范围过滤
-    let (from_ts, to_ts) = time_range.to_timestamp_range();
-    if let Some(from) = from_ts {
-        conditions.push("added_at >= ?".to_string());
-        params.push(Box::new(from));
-    }
-    if let Some(to) = to_ts {
-        conditions.push("added_at < ?".to_string());
-        params.push(Box::new(to));
-    }
-
-    // Scope 过滤
-    match &scope {
-        StatisticsScope::All => {
-            // 无额外条件
-        }
-        StatisticsScope::Playlist { song_paths } => {
-            if song_paths.is_empty() {
-                return Ok(LibraryStats {
-                    total_songs: 0,
-                    total_duration: 0,
-                    total_file_size: 0,
-                    favorite_count: 0,
-                });
-            }
-            // 使用参数绑定构建 IN 子句
-            let placeholders: Vec<String> = song_paths.iter().map(|_| "?".to_string()).collect();
-            conditions.push(format!("path IN ({})", placeholders.join(",")));
-            for path in song_paths {
-                params.push(Box::new(path.clone()));
-            }
-        }
-        StatisticsScope::Folder { path } => {
-            // 使用 LIKE 进行路径前缀匹配
-            // 需要转义路径中的特殊字符并添加通配符
-            let normalized_path = normalize_path(path);
-            let pattern = format!("{}%", normalized_path);
-            conditions.push("REPLACE(path, '\\', '/') LIKE ?".to_string());
-            params.push(Box::new(pattern));
-        }
-        StatisticsScope::Artist { name } => {
-            conditions.push("artist = ?".to_string());
-            params.push(Box::new(name.clone()));
-        }
-    }
-
-    // 构建完整 SQL
-    let where_clause = if conditions.is_empty() {
-        String::new()
-    } else {
-        format!(" WHERE {}", conditions.join(" AND "))
-    };
-
-    let sql = format!(
-        "SELECT COUNT(*), COALESCE(SUM(duration), 0), COALESCE(SUM(file_size), 0) FROM songs{}",
-        where_clause
-    );
-
-    // 执行查询
-    let params_ref: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
-    let (total_songs, total_duration, total_file_size): (i64, i64, i64) = conn
-        .query_row(&sql, params_ref.as_slice(), |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })
-        .map_err(|e| e.to_string())?;
-
-    // 计算收藏数量（基于 scope 过滤）
-    let favorite_count = match &scope {
-        StatisticsScope::All => favorite_paths.len() as i64,
-        StatisticsScope::Playlist { song_paths } => {
-            let song_set: std::collections::HashSet<&String> = song_paths.iter().collect();
-            favorite_paths
-                .iter()
-                .filter(|p| song_set.contains(p))
-                .count() as i64
-        }
-        StatisticsScope::Folder { path } => {
-            let normalized_path = normalize_path(path);
-            favorite_paths
-                .iter()
-                .filter(|p| normalize_path(p).starts_with(&normalized_path))
-                .count() as i64
-        }
-        StatisticsScope::Artist { name: _ } => {
-            // 歌手的收藏需要查数据库
-            // 暂时返回 0，可后续优化
-            0
-        }
-    };
-
-    Ok(LibraryStats {
-        total_songs,
-        total_duration,
-        total_file_size,
-        favorite_count,
-    })
-}
-
-/// 保留旧接口作为兼容别名
-#[tauri::command]
-pub fn get_library_stats(
-    db: State<DbState>,
-    favorite_paths: Vec<String>,
-) -> Result<LibraryStats, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
-
+    // 基础统计
     let (total_songs, total_duration, total_file_size): (i64, i64, i64) = conn
         .query_row(
-            "SELECT 
-                COUNT(*), 
-                COALESCE(SUM(duration), 0), 
-                COALESCE(SUM(file_size), 0) 
-             FROM songs",
+            "SELECT COUNT(*), COALESCE(SUM(duration), 0), COALESCE(SUM(file_size), 0) FROM songs",
             [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .map_err(|e| e.to_string())?;
 
-    let favorite_count = favorite_paths.len() as i64;
+    // 专辑数（排除空/未知）- 在 Rust 端过滤
+    let album_count: i64 = {
+        let mut stmt = conn
+            .prepare("SELECT DISTINCT album FROM songs WHERE album IS NOT NULL AND album != ''")
+            .map_err(|e| e.to_string())?;
+        let albums: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .filter(|name: &String| !is_invalid_name(name))
+            .collect();
+        albums.len() as i64
+    };
+
+    // 歌手数（排除空/未知）
+    let artist_count: i64 = {
+        let mut stmt = conn
+            .prepare("SELECT DISTINCT artist FROM songs WHERE artist IS NOT NULL AND artist != ''")
+            .map_err(|e| e.to_string())?;
+        let artists: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .filter(|name: &String| !is_invalid_name(name))
+            .collect();
+        artists.len() as i64
+    };
+
+    // 无损数量 + Hi-Res 数量
+    let (lossless_count, hires_count): (i64, i64) = {
+        let mut stmt = conn
+            .prepare("SELECT format, bit_depth, sample_rate FROM songs")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0).unwrap_or_default(),
+                    row.get::<_, Option<i64>>(1).ok().flatten(),
+                    row.get::<_, i64>(2).unwrap_or(0),
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+
+        let mut lossless = 0i64;
+        let mut hires = 0i64;
+        for row in rows.flatten() {
+            if is_lossless_format(&row.0) {
+                lossless += 1;
+            }
+            if is_hires(row.1, row.2) {
+                hires += 1;
+            }
+        }
+        (lossless, hires)
+    };
+
+    // 本月首次入库数量
+    let this_month_added: i64 = {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        // 简化：30天内入库
+        let month_start = now - 30 * 24 * 60 * 60;
+        conn.query_row(
+            "SELECT COUNT(*) FROM songs WHERE added_at >= ?1",
+            [month_start],
+            |row| row.get(0),
+        )
+        .unwrap_or(0)
+    };
 
     Ok(LibraryStats {
         total_songs,
         total_duration,
         total_file_size,
-        favorite_count,
+        album_count,
+        artist_count,
+        lossless_count,
+        hires_count,
+        this_month_added,
     })
 }
 
@@ -212,18 +150,63 @@ pub fn get_library_stats(
 // 播放历史与行为统计
 // =====================================================
 
-/// 记录一次播放事件
+/// 时间范围（用于行为统计）
+#[derive(Deserialize, Debug)]
+#[serde(tag = "type")]
+pub enum TimeRange {
+    All,
+    Days7,
+    Days30,
+    ThisYear,
+}
+
+impl TimeRange {
+    fn to_timestamp_from(&self) -> Option<i64> {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        match self {
+            TimeRange::All => None,
+            TimeRange::Days7 => Some(now - 7 * 24 * 60 * 60),
+            TimeRange::Days30 => Some(now - 30 * 24 * 60 * 60),
+            TimeRange::ThisYear => Some(now - 365 * 24 * 60 * 60),
+        }
+    }
+}
+
+/// 记录一次播放事件（通过 song_path 查找 song_id）
 #[tauri::command]
 pub fn record_play(db: State<DbState>, song_path: String, duration: i64) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    // 规范化路径，确保与数据库中的路径格式一致
+    let normalized_path = normalize_path(&song_path);
+
+    // 通过 path 查找 song_id
+    let song_id: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM songs WHERE path = ?1",
+            [&normalized_path],
+            |row| row.get(0),
+        )
+        .ok();
+
+    // 如果找不到歌曲，静默返回（歌曲可能已删除）
+    let song_id = match song_id {
+        Some(id) => id,
+        None => return Ok(()),
+    };
+
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
 
     conn.execute(
-        "INSERT INTO play_history (song_path, played_at, played_seconds, event) VALUES (?1, ?2, ?3, 'play')",
-        rusqlite::params![song_path, now, duration],
+        "INSERT INTO play_history (song_path, song_id, played_at, played_seconds, event) VALUES (?1, ?2, ?3, ?4, 'play')",
+        rusqlite::params![&normalized_path, song_id, now, duration],
     )
     .map_err(|e| e.to_string())?;
 
@@ -237,7 +220,9 @@ pub struct BehaviorStats {
     pub total_duration: i64,
     pub top_songs: Vec<TopSong>,
     pub top_songs_by_duration: Vec<TopSong>,
-    pub hour_distribution: Vec<i64>, // 24 个元素，索引 0-23 代表小时
+    pub top_artists: Vec<TopArtist>,
+    pub top_albums: Vec<TopAlbum>,
+    pub hour_distribution: Vec<i64>,
 }
 
 #[derive(Serialize)]
@@ -247,167 +232,68 @@ pub struct TopSong {
     pub value: i64,
 }
 
-/// 构建行为统计的 SCOPE 查询条件
-/// 返回: (join_clause, where_clause)
-/// 注意：这里的 where_clause 不包含 WHERE 关键字，只是条件部分
-fn build_scope_query_parts(
-    scope: &StatisticsScope,
-    params: &mut Vec<Box<dyn rusqlite::ToSql>>,
-    param_start_index: usize,
-) -> (String, String) {
-    let mut conditions = Vec::new();
-    let mut join_clause = String::new();
-
-    match scope {
-        StatisticsScope::All => {}
-        StatisticsScope::Playlist { song_paths } => {
-            if song_paths.is_empty() {
-                conditions.push("1 = 0".to_string());
-            } else {
-                let placeholders: Vec<String> = (0..song_paths.len())
-                    .map(|i| format!("?{}", param_start_index + i))
-                    .collect();
-                conditions.push(format!(
-                    "play_history.song_path IN ({})",
-                    placeholders.join(",")
-                ));
-                for path in song_paths {
-                    params.push(Box::new(path.clone()));
-                }
-            }
-        }
-        StatisticsScope::Folder { path } => {
-            let normalized_path = normalize_path(path);
-            let pattern = format!("{}%", normalized_path);
-            conditions.push(format!(
-                "REPLACE(play_history.song_path, '\\', '/') LIKE ?{}",
-                param_start_index
-            ));
-            params.push(Box::new(pattern));
-        }
-        StatisticsScope::Artist { name } => {
-            join_clause = "JOIN songs s ON play_history.song_path = s.path".to_string();
-            conditions.push(format!("s.artist = ?{}", param_start_index));
-            params.push(Box::new(name.clone()));
-        }
-    }
-
-    let where_part = if conditions.is_empty() {
-        String::new()
-    } else {
-        format!("({})", conditions.join(" AND "))
-    };
-
-    (join_clause, where_part)
+#[derive(Serialize)]
+pub struct TopArtist {
+    pub artist: String,
+    pub play_count: i64,
 }
 
-/// 构建行为统计的 TIME 查询条件
-/// 返回: where_part (不含 WHERE)
-fn build_time_query_parts(
-    time_range: &TimeRange,
-    params: &mut Vec<Box<dyn rusqlite::ToSql>>,
-    param_start_index: usize,
-) -> String {
-    // 语义：[from, to)
-    // to 如果为 None，则表示到“现在”（或者无上限，取决于需求，这里通常是无上限，即到查询时刻）
-    let (from_ts, to_ts) = time_range.to_timestamp_range();
-    let mut conditions = Vec::new();
-    let mut current_idx = param_start_index;
-
-    if let Some(from) = from_ts {
-        conditions.push(format!("played_at >= ?{}", current_idx));
-        params.push(Box::new(from));
-        current_idx += 1;
-    }
-
-    if let Some(to) = to_ts {
-        conditions.push(format!("played_at < ?{}", current_idx));
-        params.push(Box::new(to));
-    }
-
-    if conditions.is_empty() {
-        String::new()
-    } else {
-        format!("({})", conditions.join(" AND "))
-    }
+#[derive(Serialize)]
+pub struct TopAlbum {
+    pub album: String,
+    pub play_count: i64,
 }
 
-/// 获取行为统计数据
+/// 获取行为统计（全库，JOIN songs 表过滤有效歌曲）
 #[tauri::command]
 pub fn get_behavior_stats(
     db: State<DbState>,
-    scope: StatisticsScope,
-    time_range: TimeRange, // 新增参数
+    time_range: TimeRange,
 ) -> Result<BehaviorStats, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
-    // 闭包：构建完整的 WHERE 子句和 Params
-    let prepare_query = |scope: &StatisticsScope,
-                         time_range: &TimeRange|
-     -> (String, String, Vec<Box<dyn rusqlite::ToSql>>) {
-        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
-
-        // 1. 构建 Scope 条件
-        // params 目前为空，start_index = 1
-        let (join_clause, scope_where) = build_scope_query_parts(scope, &mut params, 1);
-
-        // 2. 构建 Time 条件
-        // params 可能已有内容，start_index = params.len() + 1
-        let start_idx = params.len() + 1;
-        let time_where = build_time_query_parts(time_range, &mut params, start_idx);
-
-        // 3. 拼接 WHERE
-        let full_where = match (scope_where.is_empty(), time_where.is_empty()) {
-            (true, true) => String::new(),
-            (false, true) => format!("WHERE {}", scope_where),
-            (true, false) => format!("WHERE {}", time_where),
-            (false, false) => format!("WHERE {} AND {}", scope_where, time_where),
-        };
-
-        (full_where, join_clause, params)
+    // 构建时间条件
+    let time_condition = match time_range.to_timestamp_from() {
+        Some(from) => format!("AND ph.played_at >= {}", from),
+        None => String::new(),
     };
 
-    // 指标 A1: 播放次数 (Total Plays)
-    let (where_clause, join_clause, params) = prepare_query(&scope, &time_range);
+    // 只统计 song_id 非空且在 songs 表中存在的记录
+    let base_join = "FROM play_history ph INNER JOIN songs s ON ph.song_id = s.id";
+
+    // 指标 A1: 播放次数
     let sql_plays = format!(
-        "SELECT COUNT(*) FROM play_history {} {}",
-        join_clause, where_clause
+        "SELECT COUNT(*) {} WHERE ph.song_id IS NOT NULL {}",
+        base_join, time_condition
     );
-    let params_ref: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
     let total_plays: i64 = conn
-        .query_row(&sql_plays, params_ref.as_slice(), |row| row.get(0))
+        .query_row(&sql_plays, [], |row| row.get(0))
         .unwrap_or(0);
 
-    // 指标 A2: 播放总时长 (Total Duration)
-    // 重新构建 params
-    let (where_clause, join_clause, params) = prepare_query(&scope, &time_range);
+    // 指标 A2: 播放总时长
     let sql_duration = format!(
-        "SELECT COALESCE(SUM(played_seconds), 0) FROM play_history {} {}",
-        join_clause, where_clause
+        "SELECT COALESCE(SUM(ph.played_seconds), 0) {} WHERE ph.song_id IS NOT NULL {}",
+        base_join, time_condition
     );
-    let params_ref: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
     let total_duration: i64 = conn
-        .query_row(&sql_duration, params_ref.as_slice(), |row| row.get(0))
+        .query_row(&sql_duration, [], |row| row.get(0))
         .unwrap_or(0);
 
-    // 指标 B1: Top 3 歌曲 (按次数)
-    let (where_clause, join_clause, params) = prepare_query(&scope, &time_range);
+    // 指标 B1: Top 5 歌曲 (按次数)
     let sql_top_plays = format!(
-        "SELECT play_history.song_path, COUNT(*) as cnt 
-         FROM play_history 
+        "SELECT s.path, COUNT(*) as cnt 
          {} 
-         {} 
-         GROUP BY play_history.song_path 
+         WHERE ph.song_id IS NOT NULL {} 
+         GROUP BY ph.song_id 
          ORDER BY cnt DESC 
-         LIMIT 3",
-        join_clause, where_clause
+         LIMIT 5",
+        base_join, time_condition
     );
-    let params_ref: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
     let mut top_songs: Vec<TopSong> = Vec::new();
     {
         let mut stmt = conn.prepare(&sql_top_plays).map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map(params_ref.as_slice(), |row| {
+            .query_map([], |row| {
                 let count: i64 = row.get(1)?;
                 Ok(TopSong {
                     song_path: row.get(0)?,
@@ -416,82 +302,126 @@ pub fn get_behavior_stats(
                 })
             })
             .map_err(|e| e.to_string())?;
-        for row in rows {
-            if let Ok(s) = row {
-                top_songs.push(s);
-            }
+        for row in rows.flatten() {
+            top_songs.push(row);
         }
     }
 
-    // 指标 B2: Top 3 歌曲 (按时长)
-    let (where_clause, join_clause, params) = prepare_query(&scope, &time_range);
+    // 指标 B2: Top 5 歌曲 (按时长)
     let sql_top_duration = format!(
-        "SELECT play_history.song_path, COALESCE(SUM(played_seconds), 0) as duration 
-         FROM play_history 
+        "SELECT s.path, COALESCE(SUM(ph.played_seconds), 0) as duration 
          {} 
-         {} 
-         GROUP BY play_history.song_path 
+         WHERE ph.song_id IS NOT NULL {} 
+         GROUP BY ph.song_id 
          ORDER BY duration DESC 
-         LIMIT 3",
-        join_clause, where_clause
+         LIMIT 5",
+        base_join, time_condition
     );
-    let params_ref: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
     let mut top_songs_by_duration: Vec<TopSong> = Vec::new();
     {
         let mut stmt = conn.prepare(&sql_top_duration).map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map(params_ref.as_slice(), |row| {
+            .query_map([], |row| {
                 let duration: i64 = row.get(1)?;
                 Ok(TopSong {
                     song_path: row.get(0)?,
-                    play_count: 0, // 时长榜不关注次数
+                    play_count: 0,
                     value: duration,
                 })
             })
             .map_err(|e| e.to_string())?;
-        for row in rows {
-            if let Ok(s) = row {
-                top_songs_by_duration.push(s);
-            }
+        for row in rows.flatten() {
+            top_songs_by_duration.push(row);
         }
     }
 
-    // 指标 C: 小时分布 (暂保持按次数统计)
-    let (where_clause, join_clause, params) = prepare_query(&scope, &time_range);
+    // 指标 C: 小时分布
     let sql_hours = format!(
-        "SELECT CAST(strftime('%H', played_at, 'unixepoch', 'localtime') AS INTEGER) as hour, 
+        "SELECT CAST(strftime('%H', ph.played_at, 'unixepoch', 'localtime') AS INTEGER) as hour, 
                 COUNT(*) as cnt 
-         FROM play_history 
          {} 
-         {} 
+         WHERE ph.song_id IS NOT NULL {} 
          GROUP BY hour",
-        join_clause, where_clause
+        base_join, time_condition
     );
-    let params_ref: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
     let mut hour_distribution: Vec<i64> = vec![0; 24];
     {
         let mut stmt = conn.prepare(&sql_hours).map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map(params_ref.as_slice(), |row| {
-                Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
-            })
+            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))
             .map_err(|e| e.to_string())?;
-        for row in rows {
-            if let Ok((hour, count)) = row {
-                if hour >= 0 && hour < 24 {
-                    hour_distribution[hour as usize] = count;
-                }
+        for row in rows.flatten() {
+            if row.0 >= 0 && row.0 < 24 {
+                hour_distribution[row.0 as usize] = row.1;
             }
         }
     }
 
+    // 指标 D1: Top 5 歌手
+    let sql_top_artists = format!(
+        "SELECT TRIM(s.artist) as artist, COUNT(*) as cnt 
+         {} 
+         WHERE ph.song_id IS NOT NULL {} 
+           AND s.artist IS NOT NULL 
+           AND TRIM(s.artist) != '' 
+           AND LOWER(TRIM(s.artist)) NOT IN ('未知', '未知歌手', 'unknown', 'unknown artist') 
+         GROUP BY TRIM(s.artist) 
+         ORDER BY cnt DESC 
+         LIMIT 5",
+        base_join, time_condition
+    );
+    let mut top_artists: Vec<TopArtist> = Vec::new();
+    {
+        let mut stmt = conn.prepare(&sql_top_artists).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(TopArtist {
+                    artist: row.get(0)?,
+                    play_count: row.get(1)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows.flatten() {
+            top_artists.push(row);
+        }
+    }
+
+    // 指标 D2: Top 5 专辑
+    let sql_top_albums = format!(
+        "SELECT TRIM(s.album) as album, COUNT(*) as cnt 
+         {} 
+         WHERE ph.song_id IS NOT NULL {} 
+           AND s.album IS NOT NULL 
+           AND TRIM(s.album) != '' 
+           AND LOWER(TRIM(s.album)) NOT IN ('未知', '未知专辑', 'unknown', 'unknown album') 
+         GROUP BY TRIM(s.album) 
+         ORDER BY cnt DESC 
+         LIMIT 5",
+        base_join, time_condition
+    );
+    let mut top_albums: Vec<TopAlbum> = Vec::new();
+    {
+        let mut stmt = conn.prepare(&sql_top_albums).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(TopAlbum {
+                    album: row.get(0)?,
+                    play_count: row.get(1)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows.flatten() {
+            top_albums.push(row);
+        }
+    }
+
     Ok(BehaviorStats {
-        total_plays, // renamed from total_plays_7d for clarity, but frontend might need update if I change jsonKey?
-        // Wait, `BehaviorStats` struct rename keys will break frontend type.
-        // Let's check struct definition.
+        total_plays,
         total_duration,
-        top_songs, // renamed from top_songs_7d
+        top_songs,
         top_songs_by_duration,
+        top_artists,
+        top_albums,
         hour_distribution,
     })
 }

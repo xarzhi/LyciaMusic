@@ -162,6 +162,19 @@ impl DbState {
             .ok();
         }
 
+        // --- Migration: Add song_id column (v1.4.0) ---
+        if !ph_columns.contains(&"song_id".to_string()) {
+            conn.execute("ALTER TABLE play_history ADD COLUMN song_id INTEGER", [])
+                .ok();
+
+            // 创建 song_id 索引
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_play_history_song_id ON play_history(song_id)",
+                [],
+            )
+            .ok();
+        }
+
         Ok(DbState {
             conn: Arc::new(Mutex::new(conn)),
         })

@@ -64,6 +64,7 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
     }
 
     Some(Song {
+        id: None, // 新解析的文件还没有入库，id 为 None
         name: path.file_name()?.to_string_lossy().to_string(),
         path: path_str.to_string(),
         title,
@@ -177,29 +178,30 @@ pub fn scan_single_directory_internal(
             } else {
                 // 文件未修改 → 从数据库读取完整信息
                 let mut stmt = conn
-                    .prepare("SELECT title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at, file_modified_at FROM songs WHERE path = ?1")
+                    .prepare("SELECT id, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at, file_modified_at FROM songs WHERE path = ?1")
                     .map_err(|e| e.to_string())?;
 
                 if let Ok(song) = stmt.query_row([&path_str], |row| {
                     Ok(Song {
+                        id: row.get(0).ok(), // 从数据库读取 id
                         name: path.file_name().unwrap().to_string_lossy().to_string(),
                         path: path_str.clone(),
-                        title: row.get(0).unwrap_or_default(),
-                        artist: row.get(1).unwrap_or_default(),
-                        album: row.get(2).unwrap_or_default(),
-                        duration: row.get(3).unwrap_or_default(),
-                        cover: row.get(4).unwrap_or_default(),
-                        bitrate: row.get(5).unwrap_or(0),
-                        sample_rate: row.get(6).unwrap_or(0),
-                        bit_depth: row.get::<_, Option<u8>>(7).unwrap_or(None),
-                        format: row.get(8).unwrap_or_else(|_| ext.clone()),
-                        file_size: row.get::<_, i64>(9).unwrap_or(0) as u64,
+                        title: row.get(1).unwrap_or_default(),
+                        artist: row.get(2).unwrap_or_default(),
+                        album: row.get(3).unwrap_or_default(),
+                        duration: row.get(4).unwrap_or_default(),
+                        cover: row.get(5).unwrap_or_default(),
+                        bitrate: row.get(6).unwrap_or(0),
+                        sample_rate: row.get(7).unwrap_or(0),
+                        bit_depth: row.get::<_, Option<u8>>(8).unwrap_or(None),
+                        format: row.get(9).unwrap_or_else(|_| ext.clone()),
+                        file_size: row.get::<_, i64>(10).unwrap_or(0) as u64,
                         added_at: row
-                            .get::<_, Option<i64>>(10)
+                            .get::<_, Option<i64>>(11)
                             .unwrap_or(None)
                             .map(|v| v as u64),
                         file_modified_at: row
-                            .get::<_, Option<i64>>(11)
+                            .get::<_, Option<i64>>(12)
                             .unwrap_or(None)
                             .map(|v| v as u64),
                     })

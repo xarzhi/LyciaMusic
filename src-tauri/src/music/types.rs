@@ -8,6 +8,7 @@ pub struct ImageConcurrencyLimit(pub Semaphore);
 
 #[derive(Serialize, Clone, Debug)]
 pub struct Song {
+    pub id: Option<i64>, // 数据库主键 (新增用于行为统计关联)
     pub name: String,
     pub title: String,
     pub path: String,

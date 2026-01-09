@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { usePlayer } from '../../composables/player';
 import StatsOverviewCards from './StatsOverviewCards.vue';
 import BehaviorStatsSection from './BehaviorStatsSection.vue';
 
 // 类型定义
 interface LibraryStats {
   total_songs: number;
-  total_duration: number;  // 秒
-  total_file_size: number; // 字节
-  favorite_count: number;
+  total_duration: number;
+  total_file_size: number;
+  album_count: number;
+  artist_count: number;
+  lossless_count: number;
+  hires_count: number;
+  this_month_added: number;
 }
 
 interface TopSong {
@@ -19,83 +22,37 @@ interface TopSong {
   value: number;
 }
 
+interface TopArtist {
+  artist: string;
+  play_count: number;
+}
+
+interface TopAlbum {
+  album: string;
+  play_count: number;
+}
+
 interface BehaviorStats {
   total_plays: number;
   total_duration: number;
   top_songs: TopSong[];
   top_songs_by_duration: TopSong[];
+  top_artists: TopArtist[];
+  top_albums: TopAlbum[];
   hour_distribution: number[];
 }
 
-type ScopeType = 'All' | 'Playlist' | 'Folder' | 'Artist';
 type TimeRangeType = 'All' | 'Days7' | 'Days30' | 'ThisYear';
-
-// Rust 端需要的 scope 结构（带 type 标签的判别联合）
-type StatisticsScope = 
-  | { type: 'All' }
-  | { type: 'Playlist'; song_paths: string[] }
-  | { type: 'Folder'; path: string }
-  | { type: 'Artist'; name: string };
-
 type TimeRange = { type: TimeRangeType };
-
-const { favoritePaths, playlists } = usePlayer();
 
 const stats = ref<LibraryStats | null>(null);
 const behaviorStats = ref<BehaviorStats | null>(null);
 const loading = ref(true);
 const error = ref<string | null>(null);
+const lastUpdated = ref<Date | null>(null);
+const isRefreshing = ref(false);
 
-// 当前选择的范围
-const currentScope = ref<ScopeType>('All');
-const currentScopeValue = ref<string>(''); // 歌单名/文件夹路径/歌手名
-const currentTimeRange = ref<TimeRangeType>('All');
-
-// 收藏率计算
-const favoriteRate = computed(() => {
-  if (!stats.value || stats.value.total_songs === 0) return 0;
-  return (stats.value.favorite_count / stats.value.total_songs) * 100;
-});
-
-// 构建 Rust 端需要的 scope 对象
-function buildScope(): StatisticsScope {
-  switch (currentScope.value) {
-    case 'All':
-      return { type: 'All' };
-    case 'Playlist': {
-      // 根据歌单名找到歌单，获取歌曲路径
-      const pl = playlists.value.find(p => p.name === currentScopeValue.value);
-      return { type: 'Playlist', song_paths: pl?.songPaths ?? [] };
-    }
-    case 'Folder':
-      return { type: 'Folder', path: currentScopeValue.value };
-    case 'Artist':
-      return { type: 'Artist', name: currentScopeValue.value };
-    default:
-      return { type: 'All' };
-  }
-}
-
-async function fetchStats() {
-  loading.value = true;
-  error.value = null;
-  try {
-    const scope = buildScope();
-    const timeRange: TimeRange = { type: currentTimeRange.value };
-    
-    stats.value = await invoke<LibraryStats>('get_statistics', {
-      scope,
-      timeRange,
-      favoritePaths: favoritePaths.value
-    });
-  } catch (e) {
-    error.value = String(e);
-  } finally {
-    loading.value = false;
-  }
-}
-
-// 行为统计的独立时间范围
+// 行为统计时间范围
 const currentBehaviorTimeRange = ref<TimeRangeType>('Days7');
 const behaviorTimeOptions: { label: string; value: TimeRangeType }[] = [
   { label: '近7天', value: 'Days7' },
@@ -106,69 +63,102 @@ const behaviorTimeOptions: { label: string; value: TimeRangeType }[] = [
 
 function updateBehaviorTime(range: TimeRangeType) {
   currentBehaviorTimeRange.value = range;
-  // watcher will handle fetch
+  fetchBehaviorStats();
+}
+
+async function fetchStats() {
+  try {
+    stats.value = await invoke<LibraryStats>('get_library_stats');
+  } catch (e) {
+    console.warn('Failed to fetch library stats:', e);
+    error.value = String(e);
+  }
 }
 
 async function fetchBehaviorStats() {
   try {
-    const scope = buildScope();
     const timeRange: TimeRange = { type: currentBehaviorTimeRange.value };
-    behaviorStats.value = await invoke<BehaviorStats>('get_behavior_stats', { 
-      scope, 
-      timeRange 
-    });
+    behaviorStats.value = await invoke<BehaviorStats>('get_behavior_stats', { timeRange });
   } catch (e) {
     console.warn('Failed to fetch behavior stats:', e);
   }
 }
 
-// 监听 scope 变化，刷新两边
-// 监听 behaviorTime 变化，只刷新行为
-watch([currentScope, currentScopeValue], () => {
-  fetchStats();
-  fetchBehaviorStats();
-});
+// 刷新按钮：并发请求 + 防抖
+async function handleRefresh() {
+  if (isRefreshing.value) return;
+  isRefreshing.value = true;
+  
+  try {
+    await Promise.all([fetchStats(), fetchBehaviorStats()]);
+    lastUpdated.value = new Date();
+  } finally {
+    isRefreshing.value = false;
+  }
+}
 
-watch(currentBehaviorTimeRange, () => {
-  fetchBehaviorStats();
-});
-// 我们可以共用一个 watch，或者在 fetchStats 调用时顺便调用 fetchBehaviorStats?
-// 为了解耦 UI 部分刷新，我们可以分别 watch。
-// 但 StatisticsPage 目前的逻辑是：StatsOverviewCards 用 fetchStats，BehaviorStatsSection 用 fetchBehaviorStats。
-// 它们都依赖 currentScope。
+// 隐藏卡片管理
+const hiddenCards = ref<Set<string>>(new Set());
+const showManager = ref(false);
 
-watch([currentScope, currentScopeValue], () => {
-  fetchStats();
-  fetchBehaviorStats();
-});
+// 从 localStorage 加载隐藏设置
+function loadHiddenSettings() {
+  const saved = localStorage.getItem('lycia-hidden-stats-cards');
+  if (saved) {
+    try {
+      hiddenCards.value = new Set(JSON.parse(saved));
+    } catch (e) {
+      console.error('Failed to parse hidden cards settings:', e);
+    }
+  }
+}
 
-// 暴露方法和状态供父组件调用
-defineExpose({ 
-  fetchStats,
-  currentScope,
-  currentScopeValue,
-  currentTimeRange,
-});
+// 保存隐藏设置
+function saveHiddenSettings() {
+  localStorage.setItem('lycia-hidden-stats-cards', JSON.stringify(Array.from(hiddenCards.value)));
+}
 
-onMounted(() => {
-  fetchStats();
-  fetchBehaviorStats();
+function toggleCardVisibility(cardTitle: string) {
+  if (hiddenCards.value.has(cardTitle)) {
+    hiddenCards.value.delete(cardTitle);
+  } else {
+    hiddenCards.value.add(cardTitle);
+  }
+  saveHiddenSettings();
+}
+
+function hideCard(cardTitle: string) {
+  hiddenCards.value.add(cardTitle);
+  saveHiddenSettings();
+}
+
+onMounted(async () => {
+  loadHiddenSettings();
+  loading.value = true;
+  error.value = null;
+  try {
+    await Promise.all([fetchStats(), fetchBehaviorStats()]);
+    lastUpdated.value = new Date();
+  } catch (e) {
+    error.value = String(e);
+  } finally {
+    loading.value = false;
+  }
 });
 </script>
 
 <template>
   <div class="statistics-page h-full overflow-y-auto custom-scrollbar w-full">
-    <!-- Content -->
     <div class="px-6 py-6">
       <!-- Loading State -->
-      <div v-if="loading && !stats" class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div v-for="i in 4" :key="i" class="h-24 rounded-xl bg-gray-100/50 dark:bg-white/5 animate-pulse"></div>
+      <div v-if="loading && !stats" class="grid grid-cols-3 gap-4">
+        <div v-for="i in 6" :key="i" class="h-24 rounded-xl bg-gray-100/50 dark:bg-white/5 animate-pulse"></div>
       </div>
 
       <!-- Error State -->
       <div v-else-if="error" class="p-6 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
         <p class="text-red-600 dark:text-red-400">加载失败：{{ error }}</p>
-        <button @click="fetchStats" class="mt-2 px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors">
+        <button @click="handleRefresh" class="mt-2 px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors">
           重试
         </button>
       </div>
@@ -178,75 +168,91 @@ onMounted(() => {
         <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-300 dark:text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
         </svg>
-        <p class="text-gray-500 dark:text-gray-400 text-lg">
-          {{ currentScope === 'All' ? '暂无数据' : '该范围内暂无歌曲' }}
-        </p>
-        <p class="text-gray-400 dark:text-gray-500 text-sm mt-1">
-          {{ currentScope === 'All' ? '先去扫描本地文件夹吧' : '尝试选择其他统计范围' }}
-        </p>
+        <p class="text-gray-500 dark:text-gray-400 text-lg">暂无数据</p>
+        <p class="text-gray-400 dark:text-gray-500 text-sm mt-1">先去设置中添加音乐库文件夹吧</p>
       </div>
 
       <!-- Stats Content -->
       <template v-else-if="stats">
-        
-        <!-- Section 1: 曲库概览 -->
-        <section class="mb-10">
-          <div class="flex items-center gap-2 mb-4">
-            <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">曲库概览</h2>
-            
-            <!-- 语义标签: 入库语义 -->
-            <div class="group relative flex items-center">
-              <span class="px-2 py-0.5 rounded text-xs font-medium bg-blue-100/50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800/30">
-                入库
-              </span>
-              <!-- Tooltip -->
-              <div class="absolute bottom-full left-0 mb-2 w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 hidden group-hover:block">
-                基于歌曲入库时间 (added_at) 统计，用于观察曲库规模变化。
-              </div>
-            </div>
-            
-            <div class="ml-auto">
-               <!-- 这里复用 DetailHeader 传递下来的时间选择器逻辑吗？ 
-                    目前 StatisticsHeader 把 currentTimeRange 传下来了。
-                    所以不需要在这里重复放 Selector，主要依靠顶部的 Selector。
-               -->
-               <span class="text-xs text-gray-400">时间范围：顶部控制</span>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100 italic flex items-center gap-2">
+            曲库概览
+            <button 
+              @click="showManager = !showManager"
+              class="text-[10px] font-normal not-italic px-1.5 py-0.5 rounded border border-gray-200 dark:border-white/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              :class="{ 'bg-blue-500/10 text-blue-500 border-blue-500/20': showManager }"
+            >
+              管理卡片
+            </button>
+          </h2>
+          
+          <div class="flex items-center gap-3">
+            <span v-if="lastUpdated" class="text-xs text-gray-400 dark:text-gray-500">
+              更新于 {{ lastUpdated.toLocaleTimeString() }}
+            </span>
+            <button 
+              @click="handleRefresh"
+              class="bg-white/1 hover:bg-white/10 border border-white/1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 w-7 h-7 flex items-center justify-center rounded-full transition active:scale-95 shadow-sm hover:border-gray-200 dark:hover:border-white/20"
+              :class="{ 'animate-spin': isRefreshing }"
+              :disabled="isRefreshing"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 卡片管理器 -->
+        <transition
+          enter-active-class="transition duration-200 ease-out"
+          enter-from-class="transform -translate-y-2 opacity-0"
+          enter-to-class="transform translate-y-0 opacity-100"
+          leave-active-class="transition duration-150 ease-in"
+          leave-from-class="transform translate-y-0 opacity-100"
+          leave-to-class="transform -translate-y-2 opacity-0"
+        >
+          <div v-if="showManager" class="mb-6 p-4 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10">
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">勾选以显示卡片：</p>
+            <div class="flex flex-wrap gap-x-6 gap-y-2">
+              <label v-for="c in ['总曲目', '专辑', '歌手', '总时长', '库大小', '无损占比', '总听歌时长', '播放次数', '最活跃时段', '最常播放 (按次数)', '最常播放 (按时长)', '24 小时播放分布', '常听歌曲', '常听歌手', '常听专辑']" :key="c" class="flex items-center gap-2 cursor-pointer group">
+                <input 
+                  type="checkbox" 
+                  :checked="!hiddenCards.has(c)" 
+                  @change="toggleCardVisibility(c)"
+                  class="w-3.5 h-3.5 rounded border-gray-300 text-blue-500 focus:ring-blue-500/20"
+                />
+                <span class="text-xs text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+                  {{ c }}
+                </span>
+              </label>
             </div>
           </div>
+        </transition>
 
-          <StatsOverviewCards
-            :total-songs="stats.total_songs"
-            :total-duration="stats.total_duration"
-            :total-file-size="stats.total_file_size"
-            :favorite-rate="favoriteRate"
-          />
-        </section>
+        <!-- Section 1: 曲库概览 -->
+        <StatsOverviewCards
+          :total-songs="stats.total_songs"
+          :total-duration="stats.total_duration"
+          :total-file-size="stats.total_file_size"
+          :album-count="stats.album_count"
+          :artist-count="stats.artist_count"
+          :lossless-count="stats.lossless_count"
+          :this-month-added="stats.this_month_added"
+          :hidden-cards="hiddenCards"
+          @hide="hideCard"
+        />
 
         <!-- Divider -->
-        <hr class="border-gray-100 dark:border-gray-800 mb-10" />
+        <hr class="border-gray-100 dark:border-gray-800 my-8" />
 
         <!-- Section 2: 听歌行为 -->
         <section>
           <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2">
-              <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">
-                听歌行为
-              </h2>
+            <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">听歌行为</h2>
 
-              <!-- 语义标签: 播放语义 -->
-              <div class="group relative flex items-center">
-                <span class="px-2 py-0.5 rounded text-xs font-medium bg-purple-100/50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-800/30">
-                  播放
-                </span>
-                <!-- Tooltip -->
-                <div class="absolute bottom-full left-0 mb-2 w-48 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 hidden group-hover:block">
-                  基于实际播放时间 (played_at) 统计，反映您的听歌习惯。
-                </div>
-              </div>
-            </div>
-
-            <!-- 独立时间选择器 -->
-             <div class="flex items-center bg-gray-100 dark:bg-white/5 rounded-lg p-0.5">
+            <!-- 时间选择器 -->
+            <div class="flex items-center bg-gray-100 dark:bg-white/5 rounded-lg p-0.5">
               <button 
                 v-for="range in behaviorTimeOptions" 
                 :key="range.value"
@@ -260,12 +266,6 @@ onMounted(() => {
               </button>
             </div>
           </div>
-          
-          <div class="mb-4 text-xs text-gray-400">
-             范围：{{ currentScope === 'All' ? '全库' : (currentScope === 'Folder' ? '当前文件夹' : currentScope) }}
-             <span class="mx-1">|</span>
-             时间：按播放记录统计（独立于上方入库时间）
-          </div>
 
           <BehaviorStatsSection
             v-if="behaviorStats"
@@ -273,7 +273,11 @@ onMounted(() => {
             :total-duration="behaviorStats.total_duration"
             :top-songs7d="behaviorStats.top_songs"
             :top-songs-by-duration="behaviorStats.top_songs_by_duration"
+            :top-artists="behaviorStats.top_artists"
+            :top-albums="behaviorStats.top_albums"
             :hour-distribution="behaviorStats.hour_distribution"
+            :hidden-cards="hiddenCards"
+            @hide="hideCard"
           />
         </section>
       </template>

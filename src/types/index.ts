@@ -1,4 +1,5 @@
 export interface Song {
+  id?: number;       // 数据库主键 (用于播放记录关联)
   name: string;
   title?: string;
   path: string;

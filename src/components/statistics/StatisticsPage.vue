@@ -148,7 +148,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="statistics-page h-full overflow-y-auto custom-scrollbar w-full">
+  <div class="statistics-page h-full overflow-y-auto custom-scrollbar w-full select-none">
     <div class="px-6 py-6">
       <!-- Loading State -->
       <div v-if="loading && !stats" class="grid grid-cols-3 gap-4">

@@ -23,9 +23,12 @@ let playbackAnchorTime = 0;
 
 let playbackStartOffset = 0;
 
-// 🟢 播放时长统计状态（模块顶层，确保跨调用共享）
+// 播放时长统计状态（模块顶层，确保跨调用共享）
 let sessionStartTime: number | null = null;
 let accumulatedTime = 0;
+
+// 🟢 Seek 状态标志位（用于禁止同步期间回滚 UI）
+let isSeeking = false;
 
 
 
@@ -1196,6 +1199,7 @@ export function usePlayer() {
     progressFrameId = requestAnimationFrame(update);
     syncIntervalId = setInterval(async () => {
       if (!State.isPlaying.value) return;
+      if (isSeeking) return; // 🟢 正在 seek 时跳过同步，避免回滚 UI
       try {
         const realTime = await invoke<number>('get_playback_progress');
         const uiTime = State.currentTime.value;
@@ -1388,25 +1392,36 @@ export function usePlayer() {
     const songMap = new Map(State.songList.value.map(s => [s.path, s]));
     return pl.songPaths.map(path => songMap.get(path)).filter((s): s is State.Song => !!s);
   }
-
   async function seekTo(newTime: number) {
     if (!State.currentSong.value) return;
+
+    // 🟢 Seek 前：累计已播放时间并重置会话起点，避免 Seek 等待时间被计入
+    if (State.isPlaying.value && sessionStartTime) {
+      accumulatedTime += (Date.now() - sessionStartTime) / 1000;
+      sessionStartTime = Date.now();
+    }
+
     if (seekTimeout) clearTimeout(seekTimeout);
+    isSeeking = true;
     stopTimer();
     let targetTime = Math.max(0, Math.min(newTime, State.currentSong.value.duration));
     State.currentTime.value = targetTime;
+
     seekTimeout = setTimeout(async () => {
       const originalVolume = State.volume.value / 100.0;
+      // 快速静音（避免 seek 时的爆音）
       await invoke('set_volume', { volume: 0.0 });
       await invoke('seek_audio', { time: Math.floor(targetTime), isPlaying: State.isPlaying.value });
       playbackStartOffset = targetTime;
-      setTimeout(async () => {
-        await invoke('set_volume', { volume: originalVolume });
-      }, 150);
+      // 🎵 简单的淡入效果（3 步，共 60ms）
+      for (let i = 1; i <= 3; i++) {
+        await new Promise(r => setTimeout(r, 20));
+        await invoke('set_volume', { volume: (originalVolume * i) / 3 });
+      }
       if (State.isPlaying.value) {
         startTimer();
       }
-    }, 100);
+    }, 50); // 减少去抖动延迟
   }
   async function playAt(time: number) { await seekTo(time); if (!State.isPlaying.value) { setTimeout(async () => { if (!State.isPlaying.value) await togglePlay(); }, 150); } }
   async function handleSeek(e: MouseEvent) { if (!State.currentSong.value) return; const t = e.currentTarget as HTMLElement; const r = t.getBoundingClientRect(); const p = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); const tm = p * State.currentSong.value.duration; await seekTo(tm); }
@@ -1422,6 +1437,13 @@ export function usePlayer() {
     listen('player:pause', () => { if (State.isPlaying.value) togglePlay(); });
     listen('player:next', () => { nextSong(); });
     listen('player:prev', () => { prevSong(); });
+
+    // 🟢 监听 seek_completed 事件，恢复同步
+    listen<number>('seek_completed', (e) => {
+      isSeeking = false;
+      playbackAnchorTime = performance.now();
+      playbackStartOffset = e.payload;
+    });
 
     watch(State.volume, (v) => localStorage.setItem('player_volume', v.toString()));
     watch(State.playMode, (v) => localStorage.setItem('player_mode', v.toString()));

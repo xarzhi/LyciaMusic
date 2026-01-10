@@ -40,6 +40,7 @@ interface BehaviorStats {
   top_artists: TopArtist[];
   top_albums: TopAlbum[];
   hour_distribution: number[];
+  recent_activity: number[];
 }
 
 type TimeRangeType = 'All' | 'Days7' | 'Days30' | 'ThisYear';
@@ -174,7 +175,7 @@ onMounted(async () => {
 
       <!-- Stats Content -->
       <template v-else-if="stats">
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center justify-between mb-4 animate-fade-in-up" style="animation-delay: 0ms;">
           <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100 italic flex items-center gap-2">
             曲库概览
             <button 
@@ -215,7 +216,7 @@ onMounted(async () => {
           <div v-if="showManager" class="mb-6 p-4 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10">
             <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">勾选以显示卡片：</p>
             <div class="flex flex-wrap gap-x-6 gap-y-2">
-              <label v-for="c in ['总曲目', '专辑', '歌手', '总时长', '库大小', '无损占比', '总听歌时长', '播放次数', '最活跃时段', '最常播放 (按次数)', '最常播放 (按时长)', '24 小时播放分布', '常听歌曲', '常听歌手', '常听专辑']" :key="c" class="flex items-center gap-2 cursor-pointer group">
+              <label v-for="c in ['总曲目', '专辑', '歌手', '总时长', '库大小', '无损占比', '总听歌时长', '播放次数', '最活跃时段', '最常播放 (按次数)', '最常播放 (按时长)', '24 小时播放分布', '常听歌手', '常听专辑']" :key="c" class="flex items-center gap-2 cursor-pointer group">
                 <input 
                   type="checkbox" 
                   :checked="!hiddenCards.has(c)" 
@@ -244,23 +245,32 @@ onMounted(async () => {
         />
 
         <!-- Divider -->
-        <hr class="border-gray-100 dark:border-gray-800 my-8" />
+        <hr class="border-gray-100 dark:border-gray-800 my-8 animate-fade-in" style="animation-delay: 600ms;" />
 
         <!-- Section 2: 听歌行为 -->
-        <section>
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">听歌行为</h2>
+        <section class="mt-8 animate-fade-in-up" style="animation-delay: 700ms;"> <!-- Added top margin -->
+          <div class="flex items-center justify-between mb-6"> <!-- Increased bottom margin -->
+            <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100 italic">听歌行为</h2>
 
-            <!-- 时间选择器 -->
-            <div class="flex items-center bg-gray-100 dark:bg-white/5 rounded-lg p-0.5">
+            <!-- Segmented Control 时间选择器 -->
+             <div class="relative bg-gray-100 dark:bg-white/5 rounded-lg p-1 shrink-0 grid grid-cols-4" style="min-width: 240px;">
+               <!-- Gliding Background - 使用 transform 实现滑动动画 -->
+               <div
+                 class="rounded-md bg-white dark:bg-gray-700 shadow-sm transition-transform duration-300 ease-spring row-start-1 col-start-1"
+                 :style="{
+                   transform: `translateX(${behaviorTimeOptions.findIndex(o => o.value === currentBehaviorTimeRange) * 100}%)`
+                 }"
+               ></div>
+
               <button 
-                v-for="range in behaviorTimeOptions" 
+                v-for="(range, index) in behaviorTimeOptions" 
                 :key="range.value"
                 @click="updateBehaviorTime(range.value)"
-                class="px-3 py-1 text-xs rounded-md transition-all duration-200"
+                class="row-start-1 z-10 px-2 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 text-center whitespace-nowrap"
+                :style="{ gridColumn: index + 1 }"
                 :class="currentBehaviorTimeRange === range.value 
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
+                  ? 'text-gray-900 dark:text-white' 
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
               >
                 {{ range.label }}
               </button>
@@ -276,6 +286,7 @@ onMounted(async () => {
             :top-artists="behaviorStats.top_artists"
             :top-albums="behaviorStats.top_albums"
             :hour-distribution="behaviorStats.hour_distribution"
+            :recent-activity="behaviorStats.recent_activity"
             :hidden-cards="hiddenCards"
             @hide="hideCard"
           />
@@ -298,5 +309,133 @@ onMounted(async () => {
 }
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
+}
+</style>
+
+<style>
+/* 统一入场动画定义 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+/* 柱状图生长动画 */
+@keyframes barGrow {
+  from {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* 数字计数动画（弹跳效果） */
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  60% {
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 渐变扫光效果（用于分割线） */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-fade-in-up {
+  opacity: 0;
+  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  opacity: 0;
+  animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-up-fade {
+  opacity: 0;
+  animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-pop-in {
+  opacity: 0;
+  animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* 分割线渐变扫光 */
+hr.animate-fade-in {
+  background: linear-gradient(
+    90deg, 
+    transparent, 
+    rgba(99, 102, 241, 0.3), 
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+             shimmer 2s ease-in-out 0.5s;
+  border: none;
+  height: 1px;
+}
+
+/* 卡片悬停时的微动效 */
+.animate-slide-up-fade:hover {
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* prefer-reduced-motion 支持 */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up,
+  .animate-fade-in,
+  .animate-slide-up-fade,
+  .animate-pop-in {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
 }
 </style>

@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { 
+  Music, 
+  Disc, 
+  Mic2, 
+  Clock, 
+  Database, 
+  Zap 
+} from 'lucide-vue-next';
 
 const props = defineProps<{
   totalSongs: number;
@@ -50,44 +58,63 @@ const losslessRate = computed(() => {
   return ((props.losslessCount / props.totalSongs) * 100).toFixed(1) + '%';
 });
 
-// 所有卡片：总曲目、专辑数、歌手数、总时长、库大小、无损占比
+// 所有卡片配置
+// 采用邻近色系：蓝色 -> 紫色 -> 粉色，避免颜色过于跳跃
 const allCards = computed(() => [
   {
     title: '总曲目',
     value: props.totalSongs.toLocaleString(),
     subtitle: props.thisMonthAdded > 0 ? `本月 +${props.thisMonthAdded}` : null,
-    icon: 'music',
-    gradient: 'from-blue-500 to-cyan-400'
+    icon: Music,
+    // Blue
+    colorClass: 'text-blue-500 dark:text-blue-400',
+    bgClass: 'bg-blue-500/10 dark:bg-blue-400/10',
+    borderClass: 'group-hover:border-blue-500/30'
   },
   {
     title: '专辑',
     value: props.albumCount.toLocaleString(),
-    icon: 'album',
-    gradient: 'from-violet-500 to-purple-400'
+    icon: Disc,
+    // Indigo
+    colorClass: 'text-indigo-500 dark:text-indigo-400',
+    bgClass: 'bg-indigo-500/10 dark:bg-indigo-400/10',
+    borderClass: 'group-hover:border-indigo-500/30'
   },
   {
     title: '歌手',
     value: props.artistCount.toLocaleString(),
-    icon: 'artist',
-    gradient: 'from-emerald-500 to-teal-400'
+    icon: Mic2,
+    // Violet
+    colorClass: 'text-violet-500 dark:text-violet-400',
+    bgClass: 'bg-violet-500/10 dark:bg-violet-400/10',
+    borderClass: 'group-hover:border-violet-500/30'
   },
   {
     title: '总时长',
     value: formattedDuration.value,
-    icon: 'clock',
-    gradient: 'from-purple-500 to-pink-400'
+    icon: Clock,
+    // Purple
+    colorClass: 'text-purple-500 dark:text-purple-400',
+    bgClass: 'bg-purple-500/10 dark:bg-purple-400/10',
+    borderClass: 'group-hover:border-purple-500/30'
   },
   {
     title: '库大小',
     value: formattedSize.value,
-    icon: 'database',
-    gradient: 'from-orange-500 to-amber-400'
+    icon: Database,
+    // Fuchsia
+    colorClass: 'text-fuchsia-500 dark:text-fuchsia-400',
+    bgClass: 'bg-fuchsia-500/10 dark:bg-fuchsia-400/10',
+    borderClass: 'group-hover:border-fuchsia-500/30'
   },
   {
     title: '无损占比',
     value: losslessRate.value,
-    icon: 'hires',
-    gradient: 'from-rose-500 to-red-400'
+    icon: Zap,
+    // Pink
+    colorClass: 'text-pink-500 dark:text-pink-400',
+    bgClass: 'bg-pink-500/10 dark:bg-pink-400/10',
+    borderClass: 'group-hover:border-pink-500/30'
   }
 ]);
 </script>
@@ -99,66 +126,75 @@ const allCards = computed(() => [
       <template v-for="(card, index) in allCards" :key="card.title">
         <div
           v-if="!hiddenCards.has(card.title)"
-          class="stat-card relative overflow-hidden rounded-xl p-4 backdrop-blur-md bg-white/60 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] group animate-slide-up-fade"
+          class="stat-card relative overflow-hidden rounded-xl p-4 backdrop-blur-md bg-white/40 dark:bg-white/5 border border-white/20 dark:border-white/5 transition-all duration-300 hover:scale-[1.02] group animate-slide-up-fade"
+          :class="['hover:bg-white/60 dark:hover:bg-white/10', card.borderClass]"
           :style="{ animationDelay: `${index * 100}ms` }"
         >
-          <!-- Close Button -->
-          <button 
-            @click.stop="emit('hide', card.title)"
-            class="absolute top-2 right-2 z-20 p-1 rounded-full bg-black/5 dark:bg-white/5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 opacity-0 group-hover:opacity-100 transition-opacity"
-            title="隐藏此卡片"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-          
-          <!-- Gradient Background -->
-          <div
-            :class="['absolute inset-0 opacity-10 dark:opacity-20 bg-gradient-to-br transition-opacity duration-300 group-hover:opacity-20 dark:group-hover:opacity-30', card.gradient]"
-          ></div>
+          <!-- Close Button with Corner Hover Zone -->
+          <div class="close-zone absolute top-0 right-0 w-10 h-10 z-20">
+            <button 
+              @click.stop="emit('hide', card.title)"
+              class="absolute top-2 right-2 p-1 rounded-full bg-black/5 dark:bg-white/5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 opacity-0 close-btn transition-opacity duration-200"
+              title="隐藏此卡片"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           
           <!-- Content -->
-          <div class="relative z-10">
-            <!-- Icon -->
-            <div :class="['w-10 h-10 rounded-lg flex items-center justify-center mb-3 bg-gradient-to-br text-white shadow-md transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6', card.gradient]">
-              <!-- Music Icon -->
-              <svg v-if="card.icon === 'music'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-              </svg>
-              <!-- Album Icon -->
-              <svg v-else-if="card.icon === 'album'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              <!-- Artist Icon -->
-              <svg v-else-if="card.icon === 'artist'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              <!-- Clock Icon -->
-              <svg v-else-if="card.icon === 'clock'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <!-- Database Icon -->
-              <svg v-else-if="card.icon === 'database'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-              </svg>
-              <!-- HiRes Icon -->
-              <svg v-else-if="card.icon === 'hires'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-              </svg>
+          <div class="relative z-10 flex flex-col h-full justify-between">
+            <div class="flex items-start justify-between mb-2">
+               <!-- Icon Container -->
+              <div :class="['p-2 rounded-lg transition-colors duration-300', card.bgClass, card.colorClass]">
+                <component :is="card.icon" :stroke-width="1.5" class="w-5 h-5" />
+              </div>
             </div>
-            
-            <!-- Title -->
-            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{{ card.title }}</p>
-            
-            <!-- Value and Subtitle -->
-            <div class="flex items-baseline justify-between">
-              <p class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{{ card.value }}</p>
+
+            <div>
+               <!-- Title -->
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5">{{ card.title }}</p>
               
-              <!-- Subtitle (本月+N) -->
-              <p v-if="card.subtitle" class="text-xs text-emerald-500 dark:text-emerald-400 font-medium">
-                {{ card.subtitle }}
-              </p>
+              <!-- Value and Subtitle -->
+              <div class="flex items-baseline gap-2">
+                <p class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{{ card.value }}</p>
+                
+                <!-- Subtitle (本月+N) -->
+                <p v-if="card.subtitle" class="text-[10px] text-emerald-500 dark:text-emerald-400 font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
+                  {{ card.subtitle }}
+                </p>
+
+                <!-- Ring Chart for Lossless Ratio -->
+                <div v-if="card.title === '无损占比'" class="absolute right-4 bottom-4 w-12 h-12 flex items-center justify-center opacity-20 group-hover:opacity-100 transition-opacity duration-500">
+                   <!-- Ring SVG -->
+                   <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                      <!-- Background Track Circle -->
+                      <circle
+                        class="text-gray-300 dark:text-white/15"
+                        cx="18"
+                        cy="18"
+                        r="15.9155"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="4"
+                      />
+                      <!-- Progress Circle -->
+                      <circle
+                        class="text-pink-500"
+                        cx="18"
+                        cy="18"
+                        r="15.9155"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="4"
+                        stroke-linecap="round"
+                        :stroke-dasharray="`${parseFloat(losslessRate)}, 100`"
+                        stroke-dashoffset="0"
+                      />
+                    </svg>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -169,27 +205,12 @@ const allCards = computed(() => [
 
 <style scoped>
 .stat-card {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
-  height: 135px;
-  display: flex;
-  flex-direction: column;
+  height: 120px;
+}
+
+/* 右上角热区悬停时显示删除按钮 */
+.close-zone:hover .close-btn {
+  opacity: 1;
 }
 </style>
 
-<style>
-@keyframes slideUpFade {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-slide-up-fade {
-  opacity: 0; /* Initially hidden */
-  animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-</style>

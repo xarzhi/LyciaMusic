@@ -154,17 +154,20 @@ onUnmounted(() => {
     
     <div 
       ref="progressBarRef"
-      class="absolute top-[-1px] left-0 w-full h-[3px] hover:h-[5px] cursor-pointer group/progress z-50 transition-all duration-200"
+      class="absolute top-[-10px] left-0 w-full h-[22px] cursor-pointer group/progress z-50"
       @mousedown="startProgressDrag"
-      style="filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));"
     >
+       <!-- 透明悬停扩展区域（上下各约 10px） -->
        <div class="absolute inset-0 bg-transparent w-full h-full"></div>
        
-       <div 
-         class="absolute left-0 top-0 h-full bg-black/5 dark:bg-white/10 group-hover/progress:bg-black/15 dark:group-hover/progress:bg-white/20 transition-all duration-200 ease-linear relative rounded-r-full"
-         :style="{ width: displayProgress + '%' }"
-       >
-          <div class="absolute right-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-[0_2px_4px_rgba(0,0,0,0.1)] border border-white/20 opacity-0 group-hover/progress:opacity-100 transition-opacity transform scale-0 group-hover/progress:scale-100"></div>
+       <!-- 实际进度条轨道（保持在 footer 顶部边缘） -->
+       <div class="absolute top-[9px] left-0 w-full h-[3px] group-hover/progress:h-[5px] transition-all duration-200" style="filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));">
+         <div 
+           class="absolute left-0 top-0 h-full bg-black/5 dark:bg-white/10 group-hover/progress:bg-black/15 dark:group-hover/progress:bg-white/20 transition-all duration-200 ease-linear relative rounded-r-full"
+           :style="{ width: displayProgress + '%' }"
+         >
+            <div class="absolute right-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-[0_2px_4px_rgba(0,0,0,0.1)] border border-white/20 opacity-0 group-hover/progress:opacity-100 transition-opacity transform scale-0 group-hover/progress:scale-100"></div>
+         </div>
        </div>
     </div>
 

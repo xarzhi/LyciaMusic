@@ -223,6 +223,7 @@ pub struct BehaviorStats {
     pub top_artists: Vec<TopArtist>,
     pub top_albums: Vec<TopAlbum>,
     pub hour_distribution: Vec<i64>,
+    pub recent_activity: Vec<i64>,
 }
 
 #[derive(Serialize)]
@@ -415,6 +416,43 @@ pub fn get_behavior_stats(
         }
     }
 
+    // 指标 E: 最近 7 天播放趋势 (Timeline)
+    // 即使 time_range 不是 7Days，我们也始终返回最近 7 天的趋势供 UI 显示
+    let mut recent_activity: Vec<i64> = vec![0; 7];
+    {
+        // 算出 7 天前的零点时间戳 (简化处理，按 24h 倒推)
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let day_seconds = 24 * 60 * 60;
+        let start_time = now - 7 * day_seconds;
+
+        // 查询最近 7 天的每一天的播放时长
+        // Output: day_offset (0-6), total_duration
+        let sql_activity = format!(
+            "SELECT CAST((ph.played_at - {}) / {} AS INTEGER) as day_offset, 
+                    COALESCE(SUM(ph.played_seconds), 0) as duration 
+             FROM play_history ph 
+             INNER JOIN songs s ON ph.song_id = s.id 
+             WHERE ph.played_at >= {} AND ph.song_id IS NOT NULL 
+             GROUP BY day_offset",
+            start_time, day_seconds, start_time
+        );
+
+        let mut stmt = conn.prepare(&sql_activity).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))
+            .map_err(|e| e.to_string())?;
+
+        for row in rows.flatten() {
+            let offset = row.0;
+            if offset >= 0 && offset < 7 {
+                recent_activity[offset as usize] = row.1;
+            }
+        }
+    }
+
     Ok(BehaviorStats {
         total_plays,
         total_duration,
@@ -423,5 +461,6 @@ pub fn get_behavior_stats(
         top_artists,
         top_albums,
         hour_distribution,
+        recent_activity,
     })
 }

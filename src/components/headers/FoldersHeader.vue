@@ -137,17 +137,17 @@ onUnmounted(() => {
     <!-- 正常模式 -->
     <div v-else class="flex items-center justify-between">
       <!-- 左侧文件夹胶囊 -->
-      <div class="flex items-center gap-2 overflow-x-auto overflow-y-visible custom-scrollbar no-scrollbar py-2 pr-2">
+      <div class="flex items-center gap-2 overflow-x-auto overflow-y-visible custom-scrollbar no-scrollbar py-2 pl-0 pr-4">
         <div 
             v-for="rootNode in folderTree" 
             :key="rootNode.path"
             @click="emit('update:activeRootPath', rootNode.path)"
             @contextmenu.prevent="handleRootContextMenu($event, rootNode.path)"
             :class="[
-                'group relative px-4 py-1.5 rounded-full text-sm font-medium transition-all cursor-pointer select-none shrink-0 border',
+                'group relative px-5 py-1.5 rounded-full text-sm font-medium transition-all duration-300 cursor-pointer select-none shrink-0',
                 activeRootPath === rootNode.path 
-                    ? 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-500/20 dark:text-blue-200 dark:border-blue-500/30' 
-                    : 'bg-gray-50 text-gray-500 border-transparent hover:bg-gray-100 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10'
+                    ? 'liquid-glass shadow-md' 
+                    : 'bg-gray-50 text-gray-500 hover:bg-gray-100 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10'
             ]"
         >
            <span>{{ rootNode.name }}</span>
@@ -280,5 +280,23 @@ onUnmounted(() => {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+.liquid-glass {
+  background: linear-gradient(135deg, rgba(235, 240, 255, 0.4), rgba(255, 255, 255, 0.2));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 
+    inset 0 0 0 1px rgba(255, 255, 255, 0.3),
+    inset 0 2px 8px rgba(255, 255, 255, 0.5);
+  color: #2563eb;
+}
+
+:global(.dark) .liquid-glass {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 </style>

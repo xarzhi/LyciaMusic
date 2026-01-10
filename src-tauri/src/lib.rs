@@ -36,7 +36,10 @@ use player::{
     get_output_devices, get_playback_progress, init_player, pause_audio, play_audio, resume_audio,
     seek_audio, set_output_device, set_volume,
 };
-use statistics::{get_behavior_stats, get_library_stats, record_play};
+use statistics::{
+    get_behavior_stats, get_format_distribution, get_library_stats, get_quality_distribution,
+    record_play,
+};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -142,7 +145,9 @@ pub fn run() {
             // Statistics Commands
             get_library_stats,
             record_play,
-            get_behavior_stats
+            get_behavior_stats,
+            get_quality_distribution,
+            get_format_distribution
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

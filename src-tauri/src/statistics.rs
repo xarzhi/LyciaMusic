@@ -48,6 +48,117 @@ pub struct LibraryStats {
     pub this_month_added: i64, // 本月首次入库数量
 }
 
+/// 音质分布统计
+#[derive(Serialize)]
+pub struct QualityDistribution {
+    pub hires: i64,         // Hi-Res (24bit + >=48kHz 无损)
+    pub super_quality: i64, // SQ (普通无损)
+    pub high_quality: i64,  // HQ (有损 >= 256kbps)
+    pub other: i64,         // 其他
+}
+
+/// 文件格式分布统计
+#[derive(Serialize)]
+pub struct FormatDistribution {
+    pub flac: i64,
+    pub mp3: i64,
+    pub ape: i64,
+    pub wav: i64,
+    pub aac: i64,
+    pub other: i64,
+}
+
+/// 获取文件格式分布统计
+#[tauri::command]
+pub fn get_format_distribution(db: State<DbState>) -> Result<FormatDistribution, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare("SELECT format FROM songs")
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| Ok(row.get::<_, String>(0).unwrap_or_default()))
+        .map_err(|e| e.to_string())?;
+
+    let mut flac = 0i64;
+    let mut mp3 = 0i64;
+    let mut ape = 0i64;
+    let mut wav = 0i64;
+    let mut aac = 0i64;
+    let mut other = 0i64;
+
+    for row in rows.flatten() {
+        let format = row.to_lowercase();
+        match format.as_str() {
+            "flac" => flac += 1,
+            "mp3" => mp3 += 1,
+            "ape" => ape += 1,
+            "wav" => wav += 1,
+            "aac" | "m4a" => aac += 1,
+            _ => other += 1,
+        }
+    }
+
+    Ok(FormatDistribution {
+        flac,
+        mp3,
+        ape,
+        wav,
+        aac,
+        other,
+    })
+}
+
+/// 获取音质分布统计
+#[tauri::command]
+pub fn get_quality_distribution(db: State<DbState>) -> Result<QualityDistribution, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare("SELECT format, bit_depth, sample_rate, bitrate FROM songs")
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0).unwrap_or_default(),
+                row.get::<_, Option<i64>>(1).ok().flatten(),
+                row.get::<_, i64>(2).unwrap_or(0),
+                row.get::<_, i64>(3).unwrap_or(0),
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut hires = 0i64;
+    let mut super_quality = 0i64;
+    let mut high_quality = 0i64;
+    let mut other = 0i64;
+
+    for row in rows.flatten() {
+        let (format, bit_depth, sample_rate, bitrate) = row;
+        let is_lossless = is_lossless_format(&format);
+        let is_hr = is_hires(bit_depth, sample_rate);
+
+        if is_lossless && is_hr {
+            hires += 1;
+        } else if is_lossless {
+            super_quality += 1;
+        } else if bitrate >= 256 {
+            high_quality += 1;
+        } else {
+            other += 1;
+        }
+    }
+
+    Ok(QualityDistribution {
+        hires,
+        super_quality,
+        high_quality,
+        other,
+    })
+}
+
 /// 获取曲库统计（全库，无 scope/time_range 参数）
 #[tauri::command]
 pub fn get_library_stats(db: State<DbState>) -> Result<LibraryStats, String> {

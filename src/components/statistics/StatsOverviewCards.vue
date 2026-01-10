@@ -18,11 +18,16 @@ const props = defineProps<{
   losslessCount: number;
   thisMonthAdded: number;
   hiddenCards: Set<string>;
+  expandedCard: string | null;
 }>();
 
 const emit = defineEmits<{
   hide: [title: string];
+  'card-click': [title: string];
 }>();
+
+// 判断卡片是否可点击
+const isClickable = (title: string) => title === '无损占比' || title === '库大小';
 
 // 格式化时长 (秒 -> X天X小时X分)
 const formattedDuration = computed(() => {
@@ -127,9 +132,32 @@ const allCards = computed(() => [
         <div
           v-if="!hiddenCards.has(card.title)"
           class="stat-card relative overflow-hidden rounded-xl p-4 backdrop-blur-md bg-white/40 dark:bg-white/5 border border-white/20 dark:border-white/5 transition-all duration-300 hover:scale-[1.02] group animate-slide-up-fade"
-          :class="['hover:bg-white/60 dark:hover:bg-white/10', card.borderClass]"
+          :class="[
+            'hover:bg-white/60 dark:hover:bg-white/10', 
+            card.borderClass,
+            isClickable(card.title) ? 'cursor-pointer' : '',
+            expandedCard === card.title && card.title === '无损占比' ? 'ring-2 ring-pink-500/50 bg-white/60 dark:bg-white/10' : '',
+            expandedCard === card.title && card.title === '库大小' ? 'ring-2 ring-fuchsia-500/50 bg-white/60 dark:bg-white/10' : ''
+          ]"
           :style="{ animationDelay: `${index * 100}ms` }"
+          @click="isClickable(card.title) && emit('card-click', card.title)"
         >
+          <!-- Clickable Indicator for expandable cards -->
+          <div v-if="isClickable(card.title)" class="absolute right-3 top-3 opacity-30 group-hover:opacity-100 transition-opacity duration-300">
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              class="h-3.5 w-3.5 transition-transform duration-300"
+              :class="[
+                expandedCard === card.title ? 'rotate-180' : '',
+                card.title === '无损占比' ? 'text-pink-500' : 'text-fuchsia-500'
+              ]"
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
           <!-- Close Button with Corner Hover Zone -->
           <div class="close-zone absolute top-0 right-0 w-10 h-10 z-20">
             <button 

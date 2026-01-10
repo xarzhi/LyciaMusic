@@ -3,6 +3,8 @@ import { ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import StatsOverviewCards from './StatsOverviewCards.vue';
 import BehaviorStatsSection from './BehaviorStatsSection.vue';
+import QualityPieChart from './QualityPieChart.vue';
+import FormatPieChart from './FormatPieChart.vue';
 
 // 类型定义
 interface LibraryStats {
@@ -52,6 +54,54 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 const lastUpdated = ref<Date | null>(null);
 const isRefreshing = ref(false);
+
+// 音质分布数据
+interface QualityDistribution {
+  hires: number;
+  super_quality: number;
+  high_quality: number;
+  other: number;
+}
+const qualityDistribution = ref<QualityDistribution | null>(null);
+const expandedCard = ref<string | null>(null);
+
+// 格式分布数据
+interface FormatDistribution {
+  flac: number;
+  mp3: number;
+  ape: number;
+  wav: number;
+  aac: number;
+  other: number;
+}
+const formatDistribution = ref<FormatDistribution | null>(null);
+
+// 卡片点击处理
+async function handleCardClick(cardTitle: string) {
+  if (expandedCard.value === cardTitle) {
+    // 收起
+    expandedCard.value = null;
+  } else {
+    // 展开
+    expandedCard.value = cardTitle;
+    // 如果是无损占比，加载音质分布数据
+    if (cardTitle === '无损占比' && !qualityDistribution.value) {
+      try {
+        qualityDistribution.value = await invoke<QualityDistribution>('get_quality_distribution');
+      } catch (e) {
+        console.warn('Failed to fetch quality distribution:', e);
+      }
+    }
+    // 如果是库大小，加载格式分布数据
+    if (cardTitle === '库大小' && !formatDistribution.value) {
+      try {
+        formatDistribution.value = await invoke<FormatDistribution>('get_format_distribution');
+      } catch (e) {
+        console.warn('Failed to fetch format distribution:', e);
+      }
+    }
+  }
+}
 
 // 行为统计时间范围
 const currentBehaviorTimeRange = ref<TimeRangeType>('Days7');
@@ -241,8 +291,78 @@ onMounted(async () => {
           :lossless-count="stats.lossless_count"
           :this-month-added="stats.this_month_added"
           :hidden-cards="hiddenCards"
+          :expanded-card="expandedCard"
           @hide="hideCard"
+          @card-click="handleCardClick"
         />
+
+        <!-- 展开区域：音质分布饼图 -->
+        <transition
+          enter-active-class="transition-all duration-400 ease-out"
+          enter-from-class="opacity-0 max-h-0 -translate-y-4"
+          enter-to-class="opacity-100 max-h-[500px] translate-y-0"
+          leave-active-class="transition-all duration-300 ease-in"
+          leave-from-class="opacity-100 max-h-[500px] translate-y-0"
+          leave-to-class="opacity-0 max-h-0 -translate-y-4"
+        >
+          <div 
+            v-if="expandedCard === '无损占比' && qualityDistribution" 
+            class="overflow-hidden rounded-xl bg-white/40 dark:bg-white/5 backdrop-blur-md border border-white/20 dark:border-white/5 mb-4"
+          >
+            <div class="flex items-center justify-between px-6 pt-4">
+              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">音质分布详情</h3>
+              <button 
+                @click="expandedCard = null"
+                class="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                </svg>
+              </button>
+            </div>
+            <QualityPieChart
+              :hires="qualityDistribution.hires"
+              :super-quality="qualityDistribution.super_quality"
+              :high-quality="qualityDistribution.high_quality"
+              :other="qualityDistribution.other"
+            />
+          </div>
+        </transition>
+
+        <!-- 展开区域：格式分布饼图 -->
+        <transition
+          enter-active-class="transition-all duration-400 ease-out"
+          enter-from-class="opacity-0 max-h-0 -translate-y-4"
+          enter-to-class="opacity-100 max-h-[500px] translate-y-0"
+          leave-active-class="transition-all duration-300 ease-in"
+          leave-from-class="opacity-100 max-h-[500px] translate-y-0"
+          leave-to-class="opacity-0 max-h-0 -translate-y-4"
+        >
+          <div 
+            v-if="expandedCard === '库大小' && formatDistribution" 
+            class="overflow-hidden rounded-xl bg-white/40 dark:bg-white/5 backdrop-blur-md border border-white/20 dark:border-white/5 mb-4"
+          >
+            <div class="flex items-center justify-between px-6 pt-4">
+              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">音乐格式分布</h3>
+              <button 
+                @click="expandedCard = null"
+                class="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                </svg>
+              </button>
+            </div>
+            <FormatPieChart
+              :flac="formatDistribution.flac"
+              :mp3="formatDistribution.mp3"
+              :ape="formatDistribution.ape"
+              :wav="formatDistribution.wav"
+              :aac="formatDistribution.aac"
+              :other="formatDistribution.other"
+            />
+          </div>
+        </transition>
 
         <!-- Divider -->
         <hr class="border-gray-100 dark:border-gray-800 my-8 animate-fade-in" style="animation-delay: 600ms;" />

@@ -55,18 +55,41 @@ const openCustomModal = () => {
               @click="setColorScheme('dark')" 
               class="relative group cursor-pointer transition-all outline-none focus:ring-2 focus:ring-[#EC4141] rounded-xl"
             >
-              <div class="aspect-[4/3] rounded-xl bg-[#2b2b2b] border-2 relative overflow-hidden shadow-sm transition-all" 
-                :class="colorScheme === 'dark' ? 'border-[#EC4141] ring-1 ring-[#EC4141]/20' : 'border-transparent group-hover:border-gray-300 dark:group-hover:border-white/20'"
+              <div class="aspect-[4/3] rounded-xl border-2 relative overflow-hidden shadow-md transition-all duration-300 group-hover:shadow-xl group-hover:scale-[1.02]" 
+                :class="colorScheme === 'dark' ? 'border-[#EC4141] ring-2 ring-[#EC4141]/30' : 'border-transparent group-hover:border-gray-400/50'"
+                style="background-color: #18181b;"
               >
-                <div class="absolute inset-0 flex flex-col items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity">
-                   <span class="text-3xl filter drop-shadow-lg">🌑</span>
-                   <span class="text-xs text-gray-400 mt-2 font-medium">酷炫黑</span>
+                <!-- 迷你 UI 预览 (深色) -->
+                <div class="absolute inset-2 flex gap-1.5 opacity-90 pointer-events-none">
+                  <!-- 侧边栏 -->
+                  <div class="w-[28%] h-full bg-[#2b2b2b] rounded-lg flex flex-col gap-1.5 p-1.5">
+                    <div class="w-2/3 h-1.5 bg-gray-600/50 rounded-full mb-1"></div>
+                    <div class="w-full h-1 bg-gray-600/30 rounded-full"></div>
+                    <div class="w-4/5 h-1 bg-gray-600/30 rounded-full"></div>
+                    <div class="w-3/4 h-1 bg-gray-600/30 rounded-full"></div>
+                  </div>
+                  <!-- 主内容区 -->
+                  <div class="flex-1 flex flex-col gap-1.5">
+                    <!-- 顶部栏 -->
+                    <div class="h-[15%] w-full bg-[#2b2b2b] rounded-lg"></div>
+                    <!-- 内容 -->
+                    <div class="flex-1 bg-[#202020] rounded-lg p-1.5 grid grid-cols-3 gap-1">
+                      <div class="aspect-square bg-gray-700/50 rounded-md"></div>
+                      <div class="aspect-square bg-gray-700/50 rounded-md"></div>
+                      <div class="aspect-square bg-gray-700/50 rounded-md"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 选中状态指示器 -->
+                <div v-if="colorScheme === 'dark'" class="absolute -top-[1px] -right-[1px] bg-[#EC4141] text-white rounded-bl-lg rounded-tr-lg p-1 shadow-sm z-10">
+                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
                 </div>
                 
-                <!-- Active Indicator -->
-                <div v-if="colorScheme === 'dark'" class="absolute top-2 right-2 bg-[#EC4141] text-white rounded-full p-0.5 shadow-md">
-                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
-                </div>
+                 <!-- 底部标签遮罩 -->
+                 <div class="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-center pb-2">
+                    <span class="text-xs text-white font-medium tracking-wide drop-shadow-md">酷炫黑</span>
+                 </div>
               </div>
             </button>
 
@@ -75,19 +98,41 @@ const openCustomModal = () => {
               @click="setColorScheme('light')" 
               class="relative group cursor-pointer transition-all outline-none focus:ring-2 focus:ring-[#EC4141] rounded-xl"
             >
-              <div class="aspect-[4/3] rounded-xl bg-white border-2 relative overflow-hidden shadow-sm transition-all" 
-                :class="colorScheme === 'light' ? 'border-[#EC4141] ring-1 ring-[#EC4141]/20' : 'border-transparent group-hover:border-gray-300 dark:group-hover:border-white/20'"
+              <div class="aspect-[4/3] rounded-xl border-2 relative overflow-hidden shadow-md transition-all duration-300 group-hover:shadow-xl group-hover:scale-[1.02]" 
+                :class="colorScheme === 'light' ? 'border-[#EC4141] ring-2 ring-[#EC4141]/30' : 'border-transparent group-hover:border-gray-300'"
+                style="background-color: #f9fafb;"
               >
-                <div class="absolute top-0 left-0 right-0 h-1.5 bg-[#EC4141]"></div>
-                <div class="absolute inset-0 flex flex-col items-center justify-center pt-2 opacity-80 group-hover:opacity-100 transition-opacity">
-                   <span class="text-3xl filter drop-shadow-sm">⚪</span>
-                   <span class="text-xs text-gray-500 mt-2 font-medium">官方白</span>
+                 <!-- 迷你 UI 预览 (浅色) -->
+                <div class="absolute inset-2 flex gap-1.5 opacity-90 pointer-events-none">
+                  <!-- 侧边栏 -->
+                  <div class="w-[28%] h-full bg-white rounded-lg flex flex-col gap-1.5 p-1.5 border border-gray-200/50">
+                    <div class="w-2/3 h-1.5 bg-gray-200 rounded-full mb-1"></div>
+                    <div class="w-full h-1 bg-gray-100 rounded-full"></div>
+                    <div class="w-4/5 h-1 bg-gray-100 rounded-full"></div>
+                    <div class="w-3/4 h-1 bg-gray-100 rounded-full"></div>
+                  </div>
+                  <!-- 主内容区 -->
+                  <div class="flex-1 flex flex-col gap-1.5">
+                    <!-- 顶部栏 -->
+                    <div class="h-[15%] w-full bg-white rounded-lg border border-gray-200/50"></div>
+                    <!-- 内容 -->
+                    <div class="flex-1 bg-white rounded-lg p-1.5 grid grid-cols-3 gap-1 border border-gray-200/50">
+                      <div class="aspect-square bg-gray-100 rounded-md"></div>
+                      <div class="aspect-square bg-gray-100 rounded-md"></div>
+                      <div class="aspect-square bg-gray-100 rounded-md"></div>
+                    </div>
+                  </div>
                 </div>
 
-                 <!-- Active Indicator -->
-                <div v-if="colorScheme === 'light'" class="absolute top-2 right-2 bg-[#EC4141] text-white rounded-full p-0.5 shadow-md">
-                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                 <!-- 选中状态指示器 -->
+                <div v-if="colorScheme === 'light'" class="absolute -top-[1px] -right-[1px] bg-[#EC4141] text-white rounded-bl-lg rounded-tr-lg p-1 shadow-sm z-10">
+                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
                 </div>
+                
+                <!-- 底部标签遮罩 -->
+                 <div class="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-gray-500/20 to-transparent flex items-end justify-center pb-2">
+                    <span class="text-xs text-gray-700 font-medium tracking-wide">官方白</span>
+                 </div>
               </div>
             </button>
 

@@ -53,6 +53,7 @@ export interface SidebarSettings {
   showFavorites: boolean;
   showRecent: boolean;
   showFolders: boolean;
+  showStatistics: boolean;
 }
 
 export interface AppSettings {

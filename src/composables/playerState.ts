@@ -107,7 +107,8 @@ export const settings = ref<AppSettings>({
     showLocalMusic: true,
     showFavorites: true,
     showRecent: true,
-    showFolders: true
+    showFolders: true,
+    showStatistics: true
   }
 });
 

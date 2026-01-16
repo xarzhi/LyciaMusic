@@ -25,7 +25,7 @@
     />
     
     <div class="flex-1 flex overflow-hidden relative">
-      <SongListSidebar :isManagementMode="false" />
+      <MasterPanel :isManagementMode="false" />
       
       <section class="flex-1 flex overflow-hidden">
         <FavoritesGrid 
@@ -88,7 +88,7 @@ import { useToast } from '../composables/toast';
 // 组件导入
 import FavoritesHeader from '../components/headers/FavoritesHeader.vue';
 import DetailHeader from '../components/headers/DetailHeader.vue';
-import SongListSidebar from '../components/song-list/SongListSidebar.vue';
+import MasterPanel from '../components/song-list/MasterPanel.vue';
 import SongTable from '../components/song-list/SongTable.vue';
 import FavoritesGrid from '../components/common/FavoritesGrid.vue';
 import DragGhost from '../components/common/DragGhost.vue';

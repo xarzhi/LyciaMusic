@@ -49,7 +49,7 @@
     <!-- 主内容区 -->
     <div class="flex-1 flex overflow-hidden relative">
       <!-- 侧边栏 -->
-      <SongListSidebar 
+      <MasterPanel 
         :isManagementMode="isManagementMode"
       />
       
@@ -148,7 +148,7 @@ import LocalMusicHeader from '../components/headers/LocalMusicHeader.vue';
 import FoldersHeader from '../components/headers/FoldersHeader.vue';
 import DetailHeader from '../components/headers/DetailHeader.vue';
 
-import SongListSidebar from '../components/song-list/SongListSidebar.vue';
+import MasterPanel from '../components/song-list/MasterPanel.vue';
 import SongTable from '../components/song-list/SongTable.vue';
 import FavoritesGrid from '../components/common/FavoritesGrid.vue';
 import DragGhost from '../components/common/DragGhost.vue';

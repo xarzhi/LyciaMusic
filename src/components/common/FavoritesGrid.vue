@@ -61,69 +61,117 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="grid grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 pt-4">
+  <div class="favorites-grid p-4">
           
+    <!-- 歌手卡片 -->
     <template v-if="favTab === 'artists'">
       <div 
         v-for="artist in favArtistList" 
         :key="artist.name"
         @click="emit('enterDetail', 'artist', artist.name)"
-        class="group cursor-pointer flex flex-col items-center"
+        class="group cursor-pointer"
       >
         <div 
           ref="itemRefs"
           :data-path="artist.firstSongPath"
-          class="w-32 h-32 rounded-full border border-gray-100 shadow-sm group-hover:shadow-md transition-all flex items-center justify-center mb-3 select-none overflow-hidden bg-gray-50 relative"
+          class="relative aspect-square rounded-full overflow-hidden shadow-md 
+                 group-hover:shadow-xl transition-all duration-300 ease-out group-hover:scale-[1.03]"
         >
-            <img 
-              v-if="imageCache.get(artist.firstSongPath)" 
-              :src="imageCache.get(artist.firstSongPath)" 
-              class="w-full h-full object-cover animate-in fade-in duration-300"
-              alt="Artist"
-            />
-            
-            <div v-else class="text-4xl text-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 w-full h-full flex items-center justify-center">
-              👤
-            </div>
-
+          <!-- 图片 -->
+          <img 
+            v-if="imageCache.get(artist.firstSongPath)" 
+            :src="imageCache.get(artist.firstSongPath)" 
+            class="w-full h-full object-cover"
+            alt="Artist"
+          />
+          
+          <!-- 占位符 -->
+          <div v-else class="w-full h-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
+            <span class="text-4xl text-indigo-300">👤</span>
+          </div>
+          
+          <!-- 渐变遮罩 -->
+          <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          
+          <!-- 悬停时显示的信息（居中） -->
+          <div class="absolute inset-0 flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all duration-300">
+            <span class="font-bold text-sm truncate max-w-[80%] text-center drop-shadow-md">{{ artist.name }}</span>
+            <span class="text-xs opacity-80 mt-1">{{ artist.count }} 首收藏</span>
+          </div>
         </div>
-        <span class="font-bold text-gray-800 text-sm truncate w-full text-center group-hover:text-[#EC4141] transition-colors">{{ artist.name }}</span>
-        <span class="text-xs text-gray-400">{{ artist.count }} 首收藏</span>
+        
+        <!-- 底部文字（始终可见） -->
+        <div class="mt-2 text-center">
+          <span class="font-bold text-gray-800 dark:text-gray-200 text-sm truncate block group-hover:text-[#EC4141] transition-colors">{{ artist.name }}</span>
+          <span class="text-xs text-gray-400">{{ artist.count }} 首收藏</span>
+        </div>
       </div>
     </template>
 
+    <!-- 专辑卡片 -->
     <template v-if="favTab === 'albums'">
       <div 
         v-for="album in favAlbumList" 
         :key="album.name"
         @click="emit('enterDetail', 'album', album.name)"
-        class="group cursor-pointer flex flex-col"
+        class="group cursor-pointer"
       >
-        <div class="relative w-full aspect-square mb-3 select-none">
-            <div class="absolute top-0 right-0 w-full h-full bg-black rounded-full translate-x-2 shadow-lg opacity-80 group-hover:translate-x-4 transition-transform duration-300 ease-out"></div>
-            
-            <div 
-              ref="itemRefs"
-              :data-path="album.firstSongPath"
-              class="relative w-full h-full border border-gray-200 rounded shadow-md flex items-center justify-center z-10 overflow-hidden bg-gray-50"
-            >
-               
-               <img 
-                 v-if="imageCache.get(album.firstSongPath)" 
-                 :src="imageCache.get(album.firstSongPath)" 
-                 class="w-full h-full object-cover animate-in fade-in duration-300"
-                 alt="Album"
-               />
-
-               <div v-else class="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-4xl text-gray-300">
-                 💿
-               </div>
-
-            </div>
+        <div 
+          ref="itemRefs"
+          :data-path="album.firstSongPath"
+          class="relative aspect-square rounded-lg overflow-hidden shadow-md
+                 group-hover:shadow-xl transition-all duration-300 ease-out group-hover:scale-[1.03]"
+        >
+          <!-- 图片 -->
+          <img 
+            v-if="imageCache.get(album.firstSongPath)" 
+            :src="imageCache.get(album.firstSongPath)" 
+            class="w-full h-full object-cover"
+            alt="Album"
+          />
+          
+          <!-- 占位符 -->
+          <div v-else class="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+            <span class="text-4xl text-gray-300">💿</span>
+          </div>
+          
+          <!-- 渐变遮罩 -->
+          <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+          
+          <!-- 专辑信息 -->
+          <div class="absolute inset-x-0 bottom-0 p-3 text-white">
+            <span class="font-bold text-sm truncate block drop-shadow-md">{{ album.name }}</span>
+            <span class="text-xs opacity-80 truncate block">{{ album.artist }}</span>
+          </div>
         </div>
-        <span class="font-bold text-gray-800 text-sm truncate group-hover:text-[#EC4141] transition-colors">{{ album.name }}</span>
-        <span class="text-xs text-gray-400 truncate">{{ album.artist }}</span>
       </div>
     </template>
   </div>
 </template>
+
+<style scoped>
+.favorites-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (min-width: 640px) {
+  .favorites-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .favorites-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .favorites-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+</style>

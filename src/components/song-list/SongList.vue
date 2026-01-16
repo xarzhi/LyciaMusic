@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 // 引用子组件
 import SongTable from './SongTable.vue'; 
 import SongListHeader from './SongListHeader.vue';
-import SongListSidebar from './SongListSidebar.vue';
+import MasterPanel from './MasterPanel.vue';
 import AddToPlaylistModal from '../overlays/AddToPlaylistModal.vue';
 import SongContextMenu from '../overlays/SongContextMenu.vue';
 import ModernModal from '../common/ModernModal.vue';
@@ -337,7 +337,7 @@ const onGlobalMouseUp = () => {
   if (dragSession.active) {
     if (dragSession.targetFolder) {
       // 🟢 Yield to Sidebar: Do not handle here, and DO NOT reset active immediately.
-      // SongListSidebar will handle the drop and reset active.
+      // MasterPanel will handle the drop and reset active.
       
       // 🟢 但是立即隐藏拖拽幽灵
       dragSession.showGhost = false;
@@ -442,7 +442,7 @@ const onGlobalMouseUp = () => {
     dragSession.insertIndex = -1;
     setTimeout(() => { 
       // dragSession.targetFolder = null; // Do not clear immediately if yielded? 
-      // Actually SongListSidebar will clear it or we clear it later.
+      // Actually MasterPanel will clear it or we clear it later.
       // But we should clear playlist/other
       dragSession.targetPlaylist = null;
     }, 100);
@@ -529,7 +529,7 @@ defineExpose({
     />
 
     <div class="flex-1 flex overflow-hidden relative">
-      <SongListSidebar />
+      <MasterPanel />
 
       <section class="flex-1 flex overflow-hidden">
         <FavoritesGrid v-if="isFavorites && !favDetailFilter && favTab !== 'songs'" @enterDetail="enterFavDetail"/>

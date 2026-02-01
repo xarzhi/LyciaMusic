@@ -142,11 +142,14 @@ const allCards = computed(() => [
           :style="{ animationDelay: `${index * 100}ms` }"
           @click="isClickable(card.title) && emit('card-click', card.title)"
         >
-          <!-- Clickable Indicator for expandable cards -->
-          <div v-if="isClickable(card.title)" class="absolute right-3 top-3 opacity-30 group-hover:opacity-100 transition-opacity duration-300">
+          <!-- Clickable Indicator for expandable cards - positioned at bottom right -->
+          <div 
+            v-if="isClickable(card.title)" 
+            class="absolute right-3 bottom-3 opacity-30 group-hover:opacity-100 transition-opacity duration-300"
+          >
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
-              class="h-3.5 w-3.5 transition-transform duration-300"
+              class="h-4 w-4 transition-transform duration-300"
               :class="[
                 expandedCard === card.title ? 'rotate-180' : '',
                 card.title === '无损占比' ? 'text-pink-500' : 'text-fuchsia-500'
@@ -193,35 +196,6 @@ const allCards = computed(() => [
                   {{ card.subtitle }}
                 </p>
 
-                <!-- Ring Chart for Lossless Ratio -->
-                <div v-if="card.title === '无损占比'" class="absolute right-4 bottom-4 w-12 h-12 flex items-center justify-center opacity-20 group-hover:opacity-100 transition-opacity duration-500">
-                   <!-- Ring SVG -->
-                   <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                      <!-- Background Track Circle -->
-                      <circle
-                        class="text-gray-300 dark:text-white/15"
-                        cx="18"
-                        cy="18"
-                        r="15.9155"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="4"
-                      />
-                      <!-- Progress Circle -->
-                      <circle
-                        class="text-pink-500"
-                        cx="18"
-                        cy="18"
-                        r="15.9155"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="4"
-                        stroke-linecap="round"
-                        :stroke-dasharray="`${parseFloat(losslessRate)}, 100`"
-                        stroke-dashoffset="0"
-                      />
-                    </svg>
-                </div>
               </div>
             </div>
           </div>

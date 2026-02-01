@@ -22,19 +22,24 @@ const badgeType = computed(() => {
   const losslessFormats = ['flac', 'wav', 'alac', 'ape'];
   const isLossless = losslessFormats.includes(props.format.toLowerCase());
   
-  // HR: 无损格式 + (位深 ≥ 24bit 且 采样率 ≥ 48kHz) - Hi-Res 高解析音质标准
-  if (isLossless && props.bitDepth && props.bitDepth >= 24 && props.sampleRate >= 48000) {
+  // HR: 无损格式 且 (位深 > 16bit 或 采样率 > 44.1kHz) - 只要有一项超越 CD 即视为高解析
+  if (isLossless && ((props.bitDepth && props.bitDepth > 16) || props.sampleRate > 44100)) {
     return 'HR';
   }
-  // SQ: 无损格式 (标准采样率/位深)
+  // SQ: 无损格式但未达到 HR 标准
   if (isLossless) {
     return 'SQ';
   }
-  // HQ: 有损格式 >= 256kbps (AAC/OGG/Opus 256kbps ≈ MP3 320kbps)
-  if (props.bitrate >= 256) {
+  // HQ: 有损格式的极致音质
+  // - MP3: >= 320kbps
+  // - AAC/OGG/Opus 等现代高效编码: >= 256kbps (256k ≈ MP3 320k)
+  const fmt = props.format.toLowerCase();
+  const efficientCodecs = ['aac', 'm4a', 'ogg', 'opus', 'wma'];
+  const hqThreshold = efficientCodecs.includes(fmt) ? 256 : 320;
+  if (props.bitrate >= hqThreshold) {
     return 'HQ';
   }
-  return null; // 其他情况不显示
+  return null; // 有损且码率不达标不显示
 });
 
 // 1.1 详细标签文本 (仅用于 detailed variant)
@@ -42,7 +47,7 @@ const detailedLabel = computed(() => {
   switch (badgeType.value) {
     case 'HR': return 'HI-RES LOSSLESS';
     case 'SQ': return 'LOSSLESS'; // 或根据偏好改为 CD LOSSLESS
-    case 'HQ': return 'HIGH QUALITY';
+    case 'HQ': return 'HIGH';
     default: return '';
   }
 });
@@ -74,50 +79,55 @@ const badgeColorClass = computed(() => {
 // 4. 生成分级提示内容 (Tiered Tooltip Content)
 const tooltipContent = computed(() => {
   const fmt = props.format?.toUpperCase() || '';
-  const kbps = props.bitrate || 0; // lofty already returns kbps
+  const kbps = props.bitrate || 0;
   
-  // Format technical subtitle: e.g. "24bit / 96kHz · FLAC"
+  // 统一模板: {bitDepth}-bit · {sampleRate} kHz · {codec} · {bitrate} kbps
   let sub = '';
-  if (props.bitDepth) sub += `${props.bitDepth}bit / `;
-  if (props.sampleRate) sub += `${props.sampleRate / 1000}kHz · `;
+  if (props.bitDepth) sub += `${props.bitDepth}-bit · `;
+  if (props.sampleRate) sub += `${props.sampleRate / 1000} kHz · `;
   sub += fmt;
+  if (kbps > 0) sub += ` · ${kbps} kbps`;
 
-  // Priority 1: Master Quality (bitDepth >= 24)
-  if (props.bitDepth && props.bitDepth >= 24) {
+  const losslessFormats = ['FLAC', 'WAV', 'ALAC', 'APE'];
+  const isLossless = losslessFormats.includes(fmt);
+
+  // HR: 高解析无损
+  if (isLossless && ((props.bitDepth && props.bitDepth > 16) || props.sampleRate > 44100)) {
     return {
-      emoji: '✨',
-      title: '母带级超清音质',
+      emoji: '',
+      title: '高解析无损',
       subtitle: sub,
       isMaster: true 
     };
   }
 
-  // Priority 2: CD Quality (Lossless & bitDepth == 16)
-  const losslessFormats = ['FLAC', 'WAV', 'ALAC', 'APE'];
-  if (losslessFormats.includes(fmt) && (!props.bitDepth || props.bitDepth === 16)) {
-     return {
-      emoji: '💿',
-      title: '无损 CD 音质',
+  // SQ: 标准无损
+  if (isLossless) {
+    return {
+      emoji: '',
+      title: '标准无损',
       subtitle: sub,
       isMaster: false
     };
   }
 
-  // Priority 3: HQ (bitrate >= 256k for modern codecs)
-  if (props.bitrate >= 256) {
+  // HQ: 高品质音乐
+  const efficientCodecs = ['AAC', 'M4A', 'OGG', 'OPUS', 'WMA'];
+  const hqThreshold = efficientCodecs.includes(fmt) ? 256 : 320;
+  if (kbps >= hqThreshold) {
     return {
-      emoji: '🎵',
+      emoji: '',
       title: '高品质音乐',
-      subtitle: `${kbps}kbps · ${fmt}`,
+      subtitle: sub,
       isMaster: false
     };
   }
 
-  // Priority 4: Standard
+  // 标准音质（不显示标签，但 tooltip 仍可显示）
   return {
     emoji: '',
     title: '标准音质',
-    subtitle: `${kbps}kbps · ${fmt}`,
+    subtitle: sub,
     isMaster: false
   };
 });

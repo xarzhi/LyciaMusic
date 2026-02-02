@@ -1,14 +1,14 @@
-use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use std::fs;
-use lofty::probe::Probe;
 use lofty::prelude::*;
+use lofty::probe::Probe;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RenameConfig {
-    pub mode: String, // "tags", "rules", "auto"
+    pub mode: String,     // "tags", "rules", "auto"
     pub template: String, // e.g. "{artist} - {title}"
     pub remove_track_prefix: bool,
     pub remove_source_prefix: bool,
@@ -43,15 +43,23 @@ fn sanitize_filename(name: &str) -> String {
 }
 
 fn process_file(path: &Path, config: &RenameConfig) -> RenamePreview {
-    let original_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let original_name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
     let original_path_str = path.to_string_lossy().to_string();
-    let ext = path.extension().unwrap_or_default().to_string_lossy().to_string();
+    let ext = path
+        .extension()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
 
     // Mode A: Standardize via Tags
     if config.mode == "tags" || config.mode == "auto" {
         // Explicitly typed probe result handling
         let tagged_file_result = Probe::open(path);
-        
+
         if let Ok(probe) = tagged_file_result {
             if let Ok(tagged_file) = probe.read() {
                 if let Some(tag) = tagged_file.primary_tag() {
@@ -62,7 +70,8 @@ fn process_file(path: &Path, config: &RenameConfig) -> RenamePreview {
                     let year = tag.year().map(|y| y.to_string()).unwrap_or_default();
                     let track = tag.track().map(|t| format!("{:02}", t)).unwrap_or_default();
 
-                    if !title.is_empty() { // Assume title is minimum requirement
+                    if !title.is_empty() {
+                        // Assume title is minimum requirement
                         let mut new_name_base = config.template.clone();
                         new_name_base = new_name_base.replace("{title}", &title);
                         new_name_base = new_name_base.replace("{artist}", &artist);
@@ -71,7 +80,7 @@ fn process_file(path: &Path, config: &RenameConfig) -> RenamePreview {
                         new_name_base = new_name_base.replace("{track}", &track);
 
                         let new_name = format!("{}.{}", sanitize_filename(&new_name_base), ext);
-                        
+
                         if new_name != original_name {
                             return RenamePreview {
                                 original_path: original_path_str,
@@ -81,7 +90,7 @@ fn process_file(path: &Path, config: &RenameConfig) -> RenamePreview {
                                 error: None,
                             };
                         } else if config.mode == "tags" {
-                             return RenamePreview {
+                            return RenamePreview {
                                 original_path: original_path_str,
                                 original_name: original_name.clone(),
                                 new_name: original_name,
@@ -93,10 +102,10 @@ fn process_file(path: &Path, config: &RenameConfig) -> RenamePreview {
                 }
             }
         }
-        
+
         // If mode is "tags" and we failed, return skipped
         if config.mode == "tags" {
-             return RenamePreview {
+            return RenamePreview {
                 original_path: original_path_str,
                 original_name: original_name.clone(),
                 new_name: original_name,
@@ -109,7 +118,7 @@ fn process_file(path: &Path, config: &RenameConfig) -> RenamePreview {
     // Mode B: Clean via Rules (or Auto fallback)
     if config.mode == "rules" || config.mode == "auto" {
         let mut cleaned_name = original_name.clone();
-        
+
         // Apply regex rules only to the stem (filename without extension)
         if let Some(stem) = path.file_stem() {
             let mut stem_str = stem.to_string_lossy().to_string();
@@ -123,7 +132,7 @@ fn process_file(path: &Path, config: &RenameConfig) -> RenamePreview {
                 let re = Regex::new(r"^\s*\[.*?\]\s*").unwrap();
                 stem_str = re.replace(&stem_str, "").to_string();
             }
-            
+
             cleaned_name = format!("{}.{}", stem_str.trim(), ext);
         }
 
@@ -149,11 +158,18 @@ fn process_file(path: &Path, config: &RenameConfig) -> RenamePreview {
 }
 
 #[tauri::command]
-pub fn preview_rename(root_path: String, config: RenameConfig) -> Result<Vec<RenamePreview>, String> {
+pub fn preview_rename(
+    root_path: String,
+    config: RenameConfig,
+) -> Result<Vec<RenamePreview>, String> {
     let mut results = Vec::new();
     let supported_exts = ["mp3", "flac", "wav", "m4a", "ogg"];
 
-    for entry in WalkDir::new(root_path).max_depth(1).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(root_path)
+        .max_depth(1)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
@@ -163,7 +179,7 @@ pub fn preview_rename(root_path: String, config: RenameConfig) -> Result<Vec<Ren
             }
         }
     }
-    
+
     // Sort logic: changed files first
     results.sort_by(|a, b| {
         let a_changed = a.status != "skipped";
@@ -183,7 +199,7 @@ pub fn preview_rename(root_path: String, config: RenameConfig) -> Result<Vec<Ren
 #[tauri::command]
 pub fn apply_rename(operations: Vec<RenameOperation>) -> Result<u32, String> {
     let mut success_count = 0;
-    
+
     for op in operations {
         let src = PathBuf::from(&op.original_path);
         if let Some(parent) = src.parent() {
@@ -195,6 +211,31 @@ pub fn apply_rename(operations: Vec<RenameOperation>) -> Result<u32, String> {
             }
         }
     }
-    
+
     Ok(success_count)
+}
+
+#[tauri::command]
+pub fn open_external_program(path: String, args: Vec<String>) -> Result<(), String> {
+    use std::process::Command;
+
+    let mut cmd = Command::new(&path);
+    for arg in args {
+        cmd.arg(arg);
+    }
+
+    cmd.spawn()
+        .map_err(|e| format!("Failed to launch program: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn refresh_folder_songs(
+    folder_path: String,
+    db_state: tauri::State<'_, crate::database::DbState>,
+) -> Result<Vec<crate::music::types::Song>, String> {
+    // 复用现有的扫描逻辑
+    let conn = db_state.conn.lock().map_err(|e| e.to_string())?;
+    crate::music::scanner::scan_single_directory_internal(folder_path, &conn)
 }

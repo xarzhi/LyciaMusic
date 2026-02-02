@@ -46,7 +46,7 @@ use tauri::{
     Manager,
 };
 use tokio::sync::Semaphore;
-use toolbox::{apply_rename, preview_rename};
+use toolbox::{apply_rename, open_external_program, preview_rename, refresh_folder_songs};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -154,7 +154,10 @@ pub fn run() {
             record_play,
             get_behavior_stats,
             get_quality_distribution,
-            get_format_distribution
+            get_format_distribution,
+            // Toolbox Commands
+            open_external_program,
+            refresh_folder_songs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

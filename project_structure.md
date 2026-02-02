@@ -1,7 +1,7 @@
 # 项目结构与功能说明文档 (Project Structure & File Descriptions)
 
 > 生成时间: 2026-01-03
-> 适用版本: LyciaMusic v1.1.0 (Tauri v2.0)
+> 适用版本: LyciaMusic v1.2.0 (Tauri v2.0)
 
 ## 目录结构树 (Directory Tree)
 

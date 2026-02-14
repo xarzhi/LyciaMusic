@@ -11,7 +11,7 @@
 
 一款基于 **Tauri v2.0**、**Vue 3** 和 **TypeScript** 开发的高性能桌面本地音乐播放器。专注于极致的视觉美感、流畅的交互体验以及原生级的系统集成。
 
-![LyciaMusic 预览](app.png)
+<img src="app.png" width="25%" alt="LyciaMusic 预览">
 
 > [!IMPORTANT]
 > 本软件目前处于 **早期开发阶段 (Alpha)**，核心功能已可用，欢迎提交 Issue 反馈建议。

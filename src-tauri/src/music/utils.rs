@@ -18,3 +18,33 @@ pub fn normalize_path(path_str: &str) -> String {
         s
     }
 }
+
+/// Escape special characters for SQL LIKE pattern with `ESCAPE '^'`.
+pub fn escape_like(input: &str) -> String {
+    input
+        .replace('^', "^^")
+        .replace('%', "^%")
+        .replace('_', "^_")
+}
+
+/// Build forward/backward descendant LIKE patterns for a folder path.
+/// Caller should use:
+/// `path = ?1 OR path LIKE ?2 ESCAPE '^' OR path LIKE ?3 ESCAPE '^'`
+pub fn descendant_like_patterns(folder_path: &str) -> (String, String) {
+    let forward_base = if folder_path.ends_with('/') || folder_path.ends_with('\\') {
+        folder_path.to_string()
+    } else {
+        format!("{folder_path}/")
+    };
+
+    let backward_base = if folder_path.ends_with('/') || folder_path.ends_with('\\') {
+        folder_path.to_string()
+    } else {
+        format!("{folder_path}\\")
+    };
+
+    (
+        format!("{}%", escape_like(&forward_base)),
+        format!("{}%", escape_like(&backward_base)),
+    )
+}

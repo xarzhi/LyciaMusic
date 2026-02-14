@@ -1,21 +1,62 @@
 // music/scanner.rs - 扫描逻辑
 
 use super::types::{FolderNode, GeneratedFolder, Song};
-use super::utils::normalize_path;
+use super::utils::{descendant_like_patterns, normalize_path};
 use crate::database::DbState;
 use lofty::prelude::*;
 use lofty::probe::Probe;
-use rusqlite::OptionalExtension;
+use rusqlite::{params, OptionalExtension};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 use walkdir::WalkDir;
 
 /// 数据库中歌曲的快照信息
 struct DbSongSnapshot {
+    song: Song,
     file_modified_at: Option<i64>,
     file_size: i64,
+}
+
+struct ScanDiff {
+    songs: Vec<Song>,
+    to_add: Vec<Song>,
+    to_update: Vec<Song>,
+    to_delete: Vec<String>,
+    has_disk_songs: bool,
+}
+
+fn clamp_i64_to_u32(v: i64) -> u32 {
+    if v <= 0 {
+        0
+    } else if v > u32::MAX as i64 {
+        u32::MAX
+    } else {
+        v as u32
+    }
+}
+
+fn i64_to_u64_opt(v: Option<i64>) -> Option<u64> {
+    v.filter(|x| *x >= 0).map(|x| x as u64)
+}
+
+fn i64_to_u8_opt(v: Option<i64>) -> Option<u8> {
+    v.filter(|x| *x >= 0 && *x <= u8::MAX as i64)
+        .map(|x| x as u8)
+}
+
+fn u64_to_i64_saturated(v: u64) -> i64 {
+    if v > i64::MAX as u64 {
+        i64::MAX
+    } else {
+        v as i64
+    }
+}
+
+fn u64_opt_to_i64_saturated(v: Option<u64>) -> Option<i64> {
+    v.map(u64_to_i64_saturated)
 }
 
 /// 从文件解析歌曲信息
@@ -64,7 +105,7 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
     }
 
     Some(Song {
-        id: None, // 新解析的文件还没有入库，id 为 None
+        id: None,
         name: path.file_name()?.to_string_lossy().to_string(),
         path: path_str.to_string(),
         title,
@@ -87,51 +128,86 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
     })
 }
 
-/// 内部扫描核心逻辑 - 差异化批量同步
-pub fn scan_single_directory_internal(
-    folder_path: String,
+fn load_db_snapshot_for_folder(
     conn: &rusqlite::Connection,
-) -> Result<Vec<Song>, String> {
-    let normalized_folder = normalize_path(&folder_path);
+    normalized_folder: &str,
+) -> Result<HashMap<String, DbSongSnapshot>, String> {
+    let (pattern_forward, pattern_back) = descendant_like_patterns(normalized_folder);
+    let mut snapshot = HashMap::new();
 
-    // ========== 第一步：获取内存快照（仅限当前文件夹） ==========
-    let mut db_snapshot: HashMap<String, DbSongSnapshot> = HashMap::new();
-    {
-        let pattern = format!("{}%", normalized_folder);
-        let mut stmt = conn
-            .prepare("SELECT path, file_modified_at, file_size FROM songs WHERE path LIKE ?1")
-            .map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at, file_modified_at
+             FROM songs
+             WHERE path = ?1
+                OR path LIKE ?2 ESCAPE '^'
+                OR path LIKE ?3 ESCAPE '^'",
+        )
+        .map_err(|e| e.to_string())?;
 
-        let rows = stmt
-            .query_map([&pattern], |row| {
+    let rows = stmt
+        .query_map(
+            params![normalized_folder, pattern_forward, pattern_back],
+            |row| {
+                let path: String = row.get(1)?;
+                let duration = clamp_i64_to_u32(row.get::<_, Option<i64>>(5)?.unwrap_or(0));
+                let bitrate = clamp_i64_to_u32(row.get::<_, Option<i64>>(7)?.unwrap_or(0));
+                let sample_rate = clamp_i64_to_u32(row.get::<_, Option<i64>>(8)?.unwrap_or(0));
+                let bit_depth = i64_to_u8_opt(row.get::<_, Option<i64>>(9)?);
+                let file_size_i64 = row.get::<_, Option<i64>>(11)?.unwrap_or(0).max(0);
+                let added_at_i64 = row.get::<_, Option<i64>>(12)?;
+                let file_modified_at_i64 = row.get::<_, Option<i64>>(13)?;
+
+                let name = Path::new(&path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.clone());
+
                 Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, Option<i64>>(1)?,
-                    row.get::<_, i64>(2).unwrap_or(0),
+                    path.clone(),
+                    DbSongSnapshot {
+                        file_modified_at: file_modified_at_i64,
+                        file_size: file_size_i64,
+                        song: Song {
+                            id: row.get::<_, i64>(0).ok(),
+                            name,
+                            path,
+                            title: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                            artist: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                            album: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                            duration,
+                            cover: row.get::<_, Option<String>>(6)?,
+                            bitrate,
+                            sample_rate,
+                            bit_depth,
+                            format: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
+                            file_size: file_size_i64 as u64,
+                            added_at: i64_to_u64_opt(added_at_i64),
+                            file_modified_at: i64_to_u64_opt(file_modified_at_i64),
+                        },
+                    },
                 ))
-            })
-            .map_err(|e| e.to_string())?;
+            },
+        )
+        .map_err(|e| e.to_string())?;
 
-        for row in rows.flatten() {
-            db_snapshot.insert(
-                row.0,
-                DbSongSnapshot {
-                    file_modified_at: row.1,
-                    file_size: row.2,
-                },
-            );
-        }
+    for row in rows.flatten() {
+        snapshot.insert(row.0, row.1);
     }
 
-    let original_db_count = db_snapshot.len();
+    Ok(snapshot)
+}
 
-    // ========== 第二步：遍历磁盘文件，分类处理 ==========
+fn collect_scan_diff(
+    normalized_folder: &str,
+    mut db_snapshot: HashMap<String, DbSongSnapshot>,
+) -> ScanDiff {
     let mut songs: Vec<Song> = Vec::new();
     let mut to_add: Vec<Song> = Vec::new();
     let mut to_update: Vec<Song> = Vec::new();
-    let mut disk_paths: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut has_disk_songs = false;
 
-    for entry in WalkDir::new(&normalized_folder)
+    for entry in WalkDir::new(normalized_folder)
         .into_iter()
         .filter_map(|e| e.ok())
     {
@@ -148,12 +224,11 @@ pub fn scan_single_directory_internal(
         if !["mp3", "flac", "wav"].contains(&ext.as_str()) {
             continue;
         }
+        has_disk_songs = true;
 
         let raw_path_str = path.to_string_lossy().to_string();
         let path_str = normalize_path(&raw_path_str);
-        disk_paths.insert(path_str.clone());
 
-        // 获取磁盘文件的 mtime 和 size
         let (disk_mtime, disk_size) = match fs::metadata(path) {
             Ok(meta) => {
                 let mtime = meta
@@ -168,120 +243,189 @@ pub fn scan_single_directory_internal(
         };
 
         if let Some(db_info) = db_snapshot.remove(&path_str) {
-            // Case B: 数据库中存在，对比 mtime 和 size
             if db_info.file_modified_at != disk_mtime || db_info.file_size != disk_size {
-                // 文件已修改 → 重新解析
                 if let Some(song) = parse_song_from_file(path, &path_str, &ext) {
                     to_update.push(song.clone());
                     songs.push(song);
                 }
             } else {
-                // 文件未修改 → 从数据库读取完整信息
-                let mut stmt = conn
-                    .prepare("SELECT id, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at, file_modified_at FROM songs WHERE path = ?1")
-                    .map_err(|e| e.to_string())?;
-
-                if let Ok(song) = stmt.query_row([&path_str], |row| {
-                    Ok(Song {
-                        id: row.get(0).ok(), // 从数据库读取 id
-                        name: path.file_name().unwrap().to_string_lossy().to_string(),
-                        path: path_str.clone(),
-                        title: row.get(1).unwrap_or_default(),
-                        artist: row.get(2).unwrap_or_default(),
-                        album: row.get(3).unwrap_or_default(),
-                        duration: row.get(4).unwrap_or_default(),
-                        cover: row.get(5).unwrap_or_default(),
-                        bitrate: row.get(6).unwrap_or(0),
-                        sample_rate: row.get(7).unwrap_or(0),
-                        bit_depth: row.get::<_, Option<u8>>(8).unwrap_or(None),
-                        format: row.get(9).unwrap_or_else(|_| ext.clone()),
-                        file_size: row.get::<_, i64>(10).unwrap_or(0) as u64,
-                        added_at: row
-                            .get::<_, Option<i64>>(11)
-                            .unwrap_or(None)
-                            .map(|v| v as u64),
-                        file_modified_at: row
-                            .get::<_, Option<i64>>(12)
-                            .unwrap_or(None)
-                            .map(|v| v as u64),
-                    })
-                }) {
-                    songs.push(song);
-                }
+                songs.push(db_info.song);
             }
-        } else {
-            // Case A: 新歌曲
-            if let Some(song) = parse_song_from_file(path, &path_str, &ext) {
-                to_add.push(song.clone());
-                songs.push(song);
-            }
+        } else if let Some(song) = parse_song_from_file(path, &path_str, &ext) {
+            to_add.push(song.clone());
+            songs.push(song);
         }
     }
 
-    // ========== 第三步：处理残留（幽灵歌曲） ==========
     let to_delete: Vec<String> = db_snapshot.keys().cloned().collect();
 
-    // ========== 第四步：空阈值保护 ==========
-    // 只有当磁盘上完全没有音频文件时才触发保护
-    // 如果磁盘上有新文件（比如重命名场景），则允许刷新
-    if disk_paths.is_empty() && original_db_count > 0 {
+    ScanDiff {
+        songs,
+        to_add,
+        to_update,
+        to_delete,
+        has_disk_songs,
+    }
+}
+
+fn apply_scan_changes(
+    conn: &mut rusqlite::Connection,
+    to_add: &[Song],
+    to_update: &[Song],
+    to_delete: &[String],
+) -> Result<(), String> {
+    if to_add.is_empty() && to_update.is_empty() && to_delete.is_empty() {
+        return Ok(());
+    }
+
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    {
+        let mut insert_stmt = tx
+            .prepare(
+                "INSERT INTO songs (path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at, file_modified_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                 ON CONFLICT(path) DO UPDATE SET
+                    title = excluded.title,
+                    artist = excluded.artist,
+                    album = excluded.album,
+                    duration = excluded.duration,
+                    cover_path = COALESCE(songs.cover_path, excluded.cover_path),
+                    bitrate = excluded.bitrate,
+                    sample_rate = excluded.sample_rate,
+                    bit_depth = excluded.bit_depth,
+                    format = excluded.format,
+                    file_size = excluded.file_size,
+                    added_at = COALESCE(songs.added_at, excluded.added_at),
+                    file_modified_at = excluded.file_modified_at",
+            )
+            .map_err(|e| e.to_string())?;
+
+        for song in to_add {
+            let file_size_i64 = u64_to_i64_saturated(song.file_size);
+            let added_at_i64 = u64_opt_to_i64_saturated(song.added_at);
+            let mtime_i64 = u64_opt_to_i64_saturated(song.file_modified_at);
+            insert_stmt
+                .execute(params![
+                    &song.path,
+                    &song.title,
+                    &song.artist,
+                    &song.album,
+                    song.duration as i64,
+                    &song.cover,
+                    song.bitrate as i64,
+                    song.sample_rate as i64,
+                    song.bit_depth.map(|v| v as i64),
+                    &song.format,
+                    file_size_i64,
+                    added_at_i64,
+                    mtime_i64
+                ])
+                .map_err(|e| format!("insert failed for '{}': {}", song.path, e))?;
+        }
+    }
+
+    {
+        let mut update_stmt = tx
+            .prepare(
+                "UPDATE songs
+                 SET title = ?1,
+                     artist = ?2,
+                     album = ?3,
+                     duration = ?4,
+                     bitrate = ?5,
+                     sample_rate = ?6,
+                     bit_depth = ?7,
+                     format = ?8,
+                     file_size = ?9,
+                     file_modified_at = ?10
+                 WHERE path = ?11",
+            )
+            .map_err(|e| e.to_string())?;
+
+        for song in to_update {
+            let file_size_i64 = u64_to_i64_saturated(song.file_size);
+            let mtime_i64 = u64_opt_to_i64_saturated(song.file_modified_at);
+            update_stmt
+                .execute(params![
+                    &song.title,
+                    &song.artist,
+                    &song.album,
+                    song.duration as i64,
+                    song.bitrate as i64,
+                    song.sample_rate as i64,
+                    song.bit_depth.map(|v| v as i64),
+                    &song.format,
+                    file_size_i64,
+                    mtime_i64,
+                    &song.path
+                ])
+                .map_err(|e| format!("update failed for '{}': {}", song.path, e))?;
+        }
+    }
+
+    {
+        let mut delete_stmt = tx
+            .prepare("DELETE FROM songs WHERE path = ?1")
+            .map_err(|e| e.to_string())?;
+        for path in to_delete {
+            delete_stmt
+                .execute(params![path])
+                .map_err(|e| format!("delete failed for '{}': {}", path, e))?;
+        }
+    }
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 内部扫描核心逻辑 - 差异化批量同步
+pub fn scan_single_directory_internal(
+    folder_path: String,
+    db_conn: Arc<Mutex<rusqlite::Connection>>,
+) -> Result<Vec<Song>, String> {
+    let normalized_folder = normalize_path(&folder_path);
+
+    // Step 1: 仅持锁读取 DB 快照
+    let db_snapshot = {
+        let conn = db_conn.lock().map_err(|e| e.to_string())?;
+        load_db_snapshot_for_folder(&conn, &normalized_folder)?
+    };
+
+    let original_db_count = db_snapshot.len();
+
+    // Step 2: 无锁扫描文件系统 + 差异计算
+    let scan_diff = collect_scan_diff(&normalized_folder, db_snapshot);
+
+    // Step 3: 空阈值保护
+    if !scan_diff.has_disk_songs && original_db_count > 0 {
         return Err("文件夹可能已断开连接或路径错误，未执行删除操作".to_string());
     }
 
-    // ========== 第五步：事务批量提交 ==========
-    conn.execute("BEGIN TRANSACTION", [])
-        .map_err(|e| e.to_string())?;
-
-    // INSERT 新歌曲
-    for song in &to_add {
-        let file_size_i64 = song.file_size as i64;
-        let added_at_i64 = song.added_at.map(|v| v as i64);
-        let mtime_i64 = song.file_modified_at.map(|v| v as i64);
-
-        conn.execute(
-            "INSERT OR REPLACE INTO songs (path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at, file_modified_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-            rusqlite::params![
-                &song.path, &song.title, &song.artist, &song.album, &song.duration,
-                &song.cover, &song.bitrate, &song.sample_rate, &song.bit_depth,
-                &song.format, &file_size_i64, &added_at_i64, &mtime_i64
-            ],
-        ).ok();
+    // Step 4: 仅持锁写入 DB
+    {
+        let mut conn = db_conn.lock().map_err(|e| e.to_string())?;
+        apply_scan_changes(
+            &mut conn,
+            &scan_diff.to_add,
+            &scan_diff.to_update,
+            &scan_diff.to_delete,
+        )?;
     }
 
-    // UPDATE 已修改的歌曲
-    for song in &to_update {
-        let file_size_i64 = song.file_size as i64;
-        let mtime_i64 = song.file_modified_at.map(|v| v as i64);
-
-        conn.execute(
-            "UPDATE songs SET title = ?1, artist = ?2, album = ?3, duration = ?4, bitrate = ?5, sample_rate = ?6, bit_depth = ?7, format = ?8, file_size = ?9, file_modified_at = ?10 WHERE path = ?11",
-            rusqlite::params![
-                &song.title, &song.artist, &song.album, &song.duration,
-                &song.bitrate, &song.sample_rate, &song.bit_depth, &song.format,
-                &file_size_i64, &mtime_i64, &song.path
-            ],
-        ).ok();
-    }
-
-    // DELETE 已删除的歌曲
-    for path in &to_delete {
-        conn.execute("DELETE FROM songs WHERE path = ?1", [path])
-            .ok();
-    }
-
-    conn.execute("COMMIT", []).map_err(|e| e.to_string())?;
-
-    // 日志输出
-    if !to_add.is_empty() || !to_update.is_empty() || !to_delete.is_empty() {
+    if !scan_diff.to_add.is_empty()
+        || !scan_diff.to_update.is_empty()
+        || !scan_diff.to_delete.is_empty()
+    {
         println!(
             "[刷新] 新增: {} 首, 更新: {} 首, 删除: {} 首",
-            to_add.len(),
-            to_update.len(),
-            to_delete.len()
+            scan_diff.to_add.len(),
+            scan_diff.to_update.len(),
+            scan_diff.to_delete.len()
         );
     }
 
-    Ok(songs)
+    Ok(scan_diff.songs)
 }
 
 #[tauri::command]
@@ -293,8 +437,7 @@ pub async fn scan_music_folder(
     let db_conn = db_state.conn.clone();
 
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let conn = db_conn.lock().map_err(|e| e.to_string())?;
-        scan_single_directory_internal(folder_path, &conn)
+        scan_single_directory_internal(folder_path, db_conn)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -342,17 +485,24 @@ pub async fn scan_folder_as_playlists(
 /// 查找文件夹中的第一首歌曲
 pub fn find_first_song_recursive(path: &Path, conn: &rusqlite::Connection) -> Option<String> {
     let path_str = normalize_path(&path.to_string_lossy());
-    let pattern_forward = format!("{}/%", path_str);
-    let pattern_back = format!("{}\\%", path_str);
+    let (pattern_forward, pattern_back) = descendant_like_patterns(&path_str);
 
     let mut stmt = conn
         .prepare(
-            "SELECT path FROM songs WHERE path LIKE ?1 OR path LIKE ?2 ORDER BY path ASC LIMIT 1",
+            "SELECT path
+             FROM songs
+             WHERE path = ?1
+                OR path LIKE ?2 ESCAPE '^'
+                OR path LIKE ?3 ESCAPE '^'
+             ORDER BY path ASC
+             LIMIT 1",
         )
         .ok()?;
 
     let song_path: Option<String> = stmt
-        .query_row([&pattern_forward, &pattern_back], |row| row.get(0))
+        .query_row(params![&path_str, pattern_forward, pattern_back], |row| {
+            row.get(0)
+        })
         .optional()
         .ok()?;
 

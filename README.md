@@ -1,150 +1,132 @@
 <div align="center">
 
-**简体中文 | [English](./README_EN.md)**
+**简体中文** | [English](./README_EN.md)
 
 </div>
 
----
+# LyciaMusic
 
-
-# LyciaMusic 🎵 | 莉西亚音乐
-
-一款基于 **Tauri v2.0**、**Vue 3** 和 **TypeScript** 开发的高性能桌面本地音乐播放器。专注于极致的视觉美感、流畅的交互体验以及原生级的系统集成。
+LyciaMusic 是一个基于 **Tauri v2 + Vue 3 + TypeScript + Rust** 的桌面本地音乐播放器，当前版本为 **v1.2.0**。项目重点是本地曲库管理、播放体验、统计分析和桌面集成能力。
 
 <img src="app.png" width="25%" alt="LyciaMusic 预览">
 
-> [!IMPORTANT]
-> 本软件目前处于 **早期开发阶段 (Alpha)**，核心功能已可用，欢迎提交 Issue 反馈建议。
+## 项目现状
 
-> [!WARNING]
-> **🚧 已知问题与开发计划 (Roadmap)：**
-> * **音频格式**：目前完美支持 FLAC 和 MP3，其他格式待测试。
-> * **多平台**：目前专注于 Windows 平台体验，macOS/Linux 暂未适配。
-> * **设置项**：部分高级设置选项仅为 UI 展示，功能尚未实装。
-> * **桌面歌词**：原生桌面歌词功能暂未完善。🎉 **强烈推荐搭配 [Lyricify Lite](https://github.com/WXriw/Lyricify-App) 使用**，本项目已完美适配其系统广播接口，体验更佳！
-> * **频谱同步**：播放界面的动效与音频可能存在微小延迟，持续优化中。
+- 开发阶段：Alpha（功能可用，持续迭代中）
+- 主要适配：Windows（界面、托盘、媒体控制均以 Windows 体验为主）
+- 语言：中文优先，内置英文 README
 
+## 主要功能
 
-## 📸 界面截图
+- 本地曲库扫描与增量更新（按文件 `mtime + size` 检测变更）
+- 曲库与侧边栏目录解耦（`library_folders` / `sidebar_folders`）
+- 音乐播放控制：播放、暂停、继续、拖动进度、音量、切换输出设备
+- 系统媒体控制集成（播放信息同步、上一首/下一首事件）
+- 歌词支持：音频标签歌词 + 同名 `.lrc` 文件读取
+- 桌面歌词浮窗：可拖动、锁定、置顶、翻译/音译显示
+- 统计页：曲库规模、音质分布、格式分布、听歌行为分析
+- 文件工具箱（4 步）：预处理、外部标签编辑、批量重命名、刷新入库
+- 系统托盘与单实例运行
 
-> 点击下方箭头展开查看高清大图 👇
+## 支持情况
+
+- 曲库扫描格式：`mp3`、`flac`、`wav`
+- 工具箱重命名预览格式：`mp3`、`flac`、`wav`、`m4a`、`ogg`
+- 数据存储：SQLite（自动迁移字段）
+
+## 界面截图
 
 <details>
-<summary><strong>✨ 点击展开应用截图预览</strong></summary>
-<br>
+<summary><strong>点击展开</strong></summary>
 
-### 软件首页
+### 首页
 <img src="./screenshots/shouye.png" width="100%">
-<br>
 
 ### 歌曲列表
 <img src="./screenshots/shouye2.png" width="100%">
-<br>
 
-### 播放界面
+### 播放详情
 <img src="./screenshots/playdetail.png" width="100%">
 
-### 设置界面
+### 设置
 <img src="./screenshots/setting.png" width="100%">
 
 </details>
 
+## 技术栈
 
+- 前端：Vue 3、Vue Router、TypeScript、Vite、Tailwind CSS 4
+- 后端：Rust、Tauri v2
+- 音频：`rodio`、`cpal`
+- 元数据：`lofty`
+- 数据库：`rusqlite`（bundled SQLite）
 
-## 📖 用户指南
+## 快速开始
 
-### 🚀 1. 快速上手
-* **导入音乐**: 点击右上角或侧边栏的 **“添加文件夹”**，LyciaMusic 将利用 Rust 引擎极速扫描并提取元数据。
-* **秒开体验**: 无论曲库多大，异步加载技术保证软件即点即开。
+### 环境要求
 
-### 🎨 2. 视觉自定义 (设置 -> 外观)
-* **✨ 灵动流光 (Flow)**: 默认模式。提取封面主色调，生成 Apple Music 风格的动态网格渐变。
-* **🌫️ 静态模糊 (Blur)**: 高斯模糊封面背景，沉浸感强。
-* **🖼️ 自定义皮肤**: 支持上传本地图片，可调节遮罩浓度与模糊度。
+- Node.js `>= 18`
+- Rust（stable）
+- Windows WebView2（Windows 10/11 默认可用）
 
-### 🎧 3. 交互与控制
-* **抽屉式歌单**: 点击右下角图标，播放列表从右侧平滑滑出。
-* **智能底栏**: 播放队列为空时自动隐藏，播放时优雅滑出。
-* **批量操作**: 在文件夹视图下，支持 `Shift` / `Ctrl` 批量选择文件进行操作，逻辑和Windows相同
-    方法：点击第一个歌单/文件夹，按住shift，点击第二个歌单/文件夹，会批量删除二者之间所有的歌单/文件夹。按住ctrl可单点选中多个歌单/文件夹
-* **简单排序**: 支持长按移动和排序歌曲列表。
+### 安装与启动
 
-### 🖱️ 4. 桌面级集成
-* **智能右键**: 无论在屏幕何处点击，右键菜单都会自动检测边界，防止溢出屏幕。
-* **系统整合**: 支持 Windows 任务栏缩略图控制及系统托盘常驻。
+```bash
+git clone https://github.com/Billy636/MyMusic.git
+cd MyMusic
+npm install
+```
 
+开发模式：
 
-
-## ✨ 核心特性
-
-### 🎨 沉浸式视觉体验
-*   **灵动流光背景**: 采用自研 HSL 聚类算法提取封面主色，实时渲染 Apple Music 风格的动态网格渐变（Mesh Gradient）。支持静态模糊与自定义皮肤模式。
-*   **磨砂玻璃美学**: 全局应用毛玻璃（Glassmorphism）设计语言，UI 界面与桌面环境完美融合。
-*   **抽屉式交互**: 右侧滑入式播放列表，紧贴窗口边缘，提供原生应用的操控感。
-
-### 🚀 极致性能优化
-*   **秒开体验**: 通过 `index.html` 静态骨架屏技术，彻底消除 WebView 启动时的白屏/闪烁现象。
-*   **智能按需加载**: 路由懒加载与异步组件挂载，确保首屏渲染速度与极低的内存占用。
-*   **后端并发控制**: 在 Rust 后端引入信号量（Semaphore）限制图片处理并发，防止冷启动时 CPU 占用过高。
-
-### 🛠️ 原生桌面集成
-*   **系统托盘**: 深度集成 Tauri v2 TrayIcon API，支持窗口控制与快捷操作。
-*   **高级右键菜单**: 全自定义右键菜单，具备智能边界检测（自动翻转）功能，防止菜单溢出屏幕。
-*   **桌面歌词**: 高品质悬浮歌词，支持自定义样式与位置锁定。
-*   **文件整理**: 内置高性能本地文件扫描、元数据提取及物理文件自动整理功能。
-
-## 💻 技术栈
-
-- **前端**: Vue 3 (Composition API), Vite, TypeScript, Tailwind CSS 4.0.
-- **后端**: Rust, Tauri v2.0.
-- **数据库**: SQLite (通过 `rusqlite`) 负责曲库持久化。
-- **音频引擎**: `rodio` (Rust 高性能音频播放库)。
-
-## 🚀 快速开始
-
-### 环境准备
-- [Node.js](https://nodejs.org/) (v18+)
-- [Rust](https://www.rust-lang.org/tools/install) (最新稳定版)
-- WebView2 (Windows 10/11 已内置)
-
-### 安装步骤
-1.  克隆仓库:
-    ```bash
-    git clone https://github.com/yourusername/my-cloud-music.git
-    cd my-cloud-music
-    ```
-2.  安装依赖:
-    ```bash
-    npm install
-    ```
-
-### 开发环境运行
 ```bash
 npm run tauri dev
 ```
 
-### 生产环境构建
+构建产物：
+
 ```bash
 npm run tauri build
 ```
 
-## 📂 项目结构
+仅前端调试：
 
-```plaintext
-├── src/                # 前端源码 (Vue 3 + TS)
-│   ├── components/     # 组件库 (布局、播放器、弹窗)
-│   ├── composables/    # 组合式逻辑 (状态管理、颜色提取、播放控制)
-│   ├── types/          # TypeScript 类型定义中心
-│   └── views/          # 页面容器 (首页、收藏、最近)
-├── src-tauri/          # 后端源码 (Rust)
-│   ├── src/            # Rust 逻辑 (音频引擎、文件IO、数据库)
-│   └── tauri.conf.json # Tauri 核心配置
-└── 项目结构.md         # 开发者详细维护文档
+```bash
+npm run dev
 ```
 
-## 📜 开源协议
+## 目录结构
 
-本项目采用 MIT 协议开源。
+```plaintext
+.
+├─ src/                        # Vue 前端
+│  ├─ components/              # UI 组件（播放器、设置、统计、弹层等）
+│  ├─ composables/             # 核心状态与业务逻辑
+│  ├─ router/                  # 路由定义
+│  ├─ types/                   # 类型定义
+│  └─ views/                   # 页面视图（Home/Favorites/Recent/Settings 等）
+├─ src-tauri/                  # Rust + Tauri 后端
+│  ├─ src/
+│  │  ├─ lib.rs                # 命令注册、托盘、初始化
+│  │  ├─ player.rs             # 播放引擎与系统媒体控制
+│  │  ├─ database.rs           # SQLite 初始化与迁移
+│  │  ├─ statistics.rs         # 曲库/行为统计
+│  │  ├─ toolbox.rs            # 工具箱（重命名/外部程序）
+│  │  └─ music/                # 扫描、封面、歌词、文件操作
+│  └─ tauri.conf.json          # 应用配置
+├─ screenshots/                # README 截图资源
+└─ README_EN.md                # 英文说明
+```
+
+## 已知限制
+
+- 当前代码路径与命令对 Windows 支持最完整，macOS/Linux 仍需补齐测试与适配
+- 设置页中部分选项仍是占位交互（UI 已有、后端能力待接入）
+- 快捷键设置页尚未完成
+
+## 许可证
+
+项目配置为 MIT 许可。
 
 ---
-*更新日期: 2025年12月31日*
+更新日期：2026-02-06

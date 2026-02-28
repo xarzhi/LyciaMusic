@@ -48,17 +48,28 @@ const activeTreeNodes = computed(() => {
 });
 
 // Auto-select first capsule if none selected
-watch(() => folderTree.value, (newVal) => {
+watch(() => folderTree.value, async (newVal) => {
     // Logic to ensure an active root is selected
     if (newVal.length > 0) {
        // If no selection, or selection invalid, select first
        if (!activeRootPath.value || !newVal.find(n => n.path === activeRootPath.value)) {
            activeRootPath.value = newVal[0].path;
        }
+       // 🟢 方案C：如果选中的根目录没有子文件夹，自动选中根目录本身并加载歌曲
+       const selectedRoot = newVal.find(n => n.path === activeRootPath.value);
+       if (selectedRoot && selectedRoot.children.length === 0 && selectedRoot.song_count > 0) {
+           currentFolderFilter.value = selectedRoot.path;
+           // 🟢 关键：直接调用 refreshFolder 加载歌曲数据
+           try {
+               await refreshFolder(selectedRoot.path);
+           } catch (e) {
+               console.error("Failed to auto-load songs for root folder:", e);
+           }
+       }
     } else {
         activeRootPath.value = null;
     }
-}, { immediate: true });
+}, { immediate: true, deep: true });
 
 // --- Custom Drag & Drop for Folders/Artists/Albums ---
 let mouseDownInfo: { x: number, y: number, index: number, item: any, type: 'folder' | 'artist' | 'album' } | null = null;
@@ -525,9 +536,10 @@ const stopResize = () => {
                  />
              </div>
              
-             <!-- Empty State for Active Root -->
-             <div v-else-if="activeRootPath" class="flex flex-col items-center justify-center py-10 text-gray-400 dark:text-gray-500 space-y-2">
-                 <span class="text-xs">该文件夹为空</span>
+             <!-- Empty State for Active Root (No Subfolders) -->
+             <div v-else-if="activeRootPath" class="flex flex-col items-center justify-center py-10 text-gray-400 dark:text-gray-500 space-y-2 text-center px-4">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                 <span class="text-xs leading-relaxed">当前目录下无子文件夹<br/>已显示所有歌曲</span>
              </div>
 
              <!-- Empty State for No Roots -->

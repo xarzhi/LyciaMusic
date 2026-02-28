@@ -46,11 +46,18 @@ use tauri::{
     Manager,
 };
 use tokio::sync::Semaphore;
-use toolbox::{apply_rename, preview_rename};
+use toolbox::{apply_rename, open_external_program, preview_rename, refresh_folder_songs};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            // 当第二个实例启动时，激活已有窗口
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -147,7 +154,10 @@ pub fn run() {
             record_play,
             get_behavior_stats,
             get_quality_distribution,
-            get_format_distribution
+            get_format_distribution,
+            // Toolbox Commands
+            open_external_program,
+            refresh_folder_songs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

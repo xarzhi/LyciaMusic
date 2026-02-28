@@ -2,7 +2,7 @@
 
 use super::scanner::{scan_folder_recursive, scan_single_directory_internal};
 use super::types::{FolderNode, LibraryFolder, Song};
-use super::utils::normalize_path;
+use super::utils::{descendant_like_patterns, normalize_path};
 use crate::database::DbState;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -29,10 +29,15 @@ pub async fn get_library_folders(
 
         let mut folders = Vec::new();
         for folder_path in paths {
+            let (pattern_forward, pattern_back) = descendant_like_patterns(&folder_path);
             let count: i64 = conn
                 .query_row(
-                    "SELECT COUNT(*) FROM songs WHERE path LIKE ?1 || '%'",
-                    [&folder_path],
+                    "SELECT COUNT(*)
+                     FROM songs
+                     WHERE path = ?1
+                        OR path LIKE ?2 ESCAPE '^'
+                        OR path LIKE ?3 ESCAPE '^'",
+                    rusqlite::params![&folder_path, pattern_forward, pattern_back],
                     |row| row.get(0),
                 )
                 .unwrap_or(0);
@@ -105,21 +110,23 @@ pub async fn scan_library(
     let db_conn = db_state.conn.clone();
 
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let conn = db_conn.lock().map_err(|e| e.to_string())?;
-
-        let mut stmt = conn
-            .prepare("SELECT path FROM library_folders")
-            .map_err(|e| e.to_string())?;
-        let folder_paths: Vec<String> = stmt
-            .query_map([], |row| row.get(0))
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect();
+        let folder_paths: Vec<String> = {
+            let conn = db_conn.lock().map_err(|e| e.to_string())?;
+            let mut stmt = conn
+                .prepare("SELECT path FROM library_folders")
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |row| row.get(0))
+                .map_err(|e| e.to_string())?
+                .filter_map(|r| r.ok())
+                .collect();
+            rows
+        };
 
         let mut all_songs = Vec::new();
 
         for folder in folder_paths {
-            if let Ok(songs) = scan_single_directory_internal(folder, &conn) {
+            if let Ok(songs) = scan_single_directory_internal(folder, db_conn.clone()) {
                 all_songs.extend(songs);
             }
         }

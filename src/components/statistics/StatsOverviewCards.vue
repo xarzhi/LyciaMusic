@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { 
   Music, 
   Disc, 
@@ -8,6 +8,23 @@ import {
   Database, 
   Zap 
 } from 'lucide-vue-next';
+
+// 控制"本月新增"标签显示
+const showMonthlyBadge = ref(true);
+let badgeTimer: ReturnType<typeof setTimeout> | null = null;
+
+onMounted(() => {
+  // 3秒后开始淡出
+  badgeTimer = setTimeout(() => {
+    showMonthlyBadge.value = false;
+  }, 3000);
+});
+
+onUnmounted(() => {
+  if (badgeTimer) {
+    clearTimeout(badgeTimer);
+  }
+});
 
 const props = defineProps<{
   totalSongs: number;
@@ -142,11 +159,14 @@ const allCards = computed(() => [
           :style="{ animationDelay: `${index * 100}ms` }"
           @click="isClickable(card.title) && emit('card-click', card.title)"
         >
-          <!-- Clickable Indicator for expandable cards -->
-          <div v-if="isClickable(card.title)" class="absolute right-3 top-3 opacity-30 group-hover:opacity-100 transition-opacity duration-300">
+          <!-- Clickable Indicator for expandable cards - positioned at bottom right -->
+          <div 
+            v-if="isClickable(card.title)" 
+            class="absolute right-3 bottom-3 opacity-30 group-hover:opacity-100 transition-opacity duration-300"
+          >
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
-              class="h-3.5 w-3.5 transition-transform duration-300"
+              class="h-4 w-4 transition-transform duration-300"
               :class="[
                 expandedCard === card.title ? 'rotate-180' : '',
                 card.title === '无损占比' ? 'text-pink-500' : 'text-fuchsia-500'
@@ -185,43 +205,16 @@ const allCards = computed(() => [
               <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5">{{ card.title }}</p>
               
               <!-- Value and Subtitle -->
-              <div class="flex items-baseline gap-2">
+              <div class="flex items-baseline gap-2 flex-nowrap">
                 <p class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{{ card.value }}</p>
                 
                 <!-- Subtitle (本月+N) -->
-                <p v-if="card.subtitle" class="text-[10px] text-emerald-500 dark:text-emerald-400 font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded-full">
-                  {{ card.subtitle }}
-                </p>
+                <Transition name="fade">
+                  <p v-if="card.subtitle && showMonthlyBadge" class="text-[10px] text-emerald-500 dark:text-emerald-400 font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                    {{ card.subtitle }}
+                  </p>
+                </Transition>
 
-                <!-- Ring Chart for Lossless Ratio -->
-                <div v-if="card.title === '无损占比'" class="absolute right-4 bottom-4 w-12 h-12 flex items-center justify-center opacity-20 group-hover:opacity-100 transition-opacity duration-500">
-                   <!-- Ring SVG -->
-                   <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                      <!-- Background Track Circle -->
-                      <circle
-                        class="text-gray-300 dark:text-white/15"
-                        cx="18"
-                        cy="18"
-                        r="15.9155"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="4"
-                      />
-                      <!-- Progress Circle -->
-                      <circle
-                        class="text-pink-500"
-                        cx="18"
-                        cy="18"
-                        r="15.9155"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="4"
-                        stroke-linecap="round"
-                        :stroke-dasharray="`${parseFloat(losslessRate)}, 100`"
-                        stroke-dashoffset="0"
-                      />
-                    </svg>
-                </div>
               </div>
             </div>
           </div>
@@ -239,6 +232,17 @@ const allCards = computed(() => [
 /* 右上角热区悬停时显示删除按钮 */
 .close-zone:hover .close-btn {
   opacity: 1;
+}
+
+/* 淡出动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
 

@@ -37,6 +37,7 @@ souvlaki = "0.7"
 raw-window-handle = "0.6"
 regex = "1"
 cpal = "0.15"
+tauri-plugin-single-instance = "2"
 
 # ... 现有的内容 ...
 

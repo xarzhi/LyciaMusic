@@ -57,6 +57,9 @@ LyciaMusic 是一个基于 **Tauri v2 + Vue 3 + TypeScript + Rust** 的桌面本
 
 <img src="./screenshots/统计2.png" width="100%">
 
+### 歌单页面
+<img src="./screenshots/歌单页面.png" width="100%">
+
 ### 设置 - 常规
 <img src="./screenshots/设置-常规.png" width="100%">
 

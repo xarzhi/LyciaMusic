@@ -8,7 +8,9 @@
 
 LyciaMusic 是一个基于 **Tauri v2 + Vue 3 + TypeScript + Rust** 的桌面本地音乐播放器，当前版本为 **v1.2.0**。项目重点是本地曲库管理、播放体验、统计分析和桌面集成能力。
 
+<div align="center">
 <img src="app.png" width="25%" alt="LyciaMusic 预览">
+</div>
 
 ## 项目现状
 
@@ -25,7 +27,7 @@ LyciaMusic 是一个基于 **Tauri v2 + Vue 3 + TypeScript + Rust** 的桌面本
 - 歌词支持：音频标签歌词 + 同名 `.lrc` 文件读取
 - 桌面歌词浮窗：可拖动、锁定、置顶、翻译/音译显示
 - 统计页：曲库规模、音质分布、格式分布、听歌行为分析
-- 文件工具箱（4 步）：预处理、外部标签编辑、批量重命名、刷新入库
+- 文件工具箱（4 步）：预处理、外部标签编辑、批量重命名、刷新入库。快捷打开musictag。
 - 系统托盘与单实例运行
 
 ## 支持情况
@@ -36,22 +38,33 @@ LyciaMusic 是一个基于 **Tauri v2 + Vue 3 + TypeScript + Rust** 的桌面本
 
 ## 界面截图
 
-<details>
-<summary><strong>点击展开</strong></summary>
-
 ### 首页
-<img src="./screenshots/shouye.png" width="100%">
+<img src="./screenshots/首页.png" width="100%">
 
-### 歌曲列表
-<img src="./screenshots/shouye2.png" width="100%">
+<img src="./screenshots/首页2.png" width="100%">
 
-### 播放详情
-<img src="./screenshots/playdetail.png" width="100%">
+### 播放页
+<img src="./screenshots/播放页.png" width="100%">
 
-### 设置
-<img src="./screenshots/setting.png" width="100%">
+### 文件夹
+<img src="./screenshots/文件夹.png" width="100%">
 
-</details>
+### 文件夹 - 管理模式
+<img src="./screenshots/文件夹-管理模式.png" width="100%">
+
+### 统计
+<img src="./screenshots/统计.png" width="100%">
+
+<img src="./screenshots/统计2.png" width="100%">
+
+### 设置 - 常规
+<img src="./screenshots/设置-常规.png" width="100%">
+
+### 设置 - 音乐库
+<img src="./screenshots/设置-音乐库.png" width="100%">
+
+### 支持 Lyricify
+<img src="./screenshots/支持Lyricify.png" width="100%">
 
 ## 技术栈
 

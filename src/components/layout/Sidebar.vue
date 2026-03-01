@@ -344,9 +344,11 @@ watch([songList, playlists], () => {
 <template>
   <aside class="w-48 bg-transparent flex flex-col border-r border-transparent h-full select-none overflow-hidden relative transition-colors duration-600">
     <div class="h-16 flex items-center px-6 shrink-0 mb-2 cursor-default relative" data-tauri-drag-region>
-      <div class="flex items-center gap-2 pointer-events-none">
-        <h1 class="text-2xl font-bold bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent tracking-tight italic">
-          LyciaMusic
+      <div class="flex items-center pointer-events-none">
+        <img src="/app_logo_black.png" alt="Logo" class="w-8 h-8 object-contain drop-shadow-sm opacity-80 dark:hidden" />
+        <img src="/app_logo_white.png" alt="Logo" class="w-8 h-8 object-contain drop-shadow-sm opacity-80 hidden dark:block" />
+        <h1 class="text-[17px] font-medium text-black/80 dark:text-white/80 tracking-wide -ml-1.5 mt-1.5 ">
+          ycia Player
         </h1>
       </div>
     </div>

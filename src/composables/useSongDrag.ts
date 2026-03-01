@@ -17,7 +17,7 @@ export function useSongDrag(
     let isMouseDown = false;
     let startX = 0;
     let startY = 0;
-    const ROW_HEIGHT = 60;
+    const ROW_HEIGHT = 72;
 
     // 自动滚动
     let autoScrollTimer: number | null = null;
@@ -106,11 +106,29 @@ export function useSongDrag(
 
             const rect = container.getBoundingClientRect();
             if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
-                const header = container.querySelector('thead') as HTMLElement | null;
-                const headerHeight = header ? header.offsetHeight : 0;
+                // 🔥 使用 elementFromPoint 精确命中鼠标下方的行元素
+                // 不再依赖 ROW_HEIGHT 常量，彻底避免行高不一致导致的选择偏移
+                const target = document.elementFromPoint(e.clientX, e.clientY);
+                const rowEl = target?.closest('[data-index]') as HTMLElement | null;
 
-                const relativeY = e.clientY - rect.top + container.scrollTop;
-                let currentIndex = Math.floor((relativeY - headerHeight) / ROW_HEIGHT);
+                let currentIndex = -1;
+                if (rowEl) {
+                    currentIndex = parseInt(rowEl.dataset.index!, 10);
+                } else {
+                    // 兜底：鼠标在虚拟滚动 padding 区域
+                    const rowElements = container.querySelectorAll('[data-index]');
+                    if (rowElements.length > 0) {
+                        const firstRow = rowElements[0] as HTMLElement;
+                        const lastRow = rowElements[rowElements.length - 1] as HTMLElement;
+                        if (e.clientY < firstRow.getBoundingClientRect().top) {
+                            currentIndex = parseInt(firstRow.dataset.index!, 10);
+                        } else {
+                            currentIndex = parseInt(lastRow.dataset.index!, 10);
+                        }
+                    }
+                }
+
+                if (currentIndex === -1) return;
                 currentIndex = Math.max(0, Math.min(displaySongList.value.length - 1, currentIndex));
 
                 if (currentIndex !== lastSelectedIndex.value) {

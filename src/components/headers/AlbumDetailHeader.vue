@@ -1,22 +1,20 @@
 <script lang="ts">
-const headerCoverCache = new Map<string, string>();
+const albumCoverCache = new Map<string, string>();
 </script>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 
 const props = defineProps<{
-  artistName: string;
+  albumName: string;
   isBatchMode: boolean;
   selectedCount?: number;
-  activeTab: string;
   songs?: any[];
 }>();
 
 const emit = defineEmits([
   'update:isBatchMode', 
-  'update:activeTab',
   'playAll', 
   'batchPlay', 
   'addToPlaylist', 
@@ -27,12 +25,20 @@ const emit = defineEmits([
 const coverUrl = ref<string>('');
 const isLoading = ref<boolean>(false);
 
+// 从歌曲列表中提取歌手名
+const artistName = computed(() => {
+  if (props.songs && props.songs.length > 0) {
+    return props.songs[0].artist || '未知歌手';
+  }
+  return '未知歌手';
+});
+
 watch(() => props.songs, async (newSongs) => {
   if (newSongs && newSongs.length > 0) {
     const firstSongPath = newSongs[0].path;
     if (firstSongPath) {
-      if (headerCoverCache.has(props.artistName)) {
-        coverUrl.value = headerCoverCache.get(props.artistName) || '';
+      if (albumCoverCache.has(props.albumName)) {
+        coverUrl.value = albumCoverCache.get(props.albumName) || '';
         isLoading.value = false;
         return;
       }
@@ -46,14 +52,14 @@ watch(() => props.songs, async (newSongs) => {
         if (filePath) {
           const url = convertFileSrc(filePath);
           coverUrl.value = url;
-          headerCoverCache.set(props.artistName, url);
+          albumCoverCache.set(props.albumName, url);
         } else {
           coverUrl.value = '';
-          headerCoverCache.set(props.artistName, '');
+          albumCoverCache.set(props.albumName, '');
         }
       } catch (e) {
         coverUrl.value = '';
-        headerCoverCache.set(props.artistName, '');
+        albumCoverCache.set(props.albumName, '');
       } finally {
         isLoading.value = false;
       }
@@ -66,17 +72,17 @@ watch(() => props.songs, async (newSongs) => {
 }, { immediate: true });
 
 const gradients = [
-  'from-pink-500 to-rose-500',
-  'from-purple-500 to-indigo-500',
-  'from-cyan-500 to-blue-500',
+  'from-blue-500 to-cyan-500',
+  'from-purple-500 to-pink-500',
   'from-emerald-400 to-teal-500',
-  'from-amber-400 to-orange-500',
+  'from-orange-400 to-rose-400',
+  'from-indigo-500 to-purple-500',
+  'from-rose-400 to-red-500',
   'from-fuchsia-500 to-pink-500',
-  'from-blue-400 to-indigo-500',
-  'from-violet-500 to-purple-500',
+  'from-amber-400 to-orange-500',
 ];
 
-const getGradientForArtist = (name: string) => {
+const getGradientForAlbum = (name: string) => {
   if (!name) return gradients[0];
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
@@ -112,28 +118,33 @@ const handlePlayAll = () => {
       </div>
     </div>
 
-    <!-- 正常模式: 歌手详情展示区 -->
+    <!-- 正常模式: 专辑详情展示区 -->
     <div v-else class="flex gap-6 h-auto mt-2 mb-6">
-      <!-- 封面图 (圆形) -->
-      <div class="w-36 h-36 rounded-full shadow-sm flex items-center justify-center shrink-0 overflow-hidden group relative select-none bg-gray-100 dark:bg-white/5 border-4 border-white/50 dark:border-white/5">
+      <!-- 封面图 (方形，带圆角) -->
+      <div class="w-36 h-36 rounded-lg shadow-sm flex items-center justify-center shrink-0 overflow-hidden group relative select-none bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10">
         <div v-if="isLoading" class="w-full h-full bg-gray-200 dark:bg-white/10 animate-pulse"></div>
-        <img v-else-if="coverUrl" :src="coverUrl" class="w-full h-full object-cover select-none animate-in fade-in duration-300" draggable="false" :alt="artistName"/>
-        <div v-else class="w-full h-full flex items-center justify-center text-4xl font-bold text-white bg-gradient-to-br animate-in fade-in duration-300" :class="getGradientForArtist(artistName)">
-          {{ artistName.charAt(0).toUpperCase() }}
+        <img v-else-if="coverUrl" :src="coverUrl" class="w-full h-full object-cover select-none animate-in fade-in duration-300" draggable="false" :alt="albumName"/>
+        <div v-else class="w-full h-full flex items-center justify-center text-4xl font-bold text-white bg-gradient-to-br animate-in fade-in duration-300" :class="getGradientForAlbum(albumName)">
+          🎵
         </div>
       </div>
       
       <!-- 文本信息与操作 -->
       <div class="h-36 flex flex-col justify-start pt-2 pb-1 flex-1 min-w-0">
-        <!-- 歌手名字 -->
+        <!-- 专辑名字和歌手名 -->
         <div class="mb-4">
-          <h1 class="text-[32px] font-bold text-gray-900 dark:text-white truncate max-w-[600px] leading-tight">
-            {{ artistName }}
+          <h1 class="text-[32px] font-bold text-gray-900 dark:text-white truncate max-w-[600px] leading-tight flex items-center gap-2">
+            <span class="bg-[#EC4141] text-white text-[12px] px-1.5 py-0.5 rounded border border-[#EC4141] font-normal leading-none -mt-1 relative top-[1px]">专辑</span>
+            {{ albumName }}
           </h1>
+          <p class="text-[14px] text-gray-500 dark:text-gray-400 mt-2 truncate w-full flex items-center gap-2">
+            <span>歌手：</span>
+            <span class="text-[#507DAF] hover:text-[#3b5b82] dark:text-[#6a9adb] dark:hover:text-[#8cbcf5] cursor-pointer transition-colors">{{ artistName }}</span>
+          </p>
         </div>
 
         <!-- 操作按钮组 -->
-        <div class="flex items-center gap-3 mt-2">
+        <div class="flex items-center gap-3 mt-auto">
            <button 
              @click="handlePlayAll" 
              class="bg-[#EC4141] hover:bg-[#d13b3b] text-white px-6 py-2 rounded-full text-[15px] font-medium transition flex items-center gap-2 active:scale-95 shadow-sm"
@@ -159,34 +170,14 @@ const handlePlayAll = () => {
       </div>
     </div>
 
-    <!-- 标签页导航 (Tabs) -->
+    <!-- 标签页导航 (Tabs) 模拟，仅作为底部边距 -->
     <div class="flex gap-8 text-[15px] font-medium mt-auto w-full">
-      <button 
-        class="pb-1.5 transition-colors relative"
-        :class="activeTab === 'songs' ? 'text-gray-900 dark:text-white font-bold' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
-        @click="emit('update:activeTab', 'songs')"
+      <div 
+        class="pb-1.5 transition-colors relative text-gray-900 dark:text-white font-bold"
       >
         歌曲
-        <div v-if="activeTab === 'songs'" class="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-[3px] bg-[#EC4141] rounded-t-full"></div>
-      </button>
-
-      <button 
-        class="pb-1.5 transition-colors relative"
-        :class="activeTab === 'albums' ? 'text-gray-900 dark:text-white font-bold' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
-        @click="emit('update:activeTab', 'albums')"
-      >
-        专辑
-        <div v-if="activeTab === 'albums'" class="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-[3px] bg-[#EC4141] rounded-t-full"></div>
-      </button>
-
-      <button 
-        class="pb-1.5 transition-colors relative"
-        :class="activeTab === 'details' ? 'text-gray-900 dark:text-white font-bold' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'"
-        @click="emit('update:activeTab', 'details')"
-      >
-        歌手详情
-        <div v-if="activeTab === 'details'" class="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-[3px] bg-[#EC4141] rounded-t-full"></div>
-      </button>
+        <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-[3px] bg-[#EC4141] rounded-t-full"></div>
+      </div>
     </div>
   </div>
 </template>

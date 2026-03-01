@@ -37,7 +37,7 @@
 
 
     <LocalMusicHeader
-      v-else-if="currentViewMode !== 'statistics'"
+      v-else-if="!['statistics', 'artist', 'album'].includes(currentViewMode)"
       v-model:isBatchMode="isBatchMode"
       :selectedCount="selectedPaths.size"
       @playAll="handlePlayAll"
@@ -62,6 +62,20 @@
           v-model:isBatchMode="isBatchMode"
           v-model:activeTab="artistActiveTab"
           :artistName="filterCondition || '未知歌手'"
+          :songs="displaySongList"
+          :selectedCount="selectedPaths.size"
+          @playAll="handlePlayAll"
+          @batchPlay="handleBatchPlay"
+          @addToPlaylist="showAddToPlaylistModal = true"
+          @batchDelete="requestBatchDelete"
+          @batchMove="handleBatchMove"
+        />
+
+        <AlbumDetailHeader
+          v-else-if="currentViewMode === 'album'"
+          v-model:isBatchMode="isBatchMode"
+          :albumName="filterCondition || '未知专辑'"
+          :songs="displaySongList"
           :selectedCount="selectedPaths.size"
           @playAll="handlePlayAll"
           @batchPlay="handleBatchPlay"
@@ -169,6 +183,7 @@ import LocalMusicHeader from '../components/headers/LocalMusicHeader.vue';
 import FoldersHeader from '../components/headers/FoldersHeader.vue';
 import DetailHeader from '../components/headers/DetailHeader.vue';
 import ArtistDetailHeader from '../components/headers/ArtistDetailHeader.vue';
+import AlbumDetailHeader from '../components/headers/AlbumDetailHeader.vue';
 
 import MasterPanel from '../components/song-list/MasterPanel.vue';
 import SongTable from '../components/song-list/SongTable.vue';

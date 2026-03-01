@@ -90,7 +90,11 @@ const mainBlurStyle = computed(() => {
         <div class="flex-1 flex flex-col min-w-0">
           <TitleBar />
           <main class="flex-1 overflow-hidden relative min-h-0">
-            <router-view /> 
+            <router-view v-slot="{ Component }">
+              <transition name="page-fade" mode="out-in">
+                <component :is="Component" />
+              </transition>
+            </router-view>
           </main>
         </div>
       </div>
@@ -122,6 +126,20 @@ const mainBlurStyle = computed(() => {
     
 
     <style>
+    .page-fade-enter-active,
+    .page-fade-leave-active {
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    
+    .page-fade-enter-from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+
+    .page-fade-leave-to {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
 
     .footer-slide-enter-active,
 

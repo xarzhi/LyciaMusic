@@ -34,6 +34,8 @@
       @rename="handleRenamePlaylist"
     />
 
+
+
     <LocalMusicHeader
       v-else-if="currentViewMode !== 'statistics'"
       v-model:isBatchMode="isBatchMode"
@@ -53,19 +55,43 @@
         :isManagementMode="isManagementMode"
       />
       
-      <!-- 歌曲列表区域 -->
-      <section class="flex-1 flex overflow-hidden">
+      <!-- 歌曲列表区域 (带有自滚动) -->
+      <section class="flex-1 flex flex-col overflow-y-auto custom-scrollbar relative">
+        <ArtistDetailHeader
+          v-if="currentViewMode === 'artist'"
+          v-model:isBatchMode="isBatchMode"
+          v-model:activeTab="artistActiveTab"
+          :artistName="filterCondition || '未知歌手'"
+          :selectedCount="selectedPaths.size"
+          @playAll="handlePlayAll"
+          @batchPlay="handleBatchPlay"
+          @addToPlaylist="showAddToPlaylistModal = true"
+          @batchDelete="requestBatchDelete"
+          @batchMove="handleBatchMove"
+        />
+
         <!-- Statistics View -->
         <StatisticsPage v-if="currentViewMode === 'statistics'" />
 
-        
-        <!-- Main song table -->
+        <!-- Artist Content Area -->
+        <div v-else-if="currentViewMode === 'artist' && artistActiveTab !== 'songs'" class="flex-1 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 min-h-[400px]">
+          <svg v-if="artistActiveTab === 'albums'" xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <p class="text-sm">{{ artistActiveTab === 'albums' ? '暂无专辑数据' : '歌手详情敬请期待' }}</p>
+        </div>
+
+        <!-- Main song table (如果不是 artist 或者 artist tab === 'songs') -->
         <SongTable
           v-else
           ref="songTableRef"
           :songs="displaySongList"
           :isBatchMode="isBatchMode"
           :selectedPaths="selectedPaths"
+          class="min-h-[500px]"
           @play="playSong"
           @contextmenu="handleContextMenu"
           @update:selectedPaths="selectedPaths = $event"
@@ -142,6 +168,7 @@ import { useToast } from '../composables/toast';
 import LocalMusicHeader from '../components/headers/LocalMusicHeader.vue';
 import FoldersHeader from '../components/headers/FoldersHeader.vue';
 import DetailHeader from '../components/headers/DetailHeader.vue';
+import ArtistDetailHeader from '../components/headers/ArtistDetailHeader.vue';
 
 import MasterPanel from '../components/song-list/MasterPanel.vue';
 import SongTable from '../components/song-list/SongTable.vue';
@@ -184,6 +211,7 @@ const isBatchMode = ref(false);
 const isManagementMode = ref(false); // 🟢 Local Management Mode State
 const selectedPaths = ref<Set<string>>(new Set());
 const songTableRef = ref<any>(null);
+const artistActiveTab = ref('songs');
 
 
 // 初始化拖拽逻辑
@@ -394,7 +422,7 @@ watch(() => route.path, (path) => {
   if (path === '/recent') {
     switchToRecent();
   } else if (path === '/') {
-    if (currentViewMode.value !== 'folder' && currentViewMode.value !== 'playlist') {
+    if (!['folder', 'playlist', 'artist', 'album'].includes(currentViewMode.value)) {
        switchViewToAll();
     }
   }

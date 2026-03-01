@@ -89,7 +89,7 @@ const mainBlurStyle = computed(() => {
         
         <div class="flex-1 flex flex-col min-w-0">
           <TitleBar />
-          <main class="flex-1 overflow-hidden relative">
+          <main class="flex-1 overflow-hidden relative min-h-0">
             <router-view /> 
           </main>
         </div>

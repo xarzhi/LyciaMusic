@@ -105,6 +105,8 @@ export const settings = ref<AppSettings>({
   },
   sidebar: {
     showLocalMusic: true,
+    showArtists: true,
+    showAlbums: true,
     showFavorites: true,
     showRecent: true,
     showFolders: true,

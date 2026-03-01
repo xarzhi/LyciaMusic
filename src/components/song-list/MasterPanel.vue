@@ -17,9 +17,9 @@ const props = withDefaults(defineProps<{
 });
 
 const { 
-  currentViewMode, localMusicTab, currentArtistFilter, currentAlbumFilter,
+  currentViewMode, localMusicTab, 
   artistList, albumList, folderList, currentFolderFilter,
-  isLocalMusic, isFolderMode,
+  isFolderMode,
   playSong, openInFinder, createPlaylist, 
   getSongsInFolder, moveFilesToFolder,
   refreshFolder, // 🟢 Ensure imported
@@ -74,10 +74,7 @@ watch(() => folderTree.value, async (newVal) => {
 // --- Custom Drag & Drop for Folders/Artists/Albums ---
 let mouseDownInfo: { x: number, y: number, index: number, item: any, type: 'folder' | 'artist' | 'album' } | null = null;
 
-const handleMouseDown = (e: MouseEvent, index: number, item: any, type: 'folder' | 'artist' | 'album') => {
-  if (e.button !== 0) return;
-  mouseDownInfo = { x: e.clientX, y: e.clientY, index, item, type };
-};
+
 
 const handleGlobalMouseMove = (e: MouseEvent) => {
   if (mouseDownInfo && !dragSession.active) {
@@ -164,16 +161,7 @@ const handleDropLogic = (list: any[], key: string, callback: (from: number, to: 
 
 
 
-const handleItemMouseMove = (e: MouseEvent, id: string, type: 'folder' | 'artist' | 'album') => {
-  if (dragSession.active && dragSession.type === type) {
-    const target = e.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    const mid = rect.top + rect.height / 2;
-    
-    dragOverId.value = id;
-    dragPosition.value = e.clientY < mid ? 'top' : 'bottom';
-  }
-};
+
 
 
 // ------------------------------
@@ -462,7 +450,7 @@ const stopResize = () => {
 
 <template>
   <aside 
-    v-if="(isLocalMusic && localMusicTab !== 'default') || isFolderMode" 
+    v-if="isFolderMode" 
     class="h-full border-r border-white/10 bg-transparent shrink-0 select-none relative group/sidebar"
     :style="{ width: sidebarWidth + 'px' }"
   >
@@ -476,51 +464,6 @@ const stopResize = () => {
     <!-- Scrollable Content -->
     <div class="h-full overflow-y-auto custom-scrollbar">
     
-    <ul v-if="isLocalMusic && localMusicTab === 'artist'" class="p-2 space-y-1">
-        <li 
-          v-for="(item, index) in artistList" 
-          :key="item.name" 
-          @mousedown="handleMouseDown($event, index, item, 'artist')"
-          @mousemove="handleItemMouseMove($event, item.name, 'artist')"
-          @click="currentArtistFilter = item.name" 
-          :class="[
-            currentArtistFilter === item.name ? 'bg-white/40 dark:bg-white/20 shadow-sm' : 'hover:bg-white/20 dark:hover:bg-white/10',
-            (dragSession.active && dragSession.type === 'artist' && dragSession.data?.name === item.name) ? 'opacity-50' : '',
-            (dragSession.type === 'artist' && dragOverId === item.name && dragPosition === 'top') ? '!border-t-2 !border-t-[#EC4141]' : '',
-            (dragSession.type === 'artist' && dragOverId === item.name && dragPosition === 'bottom') ? '!border-b-2 !border-b-[#EC4141]' : ''
-          ]"
-          class="flex items-center p-2 rounded-lg cursor-pointer transition-all border-t-2 border-transparent border-b-2 select-none"
-        >
-          <div class="w-10 h-10 rounded-full bg-white/30 dark:bg-white/10 flex items-center justify-center text-gray-500 dark:text-gray-400 font-bold mr-3 shrink-0 overflow-hidden relative">
-            <img v-if="sidebarImageCache.get(item.firstSongPath)" :src="sidebarImageCache.get(item.firstSongPath)" class="w-full h-full object-cover" />
-            <span v-else>{{ item.name.charAt(0).toUpperCase() }}</span>
-          </div>
-          <div class="flex-1 min-w-0"><div class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{{ item.name }}</div><div class="text-xs text-gray-500 dark:text-gray-400">{{ item.count }} 首</div></div>
-        </li>
-    </ul>
-
-    <ul v-if="isLocalMusic && localMusicTab === 'album'" class="p-2 space-y-1">
-        <li 
-          v-for="(item, index) in albumList" 
-          :key="item.name" 
-          @mousedown="handleMouseDown($event, index, item, 'album')"
-          @mousemove="handleItemMouseMove($event, item.name, 'album')"
-          @click="currentAlbumFilter = item.name" 
-          :class="[
-            currentAlbumFilter === item.name ? 'bg-white/40 dark:bg-white/20 shadow-sm' : 'hover:bg-white/20 dark:hover:bg-white/10',
-            (dragSession.active && dragSession.type === 'album' && dragSession.data?.name === item.name) ? 'opacity-50' : '',
-            (dragSession.type === 'album' && dragOverId === item.name && dragPosition === 'top') ? '!border-t-2 !border-t-[#EC4141]' : '',
-            (dragSession.type === 'album' && dragOverId === item.name && dragPosition === 'bottom') ? '!border-b-2 !border-b-[#EC4141]' : ''
-          ]"
-          class="flex items-center p-2 rounded-lg cursor-pointer transition-all border-t-2 border-transparent border-b-2 select-none"
-        >
-          <div class="w-10 h-10 rounded bg-white/30 dark:bg-white/10 flex items-center justify-center text-gray-500 dark:text-gray-400 mr-3 shrink-0 overflow-hidden relative">
-            <img v-if="sidebarImageCache.get(item.firstSongPath)" :src="sidebarImageCache.get(item.firstSongPath)" class="w-full h-full object-cover" />
-            <span v-else>💿</span>
-          </div>
-          <div class="flex-1 min-w-0"><div class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{{ item.name }}</div><div class="text-xs text-gray-500 dark:text-gray-400">{{ item.count }} 首</div></div>
-        </li>
-    </ul>
 
     <div v-show="isFolderMode" class="flex flex-col h-full bg-transparent">
         <div class="flex-1 overflow-y-auto custom-scrollbar px-2 pb-4 space-y-0.5 mt-1">

@@ -58,11 +58,6 @@
         <!-- Statistics View -->
         <StatisticsPage v-if="currentViewMode === 'statistics'" />
 
-        <!-- Show grid view for favorites (artists/albums tabs) -->
-        <FavoritesGrid 
-          v-else-if="shouldShowGrid" 
-          @enterDetail="enterFavDetail"
-        />
         
         <!-- Main song table -->
         <SongTable
@@ -139,7 +134,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { usePlayer, Song } from '../composables/player';
 import { useToast } from '../composables/toast';
 
@@ -150,7 +145,6 @@ import DetailHeader from '../components/headers/DetailHeader.vue';
 
 import MasterPanel from '../components/song-list/MasterPanel.vue';
 import SongTable from '../components/song-list/SongTable.vue';
-import FavoritesGrid from '../components/common/FavoritesGrid.vue';
 import DragGhost from '../components/common/DragGhost.vue';
 import AddToPlaylistModal from '../components/overlays/AddToPlaylistModal.vue';
 import MoveToFolderModal from '../components/overlays/MoveToFolderModal.vue';
@@ -161,21 +155,18 @@ import StatisticsPage from '../components/statistics/StatisticsPage.vue';
 import { useSongDrag } from '../composables/useSongDrag';
 
 const route = useRoute();
-const router = useRouter();
+
 
 const { 
   songList, 
   displaySongList, 
   currentViewMode, 
-  favTab, 
-  favDetailFilter, 
   playSong, 
   addSongsToPlaylist, 
   favoritePaths, 
   moveFilesToFolder,
   switchViewToAll,
   switchToRecent,
-  switchToFavorites,
   refreshAllFolders,
   deleteFromDisk,
   addSidebarFolder,
@@ -221,10 +212,7 @@ const songToPhysicalDelete = ref<any>(null);
 watch(isBatchMode, (val) => { if (!val) selectedPaths.value.clear(); });
 
 // ========== 计算属性 ==========
-const isFavorites = computed(() => route.path === '/favorites');
-const shouldShowGrid = computed(() => 
-  isFavorites.value && !favDetailFilter.value && favTab.value !== 'songs'
-);
+
 
 const playlistDetail = computed(() => {
   if (currentViewMode.value === 'playlist') {
@@ -401,27 +389,9 @@ const executeSongPhysicalDelete = async () => {
     songToPhysicalDelete.value = null;
   }
 };
-
-// 收藏详情页
-const enterFavDetail = (type: 'artist' | 'album', name: string) => { 
-  router.push({ query: { type, name } }); 
-};
-
 // ========== 路由监听 ==========
-watch(() => route.query, (query) => {
-  if (route.path === '/favorites') {
-    if (query.type && query.name) {
-      favDetailFilter.value = { type: query.type as 'artist' | 'album', name: query.name as string };
-    } else {
-      favDetailFilter.value = null;
-    }
-  }
-}, { immediate: true });
-
 watch(() => route.path, (path) => {
-  if (path === '/favorites') {
-    switchToFavorites();
-  } else if (path === '/recent') {
+  if (path === '/recent') {
     switchToRecent();
   } else if (path === '/') {
     if (currentViewMode.value !== 'folder' && currentViewMode.value !== 'playlist') {

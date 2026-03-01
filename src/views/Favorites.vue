@@ -1,19 +1,6 @@
 <template>
   <div class="flex flex-col h-full">
-    <DetailHeader
-      v-if="favDetailFilter"
-      v-model:isBatchMode="isBatchMode"
-      :title="favDetailFilter.name"
-      :subtitle="favDetailFilter.type === 'artist' ? '歌手详情' : '专辑详情'"
-      :songs="displaySongList"
-      :selectedCount="selectedPaths.size"
-      @playAll="handlePlayAll"
-      @batchPlay="handleBatchPlay"
-      @addToPlaylist="showAddToPlaylistModal = true"
-      @batchDelete="requestBatchDelete"
-    />
     <FavoritesHeader
-      v-else
       v-model:isBatchMode="isBatchMode"
       :selectedCount="selectedPaths.size"
       @playAll="handlePlayAll"
@@ -28,13 +15,7 @@
       <MasterPanel :isManagementMode="false" />
       
       <section class="flex-1 flex overflow-hidden">
-        <FavoritesGrid 
-          v-if="shouldShowGrid" 
-          @enterDetail="enterFavDetail"
-        />
-        
         <SongTable
-          v-else
           ref="songTableRef"
           :songs="displaySongList"
           :isBatchMode="isBatchMode"
@@ -80,17 +61,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { usePlayer, Song } from '../composables/player';
 import { useToast } from '../composables/toast';
 
 // 组件导入
 import FavoritesHeader from '../components/headers/FavoritesHeader.vue';
-import DetailHeader from '../components/headers/DetailHeader.vue';
 import MasterPanel from '../components/song-list/MasterPanel.vue';
 import SongTable from '../components/song-list/SongTable.vue';
-import FavoritesGrid from '../components/common/FavoritesGrid.vue';
 import DragGhost from '../components/common/DragGhost.vue';
 import AddToPlaylistModal from '../components/overlays/AddToPlaylistModal.vue';
 import SongContextMenu from '../components/overlays/SongContextMenu.vue';
@@ -98,12 +77,9 @@ import ModernModal from '../components/common/ModernModal.vue';
 import { useSongDrag } from '../composables/useSongDrag';
 
 const route = useRoute();
-const router = useRouter();
 
 const { 
   displaySongList, 
-  favTab,
-  favDetailFilter,
   playSong, 
   addSongsToPlaylist, 
   favoritePaths,
@@ -132,10 +108,7 @@ const contextMenuTargetSong = ref<Song | null>(null);
 // 监听批量模式变化，清空选择
 watch(isBatchMode, (val) => { if (!val) selectedPaths.value.clear(); });
 
-// ========== 计算属性 ==========
-const shouldShowGrid = computed(() => 
-  !favDetailFilter.value && favTab.value !== 'songs'
-);
+
 
 // ========== 业务逻辑处理 ==========
 
@@ -205,20 +178,9 @@ const handleContextMenu = (e: MouseEvent, song: Song) => {
   showContextMenu.value = true;
 };
 
-// 收藏详情页
-const enterFavDetail = (type: 'artist' | 'album', name: string) => { 
-  router.push({ query: { type, name } }); 
-};
+
 
 // ========== 路由监听 ==========
-watch(() => route.query, (query) => {
-  if (query.type && query.name) {
-    favDetailFilter.value = { type: query.type as 'artist' | 'album', name: query.name as string };
-  } else {
-    favDetailFilter.value = null;
-  }
-}, { immediate: true });
-
 watch(() => route.path, (path) => {
   if (path === '/favorites') {
     switchToFavorites();

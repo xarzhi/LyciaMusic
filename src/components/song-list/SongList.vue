@@ -107,7 +107,7 @@ const handleAddToPlaylist = (playlistId: string) => {
 let isMouseDown = false;
 let startX = 0;
 let startY = 0;
-const ROW_HEIGHT = 60; 
+const ROW_HEIGHT = 72; 
 
 // 自动滚动
 let autoScrollTimer: number | null = null;
@@ -204,13 +204,8 @@ const onGlobalMouseMove = (e: MouseEvent) => {
     
     const rect = container.getBoundingClientRect();
     if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
-      // 动态获取 header 高度以修正 offset
-      const header = container.querySelector('thead') as HTMLElement | null;
-      const headerHeight = header ? header.offsetHeight : 0;
-      
       const relativeY = e.clientY - rect.top + container.scrollTop;
-      // 修正 currentIndex 计算，减去 headerHeight
-      let currentIndex = Math.floor((relativeY - headerHeight) / ROW_HEIGHT);
+      let currentIndex = Math.floor(relativeY / ROW_HEIGHT);
       
       // 边界处理
       currentIndex = Math.max(0, Math.min(displaySongList.value.length - 1, currentIndex));

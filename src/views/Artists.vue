@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { usePlayer, dragSession } from '../composables/player';
 import { useRouter } from 'vue-router';
-import { ref, reactive, watch, onMounted, onUnmounted } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { useCoverCache } from '../composables/useCoverCache';
 
 const { artistList, viewArtist, artistSortMode, updateArtistOrder } = usePlayer();
 const router = useRouter();
@@ -22,27 +21,11 @@ const handleSortChange = (mode: 'count' | 'name' | 'custom') => {
 };
 
 // --- Cover Cache ---
-const coverCache = reactive(new Map<string, string>());
-const loadingSet = new Set<string>();
-
-const loadCovers = (artists: any[]) => {
-  artists.forEach(async (artist) => {
-    if (!artist.firstSongPath || coverCache.has(artist.name) || loadingSet.has(artist.name)) return;
-    loadingSet.add(artist.name);
-    try {
-      const filePath = await invoke<string>('get_song_cover_thumbnail', { path: artist.firstSongPath });
-      if (filePath) coverCache.set(artist.name, convertFileSrc(filePath));
-      else coverCache.set(artist.name, '');
-    } catch { 
-      coverCache.set(artist.name, ''); 
-    } finally { 
-      loadingSet.delete(artist.name); 
-    }
-  });
-};
+const { coverCache, loadingSet, preloadCovers } = useCoverCache();
 
 watch(() => artistList.value, (newList) => {
-  loadCovers(newList);
+  const paths = newList.map((a: any) => a.firstSongPath).filter(Boolean);
+  preloadCovers(paths);
 }, { immediate: true });
 
 // --- Dynamic Gradient Generator ---
@@ -199,10 +182,10 @@ onUnmounted(() => {
             <div class="w-full h-full rounded-full overflow-hidden shadow-sm group-hover:shadow transition-shadow duration-300 relative bg-gray-100 dark:bg-white/5 flex items-center justify-center">
                
                <!-- 骨架屏 (Loading State) -->
-               <div v-if="loadingSet.has(artist.name)" class="w-full h-full bg-gray-200 dark:bg-white/10 animate-pulse"></div>
+               <div v-if="loadingSet.has(artist.firstSongPath)" class="w-full h-full bg-gray-200 dark:bg-white/10 animate-pulse"></div>
 
                <!-- 真实封面图 -->
-               <img v-else-if="coverCache.get(artist.name)" :src="coverCache.get(artist.name)" class="w-full h-full object-cover select-none animate-in fade-in duration-300" draggable="false" :alt="artist.name"/>
+               <img v-else-if="coverCache.get(artist.firstSongPath)" :src="coverCache.get(artist.firstSongPath)" class="w-full h-full object-cover select-none animate-in fade-in duration-300" draggable="false" :alt="artist.name"/>
                
                <!-- 渐变首字母 (Fallback) -->
                <div v-else class="w-full h-full flex items-center justify-center text-lg md:text-xl font-bold text-white bg-gradient-to-br animate-in fade-in duration-300" :class="getGradientForArtist(artist.name)">

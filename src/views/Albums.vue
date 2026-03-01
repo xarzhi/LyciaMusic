@@ -1,41 +1,20 @@
 <script setup lang="ts">
 import { usePlayer, dragSession } from '../composables/player';
 import { useRouter } from 'vue-router';
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
 
 const { albumList, viewAlbum, albumSortMode, updateAlbumOrder } = usePlayer();
 const router = useRouter();
 
+import { useCoverCache } from '../composables/useCoverCache';
+
 // 封面图片加载状态管理
-import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+const { coverCache, loadingSet, preloadCovers } = useCoverCache();
 
-const coverCache = ref<Map<string, string>>(new Map());
-const loadingSet = ref<Set<string>>(new Set());
-
-// 提取专辑首支歌曲以获取封面
-const getAlbumCoverObj = (album: any) => {
-  if (album.firstSongPath && !coverCache.value.has(album.firstSongPath) && !loadingSet.value.has(album.firstSongPath)) {
-    loadAlbumCover(album.firstSongPath);
-  }
-  return album.firstSongPath;
-};
-
-// 后台异步加载封面
-const loadAlbumCover = async (path: string) => {
-  if (!path || coverCache.value.has(path) || loadingSet.value.has(path)) return;
-  
-  loadingSet.value.add(path);
-  try {
-    const coverPath = await invoke<string>('get_song_cover_thumbnail', { path });
-    if (coverPath) {
-      coverCache.value.set(path, convertFileSrc(coverPath));
-    }
-  } catch (error) {
-    console.error("Failed to load album cover for path", path, error);
-  } finally {
-    loadingSet.value.delete(path);
-  }
-};
+watch(() => albumList.value, (newList) => {
+  const paths = newList.map((a: any) => a.firstSongPath).filter(Boolean);
+  preloadCovers(paths);
+}, { immediate: true });
 
 const showSortMenu = ref(false);
 const dragOverName = ref<string | null>(null);
@@ -180,7 +159,7 @@ onUnmounted(() => {
              <!-- 专辑封套 Sleeve (带有阴影和白边) -->
              <div class="absolute inset-0 z-10 bg-white dark:bg-gray-800 rounded-md shadow-md border border-gray-100 dark:border-white/10 p-1 flex items-center justify-center overflow-hidden group-hover:shadow-xl transition-shadow duration-300">
                 <!-- Cover Image -->
-                <div v-if="getAlbumCoverObj(album) && coverCache.get(album.firstSongPath)" 
+                <div v-if="coverCache.get(album.firstSongPath)" 
                      class="w-full h-full bg-cover bg-center rounded-sm"
                      :style="{ backgroundImage: `url(${coverCache.get(album.firstSongPath)})` }">
                 </div>

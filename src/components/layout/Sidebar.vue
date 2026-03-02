@@ -343,7 +343,8 @@ watch([songList, playlists], () => {
 <template>
   <aside class="w-48 bg-transparent flex flex-col border-r border-transparent h-full select-none overflow-hidden relative transition-colors duration-600">
     <div class="h-16 flex items-center px-6 shrink-0 mb-2 cursor-default relative" data-tauri-drag-region>
-      <div class="flex items-center pointer-events-none">
+      <!-- 添加了 -translate-y-1 (向上偏移4px) 来整体上移图标和文字 -->
+      <div class="flex items-center pointer-events-none -translate-x-[4px] -translate-y-[4px]">
         <img src="/app_logo_black.png" alt="Logo" class="w-8 h-8 object-contain drop-shadow-sm opacity-80 dark:hidden" />
         <img src="/app_logo_white.png" alt="Logo" class="w-8 h-8 object-contain drop-shadow-sm opacity-80 hidden dark:block" />
         <h1 class="text-[17px] font-medium text-black/80 dark:text-white/80 tracking-wide -ml-1.5 mt-1.5 ">

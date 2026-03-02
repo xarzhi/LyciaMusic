@@ -98,7 +98,7 @@ const handleMouseDown = (e: MouseEvent, song: Song, index: number) => {
 
 
 
-const showDragIcon = computed(() => ['folder', 'playlist', 'all'].includes(currentViewMode.value));
+const showDragIcon = computed(() => ['folder', 'playlist', 'all', 'artist', 'album', 'genre', 'year'].includes(currentViewMode.value));
 
 onMounted(() => {
   window.addEventListener('resize', updateContainerHeight);

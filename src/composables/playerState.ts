@@ -76,7 +76,8 @@ export const folderSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'cu
 export const folderCustomOrder = ref<Record<string, string[]>>({}); // 每个文件夹的自定义排序
 
 // 🟢 本地音乐排序状态
-export const localSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'default'>('default');
+export const localSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'custom' | 'default'>('default');
+export const localCustomOrder = ref<string[]>([]);
 
 // 🟢 歌单排序状态
 export const playlistSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'custom'>('custom');

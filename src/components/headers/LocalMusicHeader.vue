@@ -159,13 +159,13 @@ const handleEnterBatchMode = () => {
               : { left: sortMenuX + 'px', top: sortMenuY + 'px' }"
           >
             <div 
-              v-for="mode in (['title', 'name', 'artist', 'added_at', 'default'] as const)" 
+              v-for="mode in (['title', 'name', 'artist', 'added_at', 'custom', 'default'] as const)" 
               :key="mode"
               @click="setLocalSortMode(mode); showSortMenu = false"
               class="px-3 py-2 text-xs cursor-pointer flex items-center justify-between hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
               :class="localSortMode === mode ? 'text-blue-500 font-medium' : 'text-gray-600 dark:text-gray-300'"
             >
-              <span>{{ { title: '歌曲名', name: '文件名', artist: '歌手', added_at: '添加时间', default: '默认' }[mode] }}</span>
+              <span>{{ { title: '歌曲名', name: '文件名', artist: '歌手', added_at: '添加时间', custom: '自定义', default: '默认' }[mode] }}</span>
               <svg v-if="localSortMode === mode" xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
               </svg>

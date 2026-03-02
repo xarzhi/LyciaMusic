@@ -12,6 +12,59 @@ export function useSongDrag(
         songList, currentViewMode, addSongsToPlaylist,
         currentFolderFilter, updateFolderOrder // 🟢 导入文件夹排序函数
     } = usePlayer();
+    const { filterCondition, playlists, setPlaylistSortMode } = usePlayer();
+    const { updateLocalOrder } = usePlayer();
+
+    const reorderPathOrder = (
+        pathOrder: string[],
+        movingPaths: string[],
+        targetPath?: string
+    ) => {
+        const movingSet = new Set(movingPaths);
+        const movingInOrder = pathOrder.filter(p => movingSet.has(p));
+        if (movingInOrder.length === 0) {
+            return { reordered: pathOrder, changed: false };
+        }
+
+        if (targetPath && movingSet.has(targetPath)) {
+            return { reordered: pathOrder, changed: false };
+        }
+
+        const remaining = pathOrder.filter(p => !movingSet.has(p));
+        let insertIndex = remaining.length;
+
+        if (targetPath) {
+            const targetIndexInRemaining = remaining.indexOf(targetPath);
+            if (targetIndexInRemaining !== -1) {
+                const firstMovingIndex = pathOrder.findIndex(p => movingSet.has(p));
+                const targetIndexInOriginal = pathOrder.indexOf(targetPath);
+                const movingFromAbove = firstMovingIndex !== -1 && firstMovingIndex < targetIndexInOriginal;
+                insertIndex = movingFromAbove ? targetIndexInRemaining + 1 : targetIndexInRemaining;
+            }
+        }
+
+        const reordered = [...remaining];
+        reordered.splice(insertIndex, 0, ...movingInOrder);
+        const changed = reordered.some((p, i) => p !== pathOrder[i]);
+        return { reordered, changed };
+    };
+
+    const reorderSongArrayByPaths = (
+        songs: Song[],
+        movingPaths: string[],
+        targetPath?: string
+    ) => {
+        const originalPaths = songs.map(s => s.path);
+        const { reordered, changed } = reorderPathOrder(originalPaths, movingPaths, targetPath);
+        if (!changed) {
+            return { reordered: songs, changed: false };
+        }
+        const songMap = new Map(songs.map(s => [s.path, s]));
+        return {
+            reordered: reordered.map(path => songMap.get(path)).filter((s): s is Song => !!s),
+            changed: true
+        };
+    };
 
 
     let isMouseDown = false;
@@ -87,7 +140,7 @@ export function useSongDrag(
         }
         // --- 分支 B: 普通模式 ---
         else {
-            if (['folder', 'playlist', 'all'].includes(currentViewMode.value)) {
+            if (['folder', 'playlist', 'all', 'artist', 'album', 'genre', 'year'].includes(currentViewMode.value)) {
                 dragSession.type = 'song';
                 dragSession.songs = [song];
                 dragSession.insertIndex = index;
@@ -256,61 +309,56 @@ export function useSongDrag(
             } else if (dragSession.insertIndex > -1) {
                 const movingSongs = dragSession.songs;
                 if (movingSongs.length > 0) {
+                    const movingPaths = movingSongs.map(s => s.path);
+                    const targetVisualSong = displaySongList.value[dragSession.insertIndex];
+                    const targetPath = targetVisualSong?.path;
+
                     // 处理歌单内排序
                     if (currentViewMode.value === 'playlist') {
-                        const plId = usePlayer().filterCondition.value;
-                        const pl = usePlayer().playlists.value.find(p => p.id === plId);
-                        if (pl) {
-                            const sourcePath = movingSongs[0].path;
-                            const sourceIndex = pl.songPaths.indexOf(sourcePath);
-                            const targetVisualSong = displaySongList.value[dragSession.insertIndex];
+                        const plId = filterCondition.value;
+                        const pl = playlists.value.find(p => p.id === plId);
 
-                            if (sourceIndex !== -1) {
-                                pl.songPaths.splice(sourceIndex, 1);
-                                if (targetVisualSong) {
-                                    let targetIndex = pl.songPaths.indexOf(targetVisualSong.path);
-                                    if (targetIndex >= sourceIndex) {
-                                        pl.songPaths.splice(targetIndex + 1, 0, sourcePath);
-                                    } else {
-                                        pl.songPaths.splice(targetIndex, 0, sourcePath);
-                                    }
-                                } else {
-                                    pl.songPaths.push(sourcePath);
-                                }
+                        if (pl) {
+                            // Keep drag behavior consistent with current visual order.
+                            const visualPaths = displaySongList.value.map(s => s.path);
+                            const { reordered, changed } = reorderPathOrder(visualPaths, movingPaths, targetPath);
+                            if (changed) {
+                                pl.songPaths = reordered;
+                                setPlaylistSortMode('custom');
                             }
                         }
                     }
                     // 处理全局排序
                     else {
-                        const sourcePath = movingSongs[0].path;
                         const fullList = [...songList.value];
-                        const sourceRealIndex = fullList.findIndex(s => s.path === sourcePath);
-                        const targetVisualSong = displaySongList.value[dragSession.insertIndex];
+                        const { reordered, changed } = reorderSongArrayByPaths(fullList, movingPaths, targetPath);
+                        if (changed) {
+                            songList.value = reordered;
+                        }
 
-                        if (sourceRealIndex !== -1 && targetVisualSong) {
-                            const [item] = fullList.splice(sourceRealIndex, 1);
-                            let newTargetIndex = fullList.findIndex(s => s.path === targetVisualSong.path);
-                            if (newTargetIndex >= sourceRealIndex) {
-                                fullList.splice(newTargetIndex + 1, 0, item);
-                            } else {
-                                fullList.splice(newTargetIndex, 0, item);
-                            }
-                            songList.value = fullList;
-
-                            // 🟢 文件夹视图:保存自定义排序顺序
-                            if (currentViewMode.value === 'folder' && currentFolderFilter.value) {
-                                const newOrder = displaySongList.value.map(s => s.path);
+                        // 🟢 文件夹视图:保存自定义排序顺序
+                        if (currentViewMode.value === 'folder' && currentFolderFilter.value) {
+                            const visualPaths = displaySongList.value.map(s => s.path);
+                            const { reordered: newOrder, changed: folderOrderChanged } = reorderPathOrder(
+                                visualPaths,
+                                movingPaths,
+                                targetPath
+                            );
+                            if (folderOrderChanged) {
                                 updateFolderOrder(currentFolderFilter.value, newOrder);
                             }
-                        } else if (sourceRealIndex !== -1) {
-                            const [item] = fullList.splice(sourceRealIndex, 1);
-                            fullList.push(item);
-                            songList.value = fullList;
+                        }
 
-                            // 🟢 文件夹视图:保存自定义排序顺序
-                            if (currentViewMode.value === 'folder' && currentFolderFilter.value) {
-                                const newOrder = displaySongList.value.map(s => s.path);
-                                updateFolderOrder(currentFolderFilter.value, newOrder);
+                        // 本地音乐视图: 保存自定义排序并自动切换到 custom 模式
+                        if (currentViewMode.value === 'all') {
+                            const visualPaths = displaySongList.value.map(s => s.path);
+                            const { reordered: newOrder, changed: localOrderChanged } = reorderPathOrder(
+                                visualPaths,
+                                movingPaths,
+                                targetPath
+                            );
+                            if (localOrderChanged) {
+                                updateLocalOrder(newOrder);
                             }
                         }
                     }

@@ -17,7 +17,6 @@ const {
   albumList,
   switchViewToAll,
   switchToFolderView,
-  switchToRecent,
   switchToStatistics,
   createPlaylist,
   deletePlaylist,
@@ -384,22 +383,22 @@ watch([songList, playlists], () => {
           </li>
         </router-link>
 
-        <router-link to="/recent" custom v-slot="{ navigate }" v-if="settings.sidebar.showRecent">
-          <li @click="() => { navigate(); switchToRecent(); }" :class="[baseNavClasses, (currentViewMode === 'recent' && $route.path === '/recent') ? activeNavClasses : inactiveNavClasses]">
+        <router-link to="/recent" custom v-slot="{ navigate, isActive }" v-if="settings.sidebar.showRecent">
+          <li @click="navigate" :class="[baseNavClasses, isActive ? activeNavClasses : inactiveNavClasses]">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <span>最近播放</span>
           </li>
         </router-link>
 
         <router-link to="/" custom v-slot="{ navigate }" v-if="settings.sidebar.showFolders">
-          <li @click="() => { navigate(); switchToFolderView(); }" :class="[baseNavClasses, (currentViewMode === 'folder') ? activeNavClasses : inactiveNavClasses]">
+          <li @click="() => { navigate(); switchToFolderView(); }" :class="[baseNavClasses, (currentViewMode === 'folder' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
             <span>文件夹</span>
           </li>
         </router-link>
 
         <router-link to="/" custom v-slot="{ navigate }" v-if="settings.sidebar.showStatistics">
-          <li @click="() => { navigate(); switchToStatistics(); }" :class="[baseNavClasses, (currentViewMode === 'statistics') ? activeNavClasses : inactiveNavClasses]">
+          <li @click="() => { navigate(); switchToStatistics(); }" :class="[baseNavClasses, (currentViewMode === 'statistics' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
             <span>统计</span>
           </li>

@@ -12,12 +12,11 @@
     />
     
     <div class="flex-1 flex overflow-hidden relative">
-      <MasterPanel :isManagementMode="false" />
       
       <section class="flex-1 flex overflow-hidden">
         <SongTable
           ref="songTableRef"
-          :songs="displaySongList"
+          :songs="localSongList"
           :isBatchMode="isBatchMode"
           :selectedPaths="selectedPaths"
           @play="playSong"
@@ -68,7 +67,6 @@ import { useToast } from '../composables/toast';
 
 // 组件导入
 import FavoritesHeader from '../components/headers/FavoritesHeader.vue';
-import MasterPanel from '../components/song-list/MasterPanel.vue';
 import SongTable from '../components/song-list/SongTable.vue';
 import DragGhost from '../components/common/DragGhost.vue';
 import AddToPlaylistModal from '../components/overlays/AddToPlaylistModal.vue';
@@ -84,8 +82,16 @@ const {
   addSongsToPlaylist, 
   favoritePaths,
   switchToFavorites,
-  clearFavorites
+  clearFavorites,
+  currentViewMode
 } = usePlayer();
+
+const localSongList = ref<Song[]>([]);
+watch(displaySongList, (newVal) => {
+  if (currentViewMode.value === 'favorites') {
+    localSongList.value = newVal;
+  }
+}, { immediate: true });
 
 // ========== 状态管理 ==========
 const isBatchMode = ref(false);
@@ -93,7 +99,7 @@ const selectedPaths = ref<Set<string>>(new Set());
 const songTableRef = ref<any>(null);
 
 // 初始化拖拽逻辑
-const { handleTableDragStart } = useSongDrag(displaySongList, isBatchMode, selectedPaths, songTableRef);
+const { handleTableDragStart } = useSongDrag(localSongList, isBatchMode, selectedPaths, songTableRef);
 
 // 弹窗状态
 const showAddToPlaylistModal = ref(false);
@@ -112,21 +118,20 @@ watch(isBatchMode, (val) => { if (!val) selectedPaths.value.clear(); });
 
 // ========== 业务逻辑处理 ==========
 
-// 播放全部
 const handlePlayAll = () => {
-  if (displaySongList.value.length > 0) {
-    playSong(displaySongList.value[0]);
+  if (localSongList.value.length > 0) {
+    playSong(localSongList.value[0]);
   }
 };
 
 const handleAddAllToQueue = () => {
   const { addSongsToQueue } = usePlayer();
-  addSongsToQueue(displaySongList.value);
+  addSongsToQueue(localSongList.value);
 };
 
 // 批量播放
 const handleBatchPlay = () => {
-  const selected = displaySongList.value.filter(s => selectedPaths.value.has(s.path));
+  const selected = localSongList.value.filter(s => selectedPaths.value.has(s.path));
   if (selected.length > 0) playSong(selected[0]);
 };
 

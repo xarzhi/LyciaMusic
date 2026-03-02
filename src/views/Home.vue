@@ -3,7 +3,7 @@
     <!-- 顶栏组件 -->
     <!-- 顶栏组件 -->
     <FoldersHeader
-      v-if="currentViewMode === 'folder'"
+      v-if="localViewMode === 'folder'"
       v-model:isBatchMode="isBatchMode"
       v-model:activeRootPath="activeRootPath"
       :selectedCount="selectedPaths.size"
@@ -20,11 +20,11 @@
       v-model:isManagementMode="isManagementMode"
     />
     <DetailHeader
-      v-else-if="currentViewMode === 'playlist'"
+      v-else-if="localViewMode === 'playlist'"
       v-model:isBatchMode="isBatchMode"
       :title="playlistDetail?.name || ''"
       :subtitle="playlistDetail?.date ? `${playlistDetail.date} 创建` : ''"
-      :songs="displaySongList"
+      :songs="localSongList"
       :selectedCount="selectedPaths.size"
       :showRename="true"
       @playAll="handlePlayAll"
@@ -37,7 +37,7 @@
 
 
     <LocalMusicHeader
-      v-else-if="!['statistics', 'artist', 'album'].includes(currentViewMode)"
+      v-else-if="!['statistics', 'artist', 'album'].includes(localViewMode)"
       v-model:isBatchMode="isBatchMode"
       :selectedCount="selectedPaths.size"
       @playAll="handlePlayAll"
@@ -51,18 +51,18 @@
     <!-- 主内容区 -->
     <div class="flex-1 flex overflow-hidden relative">
       <!-- 侧边栏 -->
-      <MasterPanel 
+      <MasterPanel v-if="localViewMode === 'folder'"
         :isManagementMode="isManagementMode"
       />
       
       <!-- 歌曲列表区域 (带有自滚动) -->
       <section class="flex-1 flex flex-col overflow-y-auto custom-scrollbar relative">
         <ArtistDetailHeader
-          v-if="currentViewMode === 'artist'"
+          v-if="localViewMode === 'artist'"
           v-model:isBatchMode="isBatchMode"
           v-model:activeTab="artistActiveTab"
-          :artistName="filterCondition || '未知歌手'"
-          :songs="displaySongList"
+          :artistName="localFilterCondition || '未知歌手'"
+          :songs="localSongList"
           :selectedCount="selectedPaths.size"
           @playAll="handlePlayAll"
           @batchPlay="handleBatchPlay"
@@ -72,10 +72,10 @@
         />
 
         <AlbumDetailHeader
-          v-else-if="currentViewMode === 'album'"
+          v-else-if="localViewMode === 'album'"
           v-model:isBatchMode="isBatchMode"
-          :albumName="filterCondition || '未知专辑'"
-          :songs="displaySongList"
+          :albumName="localFilterCondition || '未知专辑'"
+          :songs="localSongList"
           :selectedCount="selectedPaths.size"
           @playAll="handlePlayAll"
           @batchPlay="handleBatchPlay"
@@ -85,10 +85,10 @@
         />
 
         <!-- Statistics View -->
-        <StatisticsPage v-if="currentViewMode === 'statistics'" />
+        <StatisticsPage v-if="localViewMode === 'statistics'" />
 
         <!-- Artist Content Area -->
-        <div v-else-if="currentViewMode === 'artist' && artistActiveTab !== 'songs'" class="flex-1 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 min-h-[400px]">
+        <div v-else-if="localViewMode === 'artist' && artistActiveTab !== 'songs'" class="flex-1 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 min-h-[400px]">
           <svg v-if="artistActiveTab === 'albums'" xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
           </svg>
@@ -102,7 +102,7 @@
         <SongTable
           v-else
           ref="songTableRef"
-          :songs="displaySongList"
+          :songs="localSongList"
           :isBatchMode="isBatchMode"
           :selectedPaths="selectedPaths"
           class="min-h-[500px]"
@@ -136,7 +136,7 @@
       :x="contextMenuX" 
       :y="contextMenuY" 
       :song="contextMenuTargetSong" 
-      :is-playlist-view="currentViewMode === 'playlist'" 
+      :is-playlist-view="localViewMode === 'playlist'" 
       :isManagementMode="isManagementMode"
       @close="showContextMenu = false" 
       @add-to-playlist="showAddToPlaylistModal = true"
@@ -221,6 +221,16 @@ const {
   filterCondition
 } = usePlayer();
 
+const localViewMode = ref(currentViewMode.value);
+const localFilterCondition = ref(filterCondition.value);
+
+const localSongList = ref<Song[]>([]);
+watch(displaySongList, (newVal) => {
+  if (currentViewMode.value === localViewMode.value) {
+    localSongList.value = newVal;
+  }
+}, { immediate: true });
+
 // ========== 状态管理 ==========
 const isBatchMode = ref(false);
 const isManagementMode = ref(false); // 🟢 Local Management Mode State
@@ -230,7 +240,7 @@ const artistActiveTab = ref('songs');
 
 
 // 初始化拖拽逻辑
-const { handleTableDragStart } = useSongDrag(displaySongList, isBatchMode, selectedPaths, songTableRef);
+const { handleTableDragStart } = useSongDrag(localSongList, isBatchMode, selectedPaths, songTableRef);
 
 // 弹窗状态
 const showAddToPlaylistModal = ref(false);
@@ -258,8 +268,8 @@ watch(isBatchMode, (val) => { if (!val) selectedPaths.value.clear(); });
 
 
 const playlistDetail = computed(() => {
-  if (currentViewMode.value === 'playlist') {
-    const pl = playlists.value.find(p => p.id === filterCondition.value);
+  if (localViewMode.value === 'playlist') {
+    const pl = playlists.value.find(p => p.id === localFilterCondition.value);
     if (pl) return { 
       name: pl.name, 
       date: (pl as any).createdAt || '' 
@@ -272,14 +282,14 @@ const playlistDetail = computed(() => {
 
 // 播放全部
 const handlePlayAll = () => {
-  if (displaySongList.value.length > 0) {
-    playSong(displaySongList.value[0]);
+  if (localSongList.value.length > 0) {
+    playSong(localSongList.value[0]);
   }
 };
 
 // 批量播放
 const handleBatchPlay = () => {
-  const selected = displaySongList.value.filter(s => selectedPaths.value.has(s.path));
+  const selected = localSongList.value.filter(s => selectedPaths.value.has(s.path));
   if (selected.length > 0) playSong(selected[0]);
 };
 
@@ -437,7 +447,7 @@ watch(() => route.path, (path) => {
   if (path === '/recent') {
     switchToRecent();
   } else if (path === '/') {
-    if (!['folder', 'playlist', 'artist', 'album'].includes(currentViewMode.value)) {
+    if (!['folder', 'playlist', 'artist', 'album', 'statistics'].includes(currentViewMode.value)) {
        switchViewToAll();
     }
   }

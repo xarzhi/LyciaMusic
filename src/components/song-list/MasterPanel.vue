@@ -19,7 +19,6 @@ const props = withDefaults(defineProps<{
 const { 
   currentViewMode, localMusicTab, 
   artistList, albumList, folderList, currentFolderFilter,
-  isFolderMode,
   playSong, openInFinder, createPlaylist, 
   getSongsInFolder, moveFilesToFolder,
   refreshFolder, // 🟢 Ensure imported
@@ -450,7 +449,6 @@ const stopResize = () => {
 
 <template>
   <aside 
-    v-if="isFolderMode" 
     class="h-full border-r border-white/10 bg-transparent shrink-0 select-none relative group/sidebar"
     :style="{ width: sidebarWidth + 'px' }"
   >
@@ -465,7 +463,7 @@ const stopResize = () => {
     <div class="h-full overflow-y-auto custom-scrollbar">
     
 
-    <div v-show="isFolderMode" class="flex flex-col h-full bg-transparent">
+    <div class="flex flex-col h-full bg-transparent">
         <div class="flex-1 overflow-y-auto custom-scrollbar px-2 pb-4 space-y-0.5 mt-1">
              <div v-if="activeTreeNodes && activeTreeNodes.length > 0">
                  <FolderTreeItem 

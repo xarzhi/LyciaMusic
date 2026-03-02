@@ -12,7 +12,7 @@ const PlayerDetail = defineAsyncComponent(() => import('./components/player/Play
 const AddToPlaylistModal = defineAsyncComponent(() => import('./components/overlays/AddToPlaylistModal.vue')); 
 const Toast = defineAsyncComponent(() => import('./components/common/Toast.vue'));
 
-const { init, showAddToPlaylistModal, playlistAddTargetSongs, addSongsToPlaylist, settings, playQueue } = usePlayer();
+const { init, showAddToPlaylistModal, playlistAddTargetSongs, addSongsToPlaylist, settings, playQueue, currentViewMode, filterCondition } = usePlayer();
 init();
 
 const isFooterVisible = computed(() => playQueue.value.length > 0);
@@ -90,9 +90,9 @@ const mainBlurStyle = computed(() => {
         <div class="flex-1 flex flex-col min-w-0">
           <TitleBar />
           <main class="flex-1 overflow-hidden relative min-h-0">
-            <router-view v-slot="{ Component }">
+            <router-view v-slot="{ Component, route }">
               <transition name="page-fade" mode="out-in">
-                <component :is="Component" />
+                <component :is="Component" :key="route.path === '/' ? `/${currentViewMode}/${filterCondition}` : route.path" />
               </transition>
             </router-view>
           </main>

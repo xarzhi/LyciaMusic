@@ -135,3 +135,8 @@ pub fn move_file_to_folder(source_path: String, target_folder: String) -> Result
 
     fs::rename(source, target).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn is_directory(path: String) -> bool {
+    Path::new(&path).is_dir()
+}

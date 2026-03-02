@@ -22,7 +22,7 @@ const emit = defineEmits<{
   (e: 'drag-start', payload: { event: MouseEvent; song: Song; index: number }): void; 
 }>();
 
-const { isFavorite, toggleFavorite, formatDuration, currentViewMode } = usePlayer();
+const { isFavorite, toggleFavorite, formatDuration, currentViewMode, addLibraryFolder } = usePlayer();
 
 // --- 虚拟滚动逻辑 ---
 const ROW_HEIGHT = 72;
@@ -260,8 +260,25 @@ const getRowStyle = (songIndex: number, songPath: string) => {
       <div :style="{ height: virtualData.paddingBottom + 'px' }"></div>
     </div>
     
-    <div v-if="songs.length === 0" class="py-20 text-center select-none text-gray-500 dark:text-white/60">
-      {{ currentViewMode === 'folder' ? '该文件夹内暂无歌曲' : (currentViewMode === 'playlist' ? '歌单暂无歌曲' : '列表为空') }}
+    <div v-if="songs.length === 0" class="py-20 flex flex-col justify-center items-center select-none text-gray-500 dark:text-white/60">
+      <template v-if="currentViewMode === 'all' || currentViewMode === 'folder'">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mb-4 text-gray-300 dark:text-white/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18V5l12-2v13"></path>
+          <circle cx="6" cy="18" r="3"></circle>
+          <circle cx="18" cy="16" r="3"></circle>
+        </svg>
+        <p class="mb-6 text-[15px]">{{ currentViewMode === 'folder' ? '该文件夹内暂无歌曲' : '音乐库空空如也，快去添加你的本地音乐吧~' }}</p>
+        <button v-if="currentViewMode === 'all'" @click="addLibraryFolder" class="flex items-center gap-2 px-6 py-2.5 bg-[#EC4141] text-white hover:bg-[#d73a3a] rounded-full text-[14px] font-medium transition-colors shadow-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          添加本地音乐
+        </button>
+      </template>
+      <template v-else-if="currentViewMode === 'playlist'">
+        <p>歌单暂无歌曲</p>
+      </template>
+      <template v-else>
+        <p>列表为空</p>
+      </template>
     </div>
   </div>
 </template>

@@ -21,6 +21,7 @@ use music::{
     get_song_cover,
     get_song_cover_thumbnail,
     get_song_lyrics,
+    is_directory,        // Added this line
     move_file_to_folder, // Added this line
     move_music_file,
     remove_library_folder,
@@ -137,6 +138,7 @@ pub fn run() {
             get_output_devices,
             set_output_device,
             get_library_folders,
+            is_directory,
             add_library_folder,
             remove_library_folder,
             scan_library,

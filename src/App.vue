@@ -1,23 +1,40 @@
 <script setup lang="ts">
+import { watch, computed, defineAsyncComponent } from 'vue';
+import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
+import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
+import { invoke } from '@tauri-apps/api/core';
 import { usePlayer } from './composables/player';
 import Sidebar from './components/layout/Sidebar.vue';
-import TitleBar from './components/layout/TitleBar.vue'; 
+import TitleBar from './components/layout/TitleBar.vue';
 import PlayerFooter from './components/layout/PlayerFooter.vue';
 import GlobalBackground from './components/layout/GlobalBackground.vue';
-import { watch, computed, defineAsyncComponent } from 'vue';
 
-// 使用异步组件按需加载非首屏组件
 const PlayQueueSidebar = defineAsyncComponent(() => import('./components/player/PlayQueueSidebar.vue'));
-const PlayerDetail = defineAsyncComponent(() => import('./components/player/PlayerDetail.vue')); 
-const AddToPlaylistModal = defineAsyncComponent(() => import('./components/overlays/AddToPlaylistModal.vue')); 
+const PlayerDetail = defineAsyncComponent(() => import('./components/player/PlayerDetail.vue'));
+const AddToPlaylistModal = defineAsyncComponent(() => import('./components/overlays/AddToPlaylistModal.vue'));
 const Toast = defineAsyncComponent(() => import('./components/common/Toast.vue'));
+const MiniPlayer = defineAsyncComponent(() => import('./components/layout/MiniPlayer.vue'));
 
-const { init, showAddToPlaylistModal, playlistAddTargetSongs, addSongsToPlaylist, settings, playQueue } = usePlayer();
+const {
+  init,
+  showAddToPlaylistModal,
+  playlistAddTargetSongs,
+  addSongsToPlaylist,
+  settings,
+  playQueue,
+  currentViewMode,
+  filterCondition,
+  isMiniMode,
+  showMiniPlaylist,
+  showPlaylist,
+  closeMiniPlaylist,
+  showVolumePopover
+} = usePlayer();
+
 init();
 
 const isFooterVisible = computed(() => playQueue.value.length > 0);
 
-// --- 主题切换逻辑 ---
 const applyTheme = () => {
   const theme = settings.value.theme;
   const isDarkSystem = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -28,28 +45,22 @@ const applyTheme = () => {
       document.documentElement.classList.add('dark');
     } else if (style === 'dark') {
       document.documentElement.classList.remove('dark');
+    } else if (isDarkSystem) {
+      document.documentElement.classList.add('dark');
     } else {
-      // Auto
-      if (isDarkSystem) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+      document.documentElement.classList.remove('dark');
     }
   } else if (theme.mode === 'dark') {
     document.documentElement.classList.add('dark');
   } else {
-    // light or others
     document.documentElement.classList.remove('dark');
   }
 };
 
-// 监听设置变化
 watch(settings, () => {
   applyTheme();
 }, { deep: true });
 
-// 初始化应用
 applyTheme();
 
 const handleGlobalAdd = (playlistId: string) => {
@@ -57,40 +68,184 @@ const handleGlobalAdd = (playlistId: string) => {
   showAddToPlaylistModal.value = false;
 };
 
-// --- 动态模糊逻辑 ---
 const mainBlurStyle = computed(() => {
   const { dynamicBgType, mode, customBackground } = settings.value.theme;
-  
+
   if (dynamicBgType === 'flow' || dynamicBgType === 'blur') {
     return 'blur(40px)';
   }
-  
+
   if (mode === 'custom') {
     const b = customBackground.blur;
     return b <= 0 ? 'none' : `blur(${b}px)`;
   }
-  
+
   return 'none';
 });
+
+const MINI_WIDTH = 300;
+const MINI_BASE_HEIGHT = 75;
+const MINI_EXPANDED_HEIGHT = 420;
+
+const appWindow = getCurrentWindow();
+let normalSize = { width: 960, height: 600 };
+let normalPosition: { x: number; y: number } | null = null;
+let miniPosition: { x: number; y: number } | null = null;
+let wasMaximized = false;
+let isResizing = false;
+
+const getWindowLogicalPosition = async () => {
+  const factor = await appWindow.scaleFactor();
+  const physicalPosition = await appWindow.outerPosition();
+  const logicalPosition = physicalPosition.toLogical(factor);
+  return { x: logicalPosition.x, y: logicalPosition.y };
+};
+
+const setWindowLogicalPosition = async (position: { x: number; y: number }) => {
+  await appWindow.setPosition(new LogicalPosition(position.x, position.y));
+};
+
+const getCurrentMonitorLogicalBounds = async () => {
+  const monitor = await currentMonitor();
+  if (!monitor) return null;
+
+  const scaleFactor = monitor.scaleFactor || await appWindow.scaleFactor();
+  const monitorPosition = monitor.position.toLogical(scaleFactor);
+  const monitorSize = monitor.size.toLogical(scaleFactor);
+
+  return {
+    left: monitorPosition.x,
+    top: monitorPosition.y,
+    right: monitorPosition.x + monitorSize.width,
+    bottom: monitorPosition.y + monitorSize.height,
+    width: monitorSize.width,
+    height: monitorSize.height
+  };
+};
+
+const applyMiniWindowHeight = async (height: number) => {
+  const monitorBounds = await getCurrentMonitorLogicalBounds();
+  const width = monitorBounds ? Math.min(MINI_WIDTH, monitorBounds.width) : MINI_WIDTH;
+  const clampedHeight = monitorBounds ? Math.min(height, monitorBounds.height) : height;
+
+  await appWindow.setMinSize(new LogicalSize(width, clampedHeight));
+  await appWindow.setMaxSize(new LogicalSize(width, clampedHeight));
+  await appWindow.setSize(new LogicalSize(width, clampedHeight));
+};
+
+watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQueueVisible, volumeVisible], [prevMiniMode]) => {
+  if (isResizing) return;
+  if (!miniMode && !prevMiniMode) return;
+
+  isResizing = true;
+  try {
+    if (miniMode) {
+      if (!prevMiniMode) {
+        await appWindow.hide(); // 隐藏窗口，避免过度帧闪现
+
+        wasMaximized = await appWindow.isMaximized();
+        if (wasMaximized) await appWindow.unmaximize();
+
+        const factor = await appWindow.scaleFactor();
+        const size = await appWindow.innerSize();
+        if (size.width / factor > 600) {
+          normalSize = { width: size.width / factor, height: size.height / factor };
+        }
+        normalPosition = await getWindowLogicalPosition();
+
+        showPlaylist.value = false;
+        await appWindow.setResizable(false);
+        await appWindow.setAlwaysOnTop(true);
+        if (appWindow.setShadow) await appWindow.setShadow(false);
+
+        document.body.classList.add('mini-mode-active');
+        document.documentElement.classList.add('mini-mode-active');
+        const appEl = document.getElementById('app');
+        if (appEl) appEl.classList.add('mini-mode-active');
+
+        await invoke('set_mini_boundary_enabled', { enabled: true });
+      }
+
+      let height = MINI_BASE_HEIGHT;
+      if (miniQueueVisible) {
+        height = MINI_EXPANDED_HEIGHT;
+      } else if (volumeVisible) {
+        height = MINI_BASE_HEIGHT + 60; // 容纳音量弹窗的高度
+      }
+      
+      await applyMiniWindowHeight(height);
+      if (!prevMiniMode && miniPosition) {
+        await setWindowLogicalPosition(miniPosition);
+      }
+
+      if (!prevMiniMode) {
+        await appWindow.show();
+      }
+    } else {
+      await appWindow.hide(); // 隐藏窗口，避免过度帧闪现
+      
+      miniPosition = await getWindowLogicalPosition();
+      closeMiniPlaylist();
+      await invoke('set_mini_boundary_enabled', { enabled: false });
+      await appWindow.setResizable(true);
+      await appWindow.setMaxSize(null);
+      await appWindow.setMinSize(new LogicalSize(960, 600));
+      await appWindow.setSize(new LogicalSize(normalSize.width, normalSize.height));
+      if (normalPosition) {
+        await setWindowLogicalPosition(normalPosition);
+      }
+      await appWindow.setAlwaysOnTop(false);
+      if (appWindow.setShadow) await appWindow.setShadow(true);
+
+      document.body.classList.remove('mini-mode-active');
+      document.documentElement.classList.remove('mini-mode-active');
+      const appEl = document.getElementById('app');
+      if (appEl) appEl.classList.remove('mini-mode-active');
+
+      if (wasMaximized) await appWindow.maximize();
+      
+      await appWindow.show();
+    }
+  } catch (error: any) {
+    console.error('Mini Mode Resize Error:', error);
+  } finally {
+    isResizing = false;
+  }
+});
+
+
 </script>
 
 <template>
-  <div class="flex flex-col h-screen w-full text-gray-800 dark:text-gray-200 relative overflow-hidden font-sans">
-    
-    <GlobalBackground />
+  <div
+    class="flex flex-col h-screen w-full text-gray-800 dark:text-gray-200 relative overflow-hidden font-sans"
+    :class="{ 'bg-transparent': isMiniMode }"
+    :style="{ backgroundColor: isMiniMode ? 'transparent' : '' }"
+  >
+    <transition name="window-restore">
+      <GlobalBackground v-if="!isMiniMode" />
+    </transition>
 
-    <div 
-      class="flex-1 flex flex-col overflow-hidden relative z-10 transition-colors duration-500"
-      :class="[settings.theme.mode === 'custom' ? 'bg-transparent' : 'bg-white/30 dark:bg-black/60']"
-      :style="{ backdropFilter: mainBlurStyle }"
-    >
+    <MiniPlayer v-if="isMiniMode" />
+
+    <transition name="window-restore">
+      <div
+        v-if="!isMiniMode"
+        class="flex-1 flex flex-col overflow-hidden relative z-10 transition-colors duration-500"
+        :class="[settings.theme.mode === 'custom' ? 'bg-transparent' : 'bg-white/30 dark:bg-black/60']"
+        :style="{ backdropFilter: mainBlurStyle }"
+      >
       <div class="flex flex-1 overflow-hidden">
         <Sidebar />
-        
+
         <div class="flex-1 flex flex-col min-w-0">
           <TitleBar />
-          <main class="flex-1 overflow-hidden relative">
-            <router-view /> 
+          <main class="flex-1 overflow-hidden relative min-h-0">
+            <router-view v-slot="{ Component, route }">
+              <transition name="page-fade" mode="out-in">
+                <component :is="Component" :key="route.path === '/' ? `/${currentViewMode}/${filterCondition}` : route.path" />
+              </transition>
+            </router-view>
           </main>
         </div>
       </div>
@@ -99,68 +254,82 @@ const mainBlurStyle = computed(() => {
         <PlayerFooter v-if="isFooterVisible" />
       </transition>
     </div>
+    </transition>
 
-    <PlayerDetail />
+    <PlayerDetail v-if="!isMiniMode" />
 
-    <PlayQueueSidebar />
+    <PlayQueueSidebar v-if="!isMiniMode" />
 
-    <AddToPlaylistModal 
-      :visible="showAddToPlaylistModal" 
-      :selectedCount="playlistAddTargetSongs.length" 
-      @close="showAddToPlaylistModal = false" 
+    <AddToPlaylistModal
+      v-if="!isMiniMode"
+      :visible="showAddToPlaylistModal"
+      :selectedCount="playlistAddTargetSongs.length"
+      @close="showAddToPlaylistModal = false"
       @add="handleGlobalAdd"
     />
 
-        <Toast />
+    <Toast />
+  </div>
+</template>
 
-        
+<style>
+body.mini-mode-active,
+html.mini-mode-active,
+#app.mini-mode-active {
+  background-color: transparent !important;
+  background: transparent !important;
+}
 
-      </div>
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
 
-    </template>
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
 
-    
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
 
-    <style>
+.footer-slide-enter-active,
+.footer-slide-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
 
-    .footer-slide-enter-active,
+.footer-slide-enter-from,
+.footer-slide-leave-to {
+  transform: translateY(100%);
+  max-height: 0 !important;
+  opacity: 0;
+}
 
-    .footer-slide-leave-active {
+.footer-slide-enter-to,
+.footer-slide-leave-from {
+  transform: translateY(0);
+  max-height: 80px !important;
+  opacity: 1;
+}
 
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+/* 窗口还原过渡动画 */
+.window-restore-enter-active {
+  transition: opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
 
-      overflow: hidden;
+.window-restore-leave-active {
+  transition: none;
+}
 
-    }
+.window-restore-enter-from {
+  opacity: 0;
+  transform: scale(0.95);
+}
 
-    
-
-    .footer-slide-enter-from,
-
-    .footer-slide-leave-to {
-
-      transform: translateY(100%);
-
-      max-height: 0 !important;
-
-      opacity: 0;
-
-    }
-
-    
-
-    .footer-slide-enter-to,
-
-    .footer-slide-leave-from {
-
-      transform: translateY(0);
-
-      max-height: 80px !important;
-
-      opacity: 1;
-
-    }
-
-    </style>
-
-    
+.window-restore-leave-to {
+  opacity: 0;
+}
+</style>

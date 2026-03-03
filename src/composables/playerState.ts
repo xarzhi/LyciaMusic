@@ -23,9 +23,12 @@ export const volume = ref(100);
 export const currentTime = ref(0);
 export const playMode = ref(0);
 export const showPlaylist = ref(false);
+export const showMiniPlaylist = ref(false);
 export const isSongLoaded = ref(false);
 export const showPlayerDetail = ref(false);
 export const showQueue = ref(false);
+export const isMiniMode = ref(false);
+export const showVolumePopover = ref(false);
 export const AUDIO_DELAY = ref(0.45);
 
 // --- 自定义拖拽状态 ---
@@ -76,7 +79,8 @@ export const folderSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'cu
 export const folderCustomOrder = ref<Record<string, string[]>>({}); // 每个文件夹的自定义排序
 
 // 🟢 本地音乐排序状态
-export const localSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'default'>('default');
+export const localSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'custom' | 'default'>('default');
+export const localCustomOrder = ref<string[]>([]);
 
 // 🟢 歌单排序状态
 export const playlistSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'custom'>('custom');
@@ -105,6 +109,8 @@ export const settings = ref<AppSettings>({
   },
   sidebar: {
     showLocalMusic: true,
+    showArtists: true,
+    showAlbums: true,
     showFavorites: true,
     showRecent: true,
     showFolders: true,

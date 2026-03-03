@@ -164,7 +164,7 @@ const updateTooltipPosition = () => {
   >
     <span 
       v-if="variant === 'simple'"
-      class="text-[6px] font-medium border px-0.5 rounded-[3px] cursor-help select-none flex items-center justify-center h-[10px] leading-none transition-colors"
+      class="text-[7px] font-bold border px-0.5 rounded-[3px] cursor-help select-none flex items-center justify-center h-[12px] leading-none transition-colors"
       :class="badgeColorClass"
     >
       {{ badgeType }}
@@ -173,7 +173,7 @@ const updateTooltipPosition = () => {
     <!-- Detailed Style for Player Detail View -->
     <div 
       v-else
-      class="flex items-center gap-1 bg-white/10 px-1.5 py-0.5 rounded-[3px] text-[9px] font-bold text-white/50 tracking-tight select-none"
+      class="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded-[4px] text-[10px] font-bold text-white/60 tracking-tight select-none"
     >
       {{ detailedLabel }}
     </div>

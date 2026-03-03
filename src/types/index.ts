@@ -50,6 +50,8 @@ export interface ThemeSettings {
 
 export interface SidebarSettings {
   showLocalMusic: boolean;
+  showArtists: boolean;
+  showAlbums: boolean;
   showFavorites: boolean;
   showRecent: boolean;
   showFolders: boolean;

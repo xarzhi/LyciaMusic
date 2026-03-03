@@ -1,10 +1,20 @@
 <script setup lang="ts">
 import { usePlayer, dragSession } from '../composables/player';
 import { useRouter } from 'vue-router';
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
 
 const { albumList, viewAlbum, albumSortMode, updateAlbumOrder } = usePlayer();
 const router = useRouter();
+
+import { useCoverCache } from '../composables/useCoverCache';
+
+// 封面图片加载状态管理
+const { coverCache, loadingSet, preloadCovers } = useCoverCache();
+
+watch(() => albumList.value, (newList) => {
+  const paths = newList.map((a: any) => a.firstSongPath).filter(Boolean);
+  preloadCovers(paths);
+}, { immediate: true });
 
 const showSortMenu = ref(false);
 const dragOverName = ref<string | null>(null);
@@ -83,20 +93,23 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col overflow-hidden bg-transparent" @click="showSortMenu = false">
-    <header class="h-20 flex items-end justify-between px-8 pb-4 border-b border-gray-100 dark:border-white/5 shrink-0 z-10 relative">
-      <div class="flex items-end">
-        <h1 class="text-3xl font-bold text-gray-800 dark:text-white">💿 专辑列表</h1>
-        <span class="text-sm text-gray-400 dark:text-gray-500 ml-3 mb-1">共 {{ albumList.length }} 张</span>
-      </div>
-
-      <!-- Sort Menu -->
-      <div class="relative z-50">
-        <button @click.stop="showSortMenu = !showSortMenu" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors" title="排序">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
-          </svg>
-        </button>
+  <div class="flex-1 flex flex-col overflow-hidden bg-transparent h-full min-h-0" @click="showSortMenu = false">
+    <!-- Header: 像素级对齐 LocalMusicHeader -->
+    <header class="h-auto px-6 pt-2 pb-3 shrink-0 select-none flex flex-col justify-center z-10 relative">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2 pb-1">
+          <h2 class="text-xl font-bold text-gray-900 dark:text-white">专辑列表</h2>
+        </div>
+        
+        <!-- Sort Menu -->
+        <div class="relative z-50 flex items-center gap-2">
+          <button @click.stop="showSortMenu = !showSortMenu" 
+            class="bg-white/1 hover:bg-white/10 border border-white/1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 w-7 h-7 flex items-center justify-center rounded-full transition active:scale-95 shadow-sm hover:border-gray-200 dark:hover:border-white/20" 
+            title="排序方式">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+            </svg>
+          </button>
         
         <div v-if="showSortMenu" class="absolute right-0 top-full mt-2 w-48 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-xl shadow-xl border border-gray-100 dark:border-white/10 overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-right">
           <div class="py-1">
@@ -111,41 +124,65 @@ onUnmounted(() => {
             <button class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/10 flex items-center justify-between cursor-default" :class="albumSortMode === 'custom' ? 'text-[#EC4141] font-medium' : 'text-gray-700 dark:text-gray-200'">
               <span>自定义排序 (拖拽触发)</span>
               <svg v-if="albumSortMode === 'custom'" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-            </button>
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </header>
 
-    <section class="flex-1 overflow-y-auto p-8 custom-scrollbar relative z-0">
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+    <section class="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 custom-scrollbar relative z-0">
+      <!-- 增加响应式 breakpoint 控制每行显示个数，由 2 列扩增至 7 列 -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-x-6 gap-y-10">
         <div 
           v-for="(album, index) in albumList" 
           :key="album.name"
           @mousedown="handleMouseDown($event, index, album)"
           @mousemove="handleItemMouseMove($event, album.name)"
           @click="handleAlbumClick(album.name)"
-          class="group cursor-pointer bg-black/5 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 border border-transparent hover:border-gray-200 dark:hover:border-white/20 hover:shadow-xl rounded-lg p-4 transition-all duration-300 flex flex-col relative select-none"
+          class="group cursor-pointer rounded-xl p-2 md:p-3 transition-all duration-300 flex flex-col relative select-none hover:bg-white/40 dark:hover:bg-white/5"
           :class="[
             (dragSession.active && dragSession.type === 'album' && dragSession.data?.name === album.name) ? 'opacity-50' : '',
             {'ring-2 ring-[#EC4141] bg-red-50 dark:bg-red-900/20': dragSession.active && dragSession.type === 'album' && dragOverName === album.name && dragSession.data?.name !== album.name}
           ]"
         >
-          <!-- 专辑封面占位符 (方形) -->
-          <div class="aspect-square w-full mb-4 rounded-md bg-gradient-to-br from-gray-200 to-gray-300 dark:from-white/10 dark:to-white/20 flex items-center justify-center text-3xl shadow-sm group-hover:shadow-md transition-shadow relative overflow-hidden">
-             <div class="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors"></div>
-             💿
+          <!-- 专辑盒子 (Wrapper) 含有 CD 和封面 -->
+          <div class="relative w-full aspect-square mb-3 mt-4">
+             <!-- 黑胶光盘 (Vinyl Background) : Hover时向上层抽出 -->
+             <div class="absolute inset-x-2 top-0 bottom-1/2 bg-[#1c1c1c] rounded-t-full shadow-inner origin-bottom translate-y-[-10%] group-hover:translate-y-[-24%] transition-transform duration-500 ease-out z-0 flex items-center justify-center overflow-hidden border border-[#333]">
+                <!-- 模拟光盘纹理 -->
+                <div class="absolute inset-0 rounded-t-full border border-white/5 scale-90"></div>
+                <div class="absolute inset-0 rounded-t-full border border-white/5 scale-75"></div>
+                <div class="absolute inset-0 rounded-t-full border border-white/5 scale-50"></div>
+             </div>
+
+             <!-- 专辑封套 Sleeve (带有阴影和白边) -->
+             <div class="absolute inset-0 z-10 bg-white dark:bg-gray-800 rounded-md shadow-md border border-gray-100 dark:border-white/10 p-1 flex items-center justify-center overflow-hidden group-hover:shadow-xl transition-shadow duration-300">
+                <!-- Cover Image -->
+                <div v-if="coverCache.get(album.firstSongPath)" 
+                     class="w-full h-full bg-cover bg-center rounded-sm"
+                     :style="{ backgroundImage: `url(${coverCache.get(album.firstSongPath)})` }">
+                </div>
+                
+                <!-- Loading Skeleton / Placeholder -->
+                <div v-else class="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-white/5 dark:to-white/10 rounded-sm flex items-center justify-center text-4xl font-bold text-gray-300 dark:text-gray-600 shadow-inner"
+                     :class="{'animate-pulse': loadingSet.has(album.firstSongPath)}">
+                  {{ album.name ? album.name.substring(0, 1).toUpperCase() : 'A' }}
+                </div>
+             </div>
           </div>
           
-          <h3 class="font-bold text-gray-800 dark:text-gray-200 truncate w-full group-hover:text-[#EC4141] transition-colors">
-            {{ album.name }}
-          </h3>
-          <p class="text-xs text-gray-500 dark:text-gray-400 truncate w-full mt-1">
-            {{ album.artist }}
-          </p>
-          <span class="text-[10px] text-gray-400 dark:text-gray-500 mt-2">
-            {{ album.count }} 首歌曲
-          </span>
+          <!-- 专辑信息 -->
+          <div class="flex flex-col items-start px-1 z-20">
+            <h3 class="font-bold text-sm md:text-base text-gray-800 dark:text-gray-200 truncate w-full group-hover:text-[#EC4141] transition-colors leading-tight">
+              {{ album.name }}
+            </h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400 truncate w-full mt-1.5 flex items-center gap-1.5 opacity-80">
+              <span class="font-medium">{{ album.count }}首</span>
+              <span class="w-0.5 h-0.5 rounded-full bg-gray-400"></span>
+              <span>{{ album.artist }}</span>
+            </p>
+          </div>
         </div>
       </div>
     </section>

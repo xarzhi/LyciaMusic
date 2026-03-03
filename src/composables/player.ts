@@ -713,6 +713,13 @@ export function usePlayer() {
         base.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
       } else if (State.localSortMode.value === 'added_at') {
         base.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
+      } else if (State.localSortMode.value === 'custom') {
+        const orderMap = new Map(State.localCustomOrder.value.map((path, i) => [path, i]));
+        base.sort((a, b) => {
+          const ia = orderMap.has(a.path) ? orderMap.get(a.path)! : 999999;
+          const ib = orderMap.has(b.path) ? orderMap.get(b.path)! : 999999;
+          return ia - ib;
+        });
       }
 
       return base;
@@ -1173,6 +1180,8 @@ export function usePlayer() {
   async function toggleMute() { if (State.volume.value > 0) { State.volume.value = 0; await invoke('set_volume', { volume: 0.0 }); } else { State.volume.value = 100; await invoke('set_volume', { volume: 1.0 }); } }
   function toggleMode() { State.playMode.value = (State.playMode.value + 1) % 3; }
   function togglePlaylist() { State.showPlaylist.value = !State.showPlaylist.value; }
+  function toggleMiniPlaylist() { State.showMiniPlaylist.value = !State.showMiniPlaylist.value; }
+  function closeMiniPlaylist() { State.showMiniPlaylist.value = false; }
   async function handleScan() { addFolder(); }
   function playNext(song: State.Song) { State.tempQueue.value.unshift(song); }
   function removeSongFromList(song: State.Song) { if (State.currentViewMode.value === 'all') { State.songList.value = State.songList.value.filter(s => s.path !== song.path); } else if (State.currentViewMode.value === 'favorites') { State.favoritePaths.value = State.favoritePaths.value.filter(p => p !== song.path); } else if (State.currentViewMode.value === 'recent') { State.recentSongs.value = State.recentSongs.value.filter(i => i.song.path !== song.path); } }
@@ -1462,6 +1471,11 @@ export function usePlayer() {
     watch(State.albumSortMode, (v) => localStorage.setItem('player_album_sort_mode', v));
     watch(State.artistCustomOrder, (v) => localStorage.setItem('player_artist_custom_order', JSON.stringify(v)), { deep: true });
     watch(State.albumCustomOrder, (v) => localStorage.setItem('player_album_custom_order', JSON.stringify(v)), { deep: true });
+    watch(State.folderSortMode, (v) => localStorage.setItem('player_folder_sort_mode', v));
+    watch(State.localSortMode, (v) => localStorage.setItem('player_local_sort_mode', v));
+    watch(State.playlistSortMode, (v) => localStorage.setItem('player_playlist_sort_mode', v));
+    watch(State.folderCustomOrder, (v) => localStorage.setItem('player_folder_custom_order', JSON.stringify(v)), { deep: true });
+    watch(State.localCustomOrder, (v) => localStorage.setItem('player_local_custom_order', JSON.stringify(v)), { deep: true });
 
     watch(State.currentSong, (newSong) => {
       if (newSong) {
@@ -1502,6 +1516,36 @@ export function usePlayer() {
         const sAlbumSort = localStorage.getItem('player_album_sort_mode'); if (sAlbumSort) State.albumSortMode.value = sAlbumSort as any;
         const sArtistOrder = localStorage.getItem('player_artist_custom_order'); if (sArtistOrder) try { State.artistCustomOrder.value = JSON.parse(sArtistOrder); } catch (e) { }
         const sAlbumOrder = localStorage.getItem('player_album_custom_order'); if (sAlbumOrder) try { State.albumCustomOrder.value = JSON.parse(sAlbumOrder); } catch (e) { }
+        const sFolderSort = localStorage.getItem('player_folder_sort_mode');
+        if (sFolderSort && ['title', 'name', 'artist', 'added_at', 'custom'].includes(sFolderSort)) {
+          State.folderSortMode.value = sFolderSort as any;
+        }
+        const sLocalSort = localStorage.getItem('player_local_sort_mode');
+        if (sLocalSort && ['title', 'name', 'artist', 'added_at', 'custom', 'default'].includes(sLocalSort)) {
+          State.localSortMode.value = sLocalSort as any;
+        }
+        const sPlaylistSort = localStorage.getItem('player_playlist_sort_mode');
+        if (sPlaylistSort && ['title', 'name', 'artist', 'added_at', 'custom'].includes(sPlaylistSort)) {
+          State.playlistSortMode.value = sPlaylistSort as any;
+        }
+        const sFolderOrder = localStorage.getItem('player_folder_custom_order');
+        if (sFolderOrder) {
+          try {
+            const parsedOrder = JSON.parse(sFolderOrder);
+            if (parsedOrder && typeof parsedOrder === 'object' && !Array.isArray(parsedOrder)) {
+              State.folderCustomOrder.value = parsedOrder;
+            }
+          } catch (e) { }
+        }
+        const sLocalOrder = localStorage.getItem('player_local_custom_order');
+        if (sLocalOrder) {
+          try {
+            const parsedOrder = JSON.parse(sLocalOrder);
+            if (Array.isArray(parsedOrder)) {
+              State.localCustomOrder.value = parsedOrder;
+            }
+          } catch (e) { }
+        }
 
         const sSettings = localStorage.getItem('player_settings');
         if (sSettings) {
@@ -1625,7 +1669,7 @@ export function usePlayer() {
     // Existing
     playSong,
     pauseSong,
-    togglePlay, nextSong, prevSong, handleSeek, handleVolume, toggleMute, handleScan, toggleMode, togglePlaylist,
+    togglePlay, nextSong, prevSong, handleSeek, handleVolume, toggleMute, handleScan, toggleMode, togglePlaylist, toggleMiniPlaylist, closeMiniPlaylist,
     addFolder, addLibraryFolderPath, switchViewToAll, switchViewToFolder, switchToFolderView, switchToRecent, switchToFavorites, switchToStatistics, switchLocalTab, switchFavTab,
     removeFolder, addToHistory, clearHistory, clearLocalMusic, clearFavorites, addSongsToPlaylist, isFavorite, toggleFavorite,
     viewArtist, viewAlbum, viewGenre, viewYear, setSearch, createPlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist, viewPlaylist,
@@ -1638,6 +1682,9 @@ export function usePlayer() {
     // 🟢 导出新函数
     clearQueue, removeSongFromQueue, addSongToQueue, toggleQueue,
     addSongsToQueue, getSongsFromPlaylist,
+    // Mini 模式
+    isMiniMode: State.isMiniMode,
+    showVolumePopover: State.showVolumePopover,
     reorderWatchedFolders: (from: number, to: number) => {
       const list = [...State.watchedFolders.value];
       const [removed] = list.splice(from, 1);
@@ -1657,17 +1704,20 @@ export function usePlayer() {
     updateAlbumOrder: (newOrder: string[]) => {
       State.albumCustomOrder.value = newOrder;
       if (State.albumSortMode.value !== 'custom') State.albumSortMode.value = 'custom';
-      if (State.albumSortMode.value !== 'custom') State.albumSortMode.value = 'custom';
     }, // 🟢 comma added
     // 🟢 文件夹排序相关
     updateFolderOrder: (folderPath: string, newOrder: string[]) => {
       State.folderCustomOrder.value[folderPath] = newOrder;
       if (State.folderSortMode.value !== 'custom') State.folderSortMode.value = 'custom';
     },
+    updateLocalOrder: (newOrder: string[]) => {
+      State.localCustomOrder.value = newOrder;
+      if (State.localSortMode.value !== 'custom') State.localSortMode.value = 'custom';
+    },
     setFolderSortMode: (mode: 'title' | 'name' | 'artist' | 'added_at' | 'custom') => {
       State.folderSortMode.value = mode;
     },
-    setLocalSortMode: (mode: 'title' | 'name' | 'artist' | 'added_at' | 'default') => {
+    setLocalSortMode: (mode: 'title' | 'name' | 'artist' | 'added_at' | 'custom' | 'default') => {
       State.localSortMode.value = mode;
     },
     setPlaylistSortMode: (mode: 'title' | 'name' | 'artist' | 'added_at' | 'custom') => {

@@ -4,6 +4,7 @@ mod music;
 mod player;
 mod statistics;
 mod toolbox;
+mod window_boundary;
 
 use database::DbState;
 use music::{
@@ -21,6 +22,7 @@ use music::{
     get_song_cover,
     get_song_cover_thumbnail,
     get_song_lyrics,
+    is_directory,        // Added this line
     move_file_to_folder, // Added this line
     move_music_file,
     remove_library_folder,
@@ -47,6 +49,7 @@ use tauri::{
 };
 use tokio::sync::Semaphore;
 use toolbox::{apply_rename, open_external_program, preview_rename, refresh_folder_songs};
+use window_boundary::set_mini_boundary_enabled;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -75,6 +78,19 @@ pub fn run() {
 
             // 4. 🟢 启动时执行一次缓存清理 (后台运行，不卡启动)
             run_cache_cleanup(app.handle());
+
+            // 6. 安装 mini 窗口边界约束 subclass（Windows）
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    use raw_window_handle::HasWindowHandle;
+                    if let Ok(handle) = window.as_ref().window().window_handle() {
+                        if let raw_window_handle::RawWindowHandle::Win32(win32) = handle.as_raw() {
+                            window_boundary::install_boundary_subclass(win32.hwnd.get() as isize);
+                        }
+                    }
+                }
+            }
 
             // 5. System Tray Setup
             let handle = app.handle();
@@ -137,6 +153,7 @@ pub fn run() {
             get_output_devices,
             set_output_device,
             get_library_folders,
+            is_directory,
             add_library_folder,
             remove_library_folder,
             scan_library,
@@ -157,7 +174,8 @@ pub fn run() {
             get_format_distribution,
             // Toolbox Commands
             open_external_program,
-            refresh_folder_songs
+            refresh_folder_songs,
+            set_mini_boundary_enabled
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

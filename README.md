@@ -4,12 +4,12 @@
 
 </div>
 
-# LyciaMusic
+# LyciaPlayer
 
-LyciaMusic 是一个基于 **Tauri v2 + Vue 3 + TypeScript + Rust** 的桌面本地音乐播放器，当前版本为 **v1.2.0**。项目重点是本地曲库管理、播放体验、统计分析和桌面集成能力。
+LyciaPlayer 是一个基于 **Tauri v2 + Vue 3 + TypeScript + Rust** 的桌面本地音乐播放器，当前版本为 **v1.2.3**。项目重点是本地曲库管理、播放体验、统计分析和桌面集成能力。
 
 <div align="center">
-<img src="app.png" width="25%" alt="LyciaMusic 预览">
+<img src="app.png" width="25%" alt="LyciaPlayer 预览">
 </div>
 
 ## 项目现状
@@ -145,4 +145,4 @@ npm run dev
 项目配置为 MIT 许可。
 
 ---
-更新日期：2026-02-06
+更新日期：2026-03-03

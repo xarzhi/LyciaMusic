@@ -8,13 +8,15 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import ModernModal from '../common/ModernModal.vue';
 import ModernInputModal from '../common/ModernInputModal.vue';
 import PlaylistContextMenu from '../overlays/PlaylistContextMenu.vue';
+import { useCoverCache } from '../../composables/useCoverCache';
 
 const {
   playlists,
   songList,
+  artistList,
+  albumList,
   switchViewToAll,
   switchToFolderView,
-  switchToRecent,
   switchToStatistics,
   createPlaylist,
   deletePlaylist,
@@ -34,6 +36,22 @@ const router = useRouter();
 const isPlaylistOpen = ref(true);
 const dragOverId = ref<string | null>(null);
 const dragPosition = ref<'top' | 'bottom' | null>(null);
+
+const { preloadCovers } = useCoverCache();
+
+const handleHoverArtists = () => {
+  if (artistList.value && artistList.value.length > 0) {
+    const paths = artistList.value.slice(0, 30).map(a => a.firstSongPath).filter(Boolean);
+    preloadCovers(paths);
+  }
+};
+
+const handleHoverAlbums = () => {
+  if (albumList.value && albumList.value.length > 0) {
+    const paths = albumList.value.slice(0, 30).map(a => a.firstSongPath).filter(Boolean);
+    preloadCovers(paths);
+  }
+};
 
 // --- Custom Drag & Drop for Playlists ---
 let mouseDownInfo: { x: number, y: number, index: number, playlist: any } | null = null;
@@ -325,9 +343,12 @@ watch([songList, playlists], () => {
 <template>
   <aside class="w-48 bg-transparent flex flex-col border-r border-transparent h-full select-none overflow-hidden relative transition-colors duration-600">
     <div class="h-16 flex items-center px-6 shrink-0 mb-2 cursor-default relative" data-tauri-drag-region>
-      <div class="flex items-center gap-2 pointer-events-none">
-        <h1 class="text-2xl font-bold bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent tracking-tight italic">
-          LyciaMusic
+      <!-- 添加了 -translate-y-1 (向上偏移4px) 来整体上移图标和文字 -->
+      <div class="flex items-center pointer-events-none -translate-x-[4px] -translate-y-[4px]">
+        <img src="/app_logo_black.png" alt="Logo" class="w-8 h-8 object-contain drop-shadow-sm opacity-80 dark:hidden" />
+        <img src="/app_logo_white.png" alt="Logo" class="w-8 h-8 object-contain drop-shadow-sm opacity-80 hidden dark:block" />
+        <h1 class="text-[17px] font-medium text-black/80 dark:text-white/80 tracking-wide -ml-1.5 mt-1.5 ">
+          ycia Player
         </h1>
       </div>
     </div>
@@ -341,6 +362,20 @@ watch([songList, playlists], () => {
             <span>本地音乐</span>
           </li>
         </router-link>
+
+        <router-link to="/artists" custom v-slot="{ navigate, isActive }" v-if="settings.sidebar.showArtists">
+          <li @click="navigate" @mouseenter="handleHoverArtists" :class="[baseNavClasses, isActive ? activeNavClasses : inactiveNavClasses]">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+            <span>歌手</span>
+          </li>
+        </router-link>
+
+        <router-link to="/albums" custom v-slot="{ navigate, isActive }" v-if="settings.sidebar.showAlbums">
+          <li @click="navigate" @mouseenter="handleHoverAlbums" :class="[baseNavClasses, isActive ? activeNavClasses : inactiveNavClasses]">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="10" stroke-width="2" /><circle cx="12" cy="12" r="3" stroke-width="2" /></svg>
+            <span>专辑</span>
+          </li>
+        </router-link>
         
         <router-link to="/favorites" custom v-slot="{ navigate, isActive }" v-if="settings.sidebar.showFavorites">
           <li @click="navigate" :class="[baseNavClasses, isActive ? activeNavClasses : inactiveNavClasses]">
@@ -349,22 +384,22 @@ watch([songList, playlists], () => {
           </li>
         </router-link>
 
-        <router-link to="/recent" custom v-slot="{ navigate }" v-if="settings.sidebar.showRecent">
-          <li @click="() => { navigate(); switchToRecent(); }" :class="[baseNavClasses, (currentViewMode === 'recent' && $route.path === '/recent') ? activeNavClasses : inactiveNavClasses]">
+        <router-link to="/recent" custom v-slot="{ navigate, isActive }" v-if="settings.sidebar.showRecent">
+          <li @click="navigate" :class="[baseNavClasses, isActive ? activeNavClasses : inactiveNavClasses]">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <span>最近播放</span>
           </li>
         </router-link>
 
         <router-link to="/" custom v-slot="{ navigate }" v-if="settings.sidebar.showFolders">
-          <li @click="() => { navigate(); switchToFolderView(); }" :class="[baseNavClasses, (currentViewMode === 'folder') ? activeNavClasses : inactiveNavClasses]">
+          <li @click="() => { navigate(); switchToFolderView(); }" :class="[baseNavClasses, (currentViewMode === 'folder' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
             <span>文件夹</span>
           </li>
         </router-link>
 
         <router-link to="/" custom v-slot="{ navigate }" v-if="settings.sidebar.showStatistics">
-          <li @click="() => { navigate(); switchToStatistics(); }" :class="[baseNavClasses, (currentViewMode === 'statistics') ? activeNavClasses : inactiveNavClasses]">
+          <li @click="() => { navigate(); switchToStatistics(); }" :class="[baseNavClasses, (currentViewMode === 'statistics' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
             <span>统计</span>
           </li>

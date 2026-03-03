@@ -39,6 +39,9 @@ regex = "1"
 cpal = "0.15"
 tauri-plugin-single-instance = "2"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_UI_Shell"] }
+
 # ... 现有的内容 ...
 
 # 👇 新增：让依赖库在开发模式下也全速运行

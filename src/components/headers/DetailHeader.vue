@@ -58,7 +58,24 @@ const emit = defineEmits([
 const headerCover = ref('');
 
 const updateHeaderCover = async () => {
-  if (props.songs.length > 0) {
+  if (usePlayer().currentViewMode.value === 'playlist') {
+      const pl = usePlayer().playlists.value.find(p => p.id === usePlayer().filterCondition.value);
+      if (pl && pl.songPaths.length > 0) {
+        const firstSongPath = pl.songPaths[0];
+        try {
+          const filePath = await invoke<string>('get_song_cover', { path: firstSongPath });
+          if (filePath && filePath.length > 0) {
+            headerCover.value = convertFileSrc(filePath);
+          } else {
+            headerCover.value = '';
+          }
+        } catch (e) {
+          headerCover.value = '';
+        }
+      } else {
+        headerCover.value = '';
+      }
+  } else if (props.songs.length > 0) {
     const firstSongPath = props.songs[0].path;
     try {
       const filePath = await invoke<string>('get_song_cover', { path: firstSongPath });

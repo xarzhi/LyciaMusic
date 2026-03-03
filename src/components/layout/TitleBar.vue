@@ -6,7 +6,7 @@ import { useSettings } from '../../composables/settings';
 import { ref } from 'vue';
 
 const router = useRouter();
-const { searchQuery, setSearch } = usePlayer();
+const { searchQuery, setSearch, isMiniMode } = usePlayer();
 const appWindow = getCurrentWindow();
 const { settings } = useSettings();
 const rotation = ref(0); // For settings icon animation
@@ -97,6 +97,9 @@ const goBack = () => { router.back(); };
       </router-link>
       <div class="h-4 w-px bg-gray-400/30 mx-2"></div>
       <div class="flex items-center gap-1">
+        <button @click.stop="isMiniMode = true" class="p-2 text-gray-600 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-black/5 dark:hover:bg-white/5 rounded-md transition-colors cursor-pointer" title="Mini 模式">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" stroke-width="2" /><rect x="12" y="12" width="6" height="4" rx="1" stroke-width="2" /></svg>
+        </button>
         <button @click.stop="minimize" class="p-2 text-gray-600 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-black/5 dark:hover:bg-white/5 rounded-md transition-colors cursor-pointer"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 12H6" /></svg></button>
         <button @click.stop="toggleMaximize" class="p-2 text-gray-600 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-black/5 dark:hover:bg-white/5 rounded-md transition-colors cursor-pointer"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" stroke-width="2" /></svg></button>
         <button @click.stop="closeWindow" class="p-2 text-gray-600 dark:text-gray-200 hover:text-white hover:bg-[#EC4141] rounded-md transition-colors cursor-pointer"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>

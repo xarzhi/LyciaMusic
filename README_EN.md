@@ -1,8 +1,8 @@
-# LyciaMusic 🎵
+# Lycia Player 🎵
 
 A modern, high-performance desktop local music player built with **Tauri v2.0**, **Vue 3**, and **TypeScript**. Designed for beauty, speed, and a native desktop experience.
 
-![LyciaMusic Preview](app.png)
+![Lycia Player Preview](app.png)
 
 ## ✨ Key Features
 

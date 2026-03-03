@@ -23,9 +23,12 @@ export const volume = ref(100);
 export const currentTime = ref(0);
 export const playMode = ref(0);
 export const showPlaylist = ref(false);
+export const showMiniPlaylist = ref(false);
 export const isSongLoaded = ref(false);
 export const showPlayerDetail = ref(false);
 export const showQueue = ref(false);
+export const isMiniMode = ref(false);
+export const showVolumePopover = ref(false);
 export const AUDIO_DELAY = ref(0.45);
 
 // --- 自定义拖拽状态 ---

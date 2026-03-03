@@ -1180,6 +1180,8 @@ export function usePlayer() {
   async function toggleMute() { if (State.volume.value > 0) { State.volume.value = 0; await invoke('set_volume', { volume: 0.0 }); } else { State.volume.value = 100; await invoke('set_volume', { volume: 1.0 }); } }
   function toggleMode() { State.playMode.value = (State.playMode.value + 1) % 3; }
   function togglePlaylist() { State.showPlaylist.value = !State.showPlaylist.value; }
+  function toggleMiniPlaylist() { State.showMiniPlaylist.value = !State.showMiniPlaylist.value; }
+  function closeMiniPlaylist() { State.showMiniPlaylist.value = false; }
   async function handleScan() { addFolder(); }
   function playNext(song: State.Song) { State.tempQueue.value.unshift(song); }
   function removeSongFromList(song: State.Song) { if (State.currentViewMode.value === 'all') { State.songList.value = State.songList.value.filter(s => s.path !== song.path); } else if (State.currentViewMode.value === 'favorites') { State.favoritePaths.value = State.favoritePaths.value.filter(p => p !== song.path); } else if (State.currentViewMode.value === 'recent') { State.recentSongs.value = State.recentSongs.value.filter(i => i.song.path !== song.path); } }
@@ -1667,7 +1669,7 @@ export function usePlayer() {
     // Existing
     playSong,
     pauseSong,
-    togglePlay, nextSong, prevSong, handleSeek, handleVolume, toggleMute, handleScan, toggleMode, togglePlaylist,
+    togglePlay, nextSong, prevSong, handleSeek, handleVolume, toggleMute, handleScan, toggleMode, togglePlaylist, toggleMiniPlaylist, closeMiniPlaylist,
     addFolder, addLibraryFolderPath, switchViewToAll, switchViewToFolder, switchToFolderView, switchToRecent, switchToFavorites, switchToStatistics, switchLocalTab, switchFavTab,
     removeFolder, addToHistory, clearHistory, clearLocalMusic, clearFavorites, addSongsToPlaylist, isFavorite, toggleFavorite,
     viewArtist, viewAlbum, viewGenre, viewYear, setSearch, createPlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist, viewPlaylist,
@@ -1680,6 +1682,9 @@ export function usePlayer() {
     // 🟢 导出新函数
     clearQueue, removeSongFromQueue, addSongToQueue, toggleQueue,
     addSongsToQueue, getSongsFromPlaylist,
+    // Mini 模式
+    isMiniMode: State.isMiniMode,
+    showVolumePopover: State.showVolumePopover,
     reorderWatchedFolders: (from: number, to: number) => {
       const list = [...State.watchedFolders.value];
       const [removed] = list.splice(from, 1);

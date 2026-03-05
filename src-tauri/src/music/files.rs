@@ -8,6 +8,46 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+fn contains_lrc_timestamp(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut i = 0usize;
+
+    while i < bytes.len() {
+        if bytes[i] == b'[' {
+            let mut j = i + 1;
+            let mut min_digits = 0usize;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                min_digits += 1;
+                j += 1;
+            }
+
+            if min_digits > 0 && j < bytes.len() && bytes[j] == b':' {
+                j += 1;
+                if j + 1 < bytes.len() && bytes[j].is_ascii_digit() && bytes[j + 1].is_ascii_digit() {
+                    j += 2;
+
+                    if j < bytes.len() && bytes[j] == b'.' {
+                        j += 1;
+                        let mut frac_digits = 0usize;
+                        while j < bytes.len() && bytes[j].is_ascii_digit() {
+                            frac_digits += 1;
+                            j += 1;
+                        }
+                        if frac_digits > 0 && j < bytes.len() && bytes[j] == b']' {
+                            return true;
+                        }
+                    } else if j < bytes.len() && bytes[j] == b']' {
+                        return true;
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+
+    false
+}
+
 #[tauri::command]
 pub async fn get_song_lyrics(path: String) -> Result<String, String> {
     if let Ok(tagged_file) = Probe::open(&path).map_err(|e| e.to_string())?.read() {
@@ -18,7 +58,7 @@ pub async fn get_song_lyrics(path: String) -> Result<String, String> {
             for item in tag.items() {
                 if item.key() == &ItemKey::Comment {
                     if let Some(text) = item.value().text() {
-                        if text.contains("[00:") {
+                        if contains_lrc_timestamp(text) {
                             return Ok(text.to_string());
                         }
                     }

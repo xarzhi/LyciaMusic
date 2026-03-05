@@ -100,13 +100,13 @@ const metaInfo = computed(() => {
       <PlayerDetailLeft :isExpanded="showPlayerDetail" />
 
       <!-- 主内容区域 (歌词/信息居右，左侧留空给绝对定位的封面) -->
-      <div class="relative z-50 flex-1 flex min-h-0 px-8 pb-20">
+      <div class="relative z-50 flex-1 flex min-h-0 pl-8 pr-0 pb-20">
         <!-- 左侧留白占位 -->
         <div class="w-1/2 min-w-[300px] h-full pointer-events-none"></div>
 
         <!-- 右侧歌词 / 元信息 -->
         <div 
-          class="flex-1 h-full flex flex-col justify-center max-w-[600px] pr-8 pl-4 py-8"
+          class="flex-1 h-full flex flex-col justify-center pr-0 pl-2 py-8"
           :style="staggerStyle(2, 'X', 20)"
         >
           <transition name="fade-scale" mode="out-in">

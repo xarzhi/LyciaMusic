@@ -1194,10 +1194,15 @@ export function usePlayer() {
     if (syncIntervalId !== null) { clearInterval(syncIntervalId); syncIntervalId = null; }
   }
 
+  function reanchorPlaybackClock(time: number) {
+    playbackAnchorTime = performance.now();
+    playbackStartOffset = time;
+    State.currentTime.value = time;
+  }
+
   function startTimer() {
     stopTimer();
-    playbackAnchorTime = performance.now();
-    playbackStartOffset = State.currentTime.value;
+    reanchorPlaybackClock(State.currentTime.value);
     const update = () => {
       if (!State.currentSong.value || !State.isPlaying.value) return;
       const now = performance.now();
@@ -1214,9 +1219,7 @@ export function usePlayer() {
         const realTime = await invoke<number>('get_playback_progress');
         const uiTime = State.currentTime.value;
         if (Math.abs(realTime - uiTime) > 0.05) {
-          State.currentTime.value = realTime;
-          playbackAnchorTime = performance.now();
-          playbackStartOffset = realTime;
+          reanchorPlaybackClock(realTime);
         }
       } catch (e) { }
     }, 1000);
@@ -1415,14 +1418,14 @@ export function usePlayer() {
     isSeeking = true;
     stopTimer();
     let targetTime = Math.max(0, Math.min(newTime, State.currentSong.value.duration));
-    State.currentTime.value = targetTime;
+    reanchorPlaybackClock(targetTime);
 
     seekTimeout = setTimeout(async () => {
       const originalVolume = State.volume.value / 100.0;
       // 快速静音（避免 seek 时的爆音）
       await invoke('set_volume', { volume: 0.0 });
       await invoke('seek_audio', { time: Math.floor(targetTime), isPlaying: State.isPlaying.value });
-      playbackStartOffset = targetTime;
+      reanchorPlaybackClock(targetTime);
       // 🎵 简单的淡入效果（3 步，共 60ms）
       for (let i = 1; i <= 3; i++) {
         await new Promise(r => setTimeout(r, 20));
@@ -1451,8 +1454,7 @@ export function usePlayer() {
     // 🟢 监听 seek_completed 事件，恢复同步
     listen<number>('seek_completed', (e) => {
       isSeeking = false;
-      playbackAnchorTime = performance.now();
-      playbackStartOffset = e.payload;
+      reanchorPlaybackClock(e.payload);
     });
 
     watch(State.volume, (v) => localStorage.setItem('player_volume', v.toString()));

@@ -103,29 +103,65 @@ let volumeTimer: any = null;
 const handleVolumeEnter = () => {
   if (volumeTimer) clearTimeout(volumeTimer);
   showVolumeSlider.value = true;
+  handleFooterMouseEnter(); // Also stop idle timer
 };
 
 const handleVolumeLeave = () => {
   volumeTimer = setTimeout(() => {
     if (!isDraggingVolume.value) {
       showVolumeSlider.value = false;
+      // If we left the volume slider, check if we should start footer idle timer
+      startIdleTimer();
     }
   }, 300);
+};
+
+// --- Idle State for Auto-Hide ---
+const isIdle = ref(false);
+let idleTimer: any = null;
+
+const startIdleTimer = () => {
+  if (idleTimer) clearTimeout(idleTimer);
+  // Do not hide if context menu, dragging, or volume slider is active
+  if (showContextMenu.value || isDraggingProgress.value || isDraggingVolume.value || showVolumeSlider.value) return;
+  
+  idleTimer = setTimeout(() => {
+    isIdle.value = true;
+  }, 2000);
+};
+
+const handleFooterMouseEnter = () => {
+  isIdle.value = false;
+  if (idleTimer) clearTimeout(idleTimer);
+};
+
+const handleFooterMouseMove = () => {
+  if (isIdle.value) isIdle.value = false;
+  if (idleTimer) clearTimeout(idleTimer);
+};
+
+const handleFooterMouseLeave = () => {
+  startIdleTimer();
 };
 
 onMounted(() => { 
   window.addEventListener('mousemove', onGlobalMouseMove); 
   window.addEventListener('mouseup', onGlobalMouseUp); 
+  startIdleTimer(); // Start initial idle timer
 });
 onUnmounted(() => { 
   window.removeEventListener('mousemove', onGlobalMouseMove); 
   window.removeEventListener('mouseup', onGlobalMouseUp); 
+  if (idleTimer) clearTimeout(idleTimer);
 });
 </script>
 
 <template>
   <footer 
     class="h-20 flex items-center justify-between px-4 z-[60] relative select-none bg-transparent"
+    @mouseenter="handleFooterMouseEnter"
+    @mousemove="handleFooterMouseMove"
+    @mouseleave="handleFooterMouseLeave"
   >
     
     <div 
@@ -202,7 +238,10 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="flex items-center justify-center flex-1 gap-6">
+    <div 
+      class="flex items-center justify-center flex-1 gap-6 transition-opacity duration-700"
+      :class="{ 'opacity-0 pointer-events-none': isIdle }"
+    >
       <button @click="toggleMode" class="transition-colors" 
         :class="[playMode === 2 ? 'text-[#EC4141]' : (showPlayerDetail ? 'text-white/60 hover:text-white' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white')]"
         :title="['列表循环', '单曲循环', '随机播放'][playMode]">
@@ -243,7 +282,10 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <div class="flex items-center justify-end w-1/3 min-w-[150px] space-x-5 pr-2"> 
+    <div 
+      class="flex items-center justify-end w-1/3 min-w-[150px] space-x-5 pr-2 transition-opacity duration-700"
+      :class="{ 'opacity-0 pointer-events-none': isIdle }"
+    > 
       <div 
         class="relative flex items-center justify-center h-full z-[70]"
         @mouseenter="handleVolumeEnter"

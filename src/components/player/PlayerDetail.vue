@@ -30,7 +30,7 @@ const staggerStyle = (phase: number, translateDir: 'Y' | 'X' = 'Y', distance = 2
   return {
     opacity: visible ? 1 : 0,
     transform: visible ? 'translate(0, 0)' : translate,
-    transition: `opacity 400ms cubic-bezier(0.34,1.56,0.64,1) ${showPlayerDetail.value ? phase * 100 : 0}ms, transform 400ms cubic-bezier(0.34,1.56,0.64,1) ${showPlayerDetail.value ? phase * 100 : 0}ms`,
+    transition: `opacity 400ms cubic-bezier(0.22,1,0.36,1) ${showPlayerDetail.value ? phase * 100 : 0}ms, transform 400ms cubic-bezier(0.22,1,0.36,1) ${showPlayerDetail.value ? phase * 100 : 0}ms`,
   };
 };
 
@@ -55,13 +55,19 @@ const metaInfo = computed(() => {
 
 <template>
   <div 
-    class="fixed inset-x-0 bottom-0 z-[50] overflow-visible flex flex-col font-sans select-none text-white transition-all duration-700 cubic-bezier(0.34,1.56,0.64,1)"
-    :class="showPlayerDetail ? 'h-[100vh]' : 'h-20 pointer-events-none'"
+    class="fixed inset-x-0 bottom-0 h-[100vh] z-[50] overflow-visible flex flex-col font-sans select-none text-white"
+    :class="showPlayerDetail ? 'pointer-events-auto' : 'pointer-events-none'"
   >
     <div class="relative w-full h-[100vh] flex flex-col pt-[calc(100vh-100%)]">
       
       <!-- 沉浸式背景层 -->
-      <div class="absolute inset-0 transition-opacity duration-700" :style="{ opacity: showPlayerDetail ? 1 : 0 }">
+      <div 
+        class="absolute inset-0 transition-all duration-600 ease-[cubic-bezier(0.22,1,0.36,1)]" 
+        :style="{ 
+          opacity: showPlayerDetail ? 1 : 0,
+          transform: showPlayerDetail ? 'translateY(0)' : 'translateY(100%)'
+        }"
+      >
         <PlayerDetailBackground :bgOpacity="1" />
         <div class="absolute inset-0 bg-[#0a0a0a] z-[-1]"></div>
       </div>

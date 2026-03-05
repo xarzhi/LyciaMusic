@@ -16,6 +16,7 @@ let progressFrameId: number | null = null;
 // 校准定时器 ID
 let syncIntervalId: any = null;
 let seekTimeout: any = null;
+let dominantColorTaskId = 0;
 
 // 插值锚点
 
@@ -1274,7 +1275,7 @@ export function usePlayer() {
     State.isPlaying.value = true;
     State.isSongLoaded.value = true;
     State.currentTime.value = 0;
-    State.currentCover.value = '';
+    // Keep previous cover until the next one is ready to avoid visual flash.
 
     // 🟢 开始新会话计时
     accumulatedTime = 0;
@@ -1486,14 +1487,17 @@ export function usePlayer() {
     }, { deep: true });
 
     watch(State.currentCover, async (newCover) => {
-      if (newCover) {
-        let url = newCover;
-        if (!newCover.startsWith('http') && !newCover.startsWith('data:')) {
-          url = convertFileSrc(newCover);
-        }
-        const colors = await extractDominantColors(url, 4);
-        State.dominantColors.value = colors;
+      if (!newCover) return;
+
+      const taskId = ++dominantColorTaskId;
+      let url = newCover;
+      if (!newCover.startsWith('http') && !newCover.startsWith('data:')) {
+        url = convertFileSrc(newCover);
       }
+
+      const colors = await extractDominantColors(url, 4);
+      if (taskId !== dominantColorTaskId) return;
+      State.dominantColors.value = colors;
     });
 
     watch(State.isPlaying, (playing) => {

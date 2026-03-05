@@ -12,7 +12,6 @@ const {
   currentSong, isPlaying, dominantColors
 } = usePlayer();
 
-// --- Context Menu State ---
 const showContextMenu = ref(false);
 const contextMenuX = ref(0);
 const contextMenuY = ref(0);
@@ -27,36 +26,42 @@ const handleContextMenu = (e: MouseEvent) => {
 
 const bigCoverUrl = ref('');
 const localCoverUrl = ref('');
+const bigCoverLoaded = ref(false);
+let coverRequestId = 0;
 
-// 获取高清大图及小图
+// Fetch thumbnail and full-size cover for the current song.
 watch(currentSong, async (newSong) => {
+  const requestId = ++coverRequestId;
+  bigCoverLoaded.value = false;
+
   if (newSong && newSong.path) {
     try {
-      // 获取小图 (作为占位符)
       const thumbPath = await invoke<string>('get_song_cover_thumbnail', { path: newSong.path });
-      if (thumbPath) {
-        localCoverUrl.value = convertFileSrc(thumbPath);
-      } else {
-        localCoverUrl.value = '';
-      }
-      // 获取大图
+      if (requestId !== coverRequestId) return;
+
+      localCoverUrl.value = thumbPath ? convertFileSrc(thumbPath) : '';
+
       const path = await invoke<string>('get_song_cover', { path: newSong.path });
-      if (path) {
-        bigCoverUrl.value = convertFileSrc(path);
-      } else {
-        bigCoverUrl.value = '';
-      }
-    } catch (e) {
+      if (requestId !== coverRequestId) return;
+
+      bigCoverUrl.value = path ? convertFileSrc(path) : '';
+    } catch {
+      if (requestId !== coverRequestId) return;
       bigCoverUrl.value = '';
       localCoverUrl.value = '';
     }
   } else {
+    if (requestId !== coverRequestId) return;
     bigCoverUrl.value = '';
     localCoverUrl.value = '';
   }
 }, { immediate: true });
 
-// --- 暴露封面 ref 给父组件 ---
+const onBigCoverLoad = () => {
+  bigCoverLoaded.value = true;
+};
+
+// --- 鏆撮湶灏侀潰 ref 缁欑埗缁勪欢 ---
 const detailCoverRef = ref<HTMLElement | null>(null);
 defineExpose({ detailCoverRef });
 </script>
@@ -67,8 +72,8 @@ defineExpose({ detailCoverRef });
     <!-- Album Art -->
     <div 
       ref="detailCoverRef"
-      class="absolute transition-all duration-700 cubic-bezier(0.34,1.56,0.64,1) z-50 will-change-transform detail-cover-reflect pointer-events-auto"
-      :class="props.isExpanded ? 'top-1/2 left-[25%] -translate-x-1/2 -translate-y-[45%] w-[clamp(280px,40vw,480px)] aspect-square rounded-2xl' : 'top-[16px] left-[16px] translate-x-0 translate-y-0 w-12 h-12 rounded-lg pointer-events-none'"
+      class="absolute aspect-square transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] z-50 will-change-transform detail-cover-reflect pointer-events-auto"
+      :class="props.isExpanded ? 'top-[45%] left-[calc(100px+18%)] -translate-x-1/2 -translate-y-1/2 w-[clamp(220px,45vh,580px)] rounded-2xl' : 'top-[calc(100vh-64px)] left-[16px] translate-x-0 translate-y-0 w-12 rounded-lg pointer-events-none'"
       :style="{ 
         boxShadow: props.isExpanded && isPlaying
           ? `0 30px 60px -12px rgba(0,0,0,0.6), 0 18px 36px -18px rgba(0,0,0,0.7), 0 0 80px -20px ${dominantColors[0]}44` 
@@ -77,10 +82,17 @@ defineExpose({ detailCoverRef });
         opacity: 1,
       }"
     >
-      <img v-if="bigCoverUrl" :src="bigCoverUrl" class="w-full h-full object-cover select-none transition-transform duration-700" :class="props.isExpanded ? 'scale-100' : 'scale-125'" draggable="false" />
-      <img v-else-if="localCoverUrl" :src="localCoverUrl" class="w-full h-full object-cover select-none transition-transform duration-700" :class="props.isExpanded ? 'scale-100' : 'scale-125'" draggable="false" />
-      <div v-else class="w-full h-full bg-white/5 flex items-center justify-center text-white/10">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-32 w-32" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+      <div class="w-full h-full rounded-[inherit] overflow-hidden relative isolate">
+        <!-- 鍗犱綅鍥?(灏忓浘) -->
+        <img v-if="localCoverUrl" :src="localCoverUrl" class="absolute inset-0 w-full h-full object-cover select-none transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] z-10" :class="props.isExpanded ? 'scale-100' : 'scale-125'" draggable="false" decoding="async" />
+        
+        <!-- 楂樻竻澶у浘 (鍔犺浇瀹屽悗娓愭樉閬洊灞€閮? -->
+        <img v-show="bigCoverUrl" :src="bigCoverUrl" @load="onBigCoverLoad" class="absolute inset-0 w-full h-full object-cover select-none transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] z-20" :class="[props.isExpanded ? 'scale-100' : 'scale-125', bigCoverLoaded ? 'opacity-100' : 'opacity-0']" draggable="false" decoding="async" />
+        
+        <!-- 鏃犲浘鏃剁殑榛樿鍙戝厜鍏冪礌 -->
+        <div v-if="!localCoverUrl && !bigCoverUrl" class="absolute inset-0 w-full h-full bg-white/5 flex items-center justify-center text-white/10 z-0">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-32 w-32" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+        </div>
       </div>
     </div>
 
@@ -96,7 +108,7 @@ defineExpose({ detailCoverRef });
 </template>
 
 <style scoped>
-/* 封面倒影效果 */
+/* 灏侀潰鍊掑奖鏁堟灉 */
 .detail-cover-reflect {
   -webkit-box-reflect: below 8px 
     linear-gradient(

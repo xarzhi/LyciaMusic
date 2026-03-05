@@ -25,6 +25,7 @@ const {
   currentViewMode,
   filterCondition,
   isMiniMode,
+  showPlayerDetail,
   showMiniPlaylist,
   showPlaylist,
   closeMiniPlaylist,
@@ -69,6 +70,10 @@ const handleGlobalAdd = (playlistId: string) => {
 };
 
 const mainBlurStyle = computed(() => {
+  if (showPlayerDetail.value) {
+    return 'none';
+  }
+
   const { dynamicBgType, mode, customBackground } = settings.value.theme;
 
   if (dynamicBgType === 'flow' || dynamicBgType === 'blur') {

@@ -3,7 +3,8 @@ import { usePlayer } from '../../composables/player';
 import { computed } from 'vue';
 import { convertFileSrc } from '@tauri-apps/api/core';
 
-const { settings, currentCover, dominantColors } = usePlayer();
+const { settings, currentCover, dominantColors, showPlayerDetail } = usePlayer();
+const reduceDynamicEffects = computed(() => showPlayerDetail.value);
 
 // 计算当前应该显示的背景图
 const activeBackgroundInfo = computed(() => {
@@ -70,7 +71,7 @@ const bgImageSrc = computed(() => {
         <div class="absolute inset-0 transition-colors duration-[1500ms] opacity-40" :style="{ backgroundColor: dominantColors[0] }"></div>
         
         <!-- 动画色块 -->
-        <div class="absolute inset-0 filter blur-[120px] opacity-60">
+        <div v-if="!reduceDynamicEffects" class="absolute inset-0 filter blur-[120px] opacity-60">
           <div 
             class="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-1 transition-colors duration-[1500ms]"
             :style="{ backgroundColor: dominantColors[1] }"
@@ -86,7 +87,7 @@ const bgImageSrc = computed(() => {
         </div>
 
         <!-- 噪点层 -->
-        <div class="absolute inset-0 opacity-[0.025] pointer-events-none z-10 bg-noise"></div>
+        <div v-if="!reduceDynamicEffects" class="absolute inset-0 opacity-[0.025] pointer-events-none z-10 bg-noise"></div>
         
         <!-- 环境光遮罩 (在浅色模式下极淡) -->
         <div class="absolute inset-0 bg-white/5 dark:bg-black/40 z-20"></div>

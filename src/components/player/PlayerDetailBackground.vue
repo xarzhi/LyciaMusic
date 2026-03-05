@@ -1,11 +1,19 @@
 <script setup lang="ts">
 import { usePlayer } from '../../composables/player';
 
+
+const props = defineProps<{
+  bgOpacity?: number;
+}>();
+
 const { dominantColors } = usePlayer();
 </script>
 
 <template>
-  <div class="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
+  <div 
+    class="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none"
+    :style="{ opacity: props.bgOpacity ?? 1, transition: 'opacity 350ms cubic-bezier(0.4, 0, 0.2, 1)' }"
+  >
     <!-- 基础深色背景层 -->
     <div class="absolute inset-0 bg-[#080808] z-0"></div>
     

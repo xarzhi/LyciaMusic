@@ -231,11 +231,10 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
     <transition name="window-restore">
       <div
         v-if="!isMiniMode"
-        class="flex-1 flex flex-col overflow-hidden relative z-10 transition-colors duration-500"
+        class="flex-1 flex overflow-hidden relative z-10 transition-colors duration-500"
         :class="[settings.theme.mode === 'custom' ? 'bg-transparent' : 'bg-white/30 dark:bg-black/60']"
         :style="{ backdropFilter: mainBlurStyle }"
       >
-      <div class="flex flex-1 overflow-hidden">
         <Sidebar />
 
         <div class="flex-1 flex flex-col min-w-0">
@@ -249,14 +248,17 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
           </main>
         </div>
       </div>
-
-      <transition name="footer-slide">
-        <PlayerFooter v-if="isFooterVisible" />
-      </transition>
-    </div>
     </transition>
 
-    <PlayerDetail v-if="!isMiniMode" />
+    <div v-if="!isMiniMode && isFooterVisible" class="relative z-[60]">
+      <!-- Player Detail (垫底滑动层) -->
+      <PlayerDetail />
+      
+      <!-- Player Footer (悬浮覆盖层) -->
+      <transition name="footer-slide">
+        <PlayerFooter />
+      </transition>
+    </div>
 
     <PlayQueueSidebar v-if="!isMiniMode" />
 

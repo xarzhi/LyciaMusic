@@ -31,6 +31,9 @@ export const isMiniMode = ref(false);
 export const showVolumePopover = ref(false);
 export const AUDIO_DELAY = ref(0.45);
 
+// --- 共享元素转场 ---
+export const footerCoverEl = ref<HTMLElement | null>(null);
+
 // --- 自定义拖拽状态 ---
 export const dragSession = reactive({
   active: false,

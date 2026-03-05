@@ -17,39 +17,6 @@ export interface LyricWord {
 }
 
 export type LyricsStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
-const LYRICS_GLOBAL_OFFSET_KEY = 'player_lyrics_global_offset';
-const LYRICS_SONG_OFFSETS_KEY = 'player_lyrics_song_offsets';
-const MAX_LYRICS_OFFSET = 5;
-
-function clampOffset(value: number): number {
-  return Math.max(-MAX_LYRICS_OFFSET, Math.min(MAX_LYRICS_OFFSET, value));
-}
-
-function readStoredNumber(key: string, fallback = 0): number {
-  if (typeof window === 'undefined') return fallback;
-  const raw = localStorage.getItem(key);
-  if (!raw) return fallback;
-  const value = parseFloat(raw);
-  return Number.isFinite(value) ? clampOffset(value) : fallback;
-}
-
-function readStoredSongOffsets(): Record<string, number> {
-  if (typeof window === 'undefined') return {};
-  const raw = localStorage.getItem(LYRICS_SONG_OFFSETS_KEY);
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const result: Record<string, number> = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        result[key] = clampOffset(value);
-      }
-    }
-    return result;
-  } catch {
-    return {};
-  }
-}
 
 export const lyricsSettings = reactive({
   showTranslation: true,
@@ -63,54 +30,8 @@ export const showDesktopLyrics = ref(false);
 const rawLyrics = ref<string>('');
 const parsedLyrics = ref<LyricLine[]>([]);
 const lyricsStatus = ref<LyricsStatus>('idle');
-const lyricsError = ref<string | null>(null);
-const globalLyricOffset = ref<number>(readStoredNumber(LYRICS_GLOBAL_OFFSET_KEY, 0));
-const songLyricOffsets = ref<Record<string, number>>(readStoredSongOffsets());
 
 let loadRequestId = 0;
-
-function persistGlobalOffset() {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(LYRICS_GLOBAL_OFFSET_KEY, globalLyricOffset.value.toString());
-}
-
-function persistSongOffsets() {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(LYRICS_SONG_OFFSETS_KEY, JSON.stringify(songLyricOffsets.value));
-}
-
-function setGlobalLyricOffset(offset: number) {
-  globalLyricOffset.value = clampOffset(offset);
-  persistGlobalOffset();
-}
-
-function setSongLyricOffset(songPath: string, offset: number) {
-  if (!songPath) return;
-  songLyricOffsets.value = {
-    ...songLyricOffsets.value,
-    [songPath]: clampOffset(offset),
-  };
-  persistSongOffsets();
-}
-
-function clearSongLyricOffset(songPath: string) {
-  if (!songPath || !(songPath in songLyricOffsets.value)) return;
-  const { [songPath]: _, ...rest } = songLyricOffsets.value;
-  songLyricOffsets.value = rest;
-  persistSongOffsets();
-}
-
-function setCurrentSongLyricOffset(offset: number) {
-  const path = currentSong.value?.path;
-  if (!path) return;
-  setSongLyricOffset(path, offset);
-}
-
-function clearCurrentSongLyricOffset() {
-  const path = currentSong.value?.path;
-  if (!path) return;
-  clearSongLyricOffset(path);
-}
 
 function parseTimeTag(match: RegExpMatchArray, offsetMs: number): number {
   const min = parseInt(match[1], 10);
@@ -254,12 +175,10 @@ async function loadLyrics() {
     rawLyrics.value = '';
     parsedLyrics.value = [];
     lyricsStatus.value = 'idle';
-    lyricsError.value = null;
     return;
   }
 
   lyricsStatus.value = 'loading';
-  lyricsError.value = null;
   rawLyrics.value = '';
   parsedLyrics.value = [];
 
@@ -277,7 +196,6 @@ async function loadLyrics() {
     rawLyrics.value = '';
     parsedLyrics.value = [];
     lyricsStatus.value = 'error';
-    lyricsError.value = e instanceof Error ? e.message : String(e);
     console.error('Failed to load lyrics:', e);
   }
 }
@@ -300,20 +218,10 @@ function findLyricIndexByTime(lines: LyricLine[], targetTime: number): number {
   return answer;
 }
 
-const currentSongLyricOffset = computed(() => {
-  const path = currentSong.value?.path;
-  if (!path) return 0;
-  return songLyricOffsets.value[path] ?? 0;
-});
-
-const effectiveLyricOffset = computed(() => {
-  return globalLyricOffset.value + currentSongLyricOffset.value;
-});
-
 const currentLyricIndex = computed(() => {
   if (parsedLyrics.value.length === 0) return -1;
 
-  const targetTime = currentTime.value - AUDIO_DELAY.value + effectiveLyricOffset.value;
+  const targetTime = currentTime.value - AUDIO_DELAY.value;
   return findLyricIndexByTime(parsedLyrics.value, targetTime);
 });
 
@@ -351,16 +259,6 @@ export function useLyrics() {
     showDesktopLyrics,
     lyricsSettings,
     lyricsStatus,
-    lyricsError,
-    globalLyricOffset,
-    songLyricOffsets,
-    currentSongLyricOffset,
-    effectiveLyricOffset,
-    setGlobalLyricOffset,
-    setSongLyricOffset,
-    clearSongLyricOffset,
-    setCurrentSongLyricOffset,
-    clearCurrentSongLyricOffset,
     currentLyricLine,
     currentLyricIndex,
     parsedLyrics,

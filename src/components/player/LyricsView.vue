@@ -6,7 +6,7 @@ import { useLyrics } from '../../composables/lyrics';
 import { usePlayer } from '../../composables/player';
 import { AUDIO_DELAY } from '../../composables/playerState';
 
-const { parsedLyrics, currentLyricIndex, lyricsSettings, lyricsStatus, effectiveLyricOffset } = useLyrics();
+const { parsedLyrics, currentLyricIndex, lyricsSettings, lyricsStatus } = useLyrics();
 const { playAt, currentTime } = usePlayer();
 
 const containerRef = ref<HTMLElement | null>(null);
@@ -36,7 +36,7 @@ const emptyStateText = computed(() => {
 });
 
 const lyricClock = computed(() => {
-  return currentTime.value - AUDIO_DELAY.value + effectiveLyricOffset.value;
+  return currentTime.value - AUDIO_DELAY.value;
 });
 
 function isActiveLine(index: number): boolean {

@@ -48,35 +48,70 @@ fn contains_lrc_timestamp(text: &str) -> bool {
     false
 }
 
+fn read_sidecar_lrc(path_obj: &Path) -> Option<String> {
+    let stem = path_obj.file_stem()?.to_string_lossy().to_string();
+    let parent = path_obj.parent()?;
+
+    let exact_path = parent.join(format!("{}.lrc", stem));
+    if let Ok(content) = fs::read_to_string(&exact_path) {
+        return Some(content);
+    }
+
+    let entries = fs::read_dir(parent).ok()?;
+    for entry in entries.flatten() {
+        let candidate = entry.path();
+        if !candidate.is_file() {
+            continue;
+        }
+
+        let ext_is_lrc = candidate
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.eq_ignore_ascii_case("lrc"))
+            .unwrap_or(false);
+        if !ext_is_lrc {
+            continue;
+        }
+
+        let candidate_stem = candidate.file_stem()?.to_string_lossy().to_string();
+        if !candidate_stem.eq_ignore_ascii_case(&stem) {
+            continue;
+        }
+
+        if let Ok(content) = fs::read_to_string(&candidate) {
+            return Some(content);
+        }
+    }
+
+    None
+}
+
 #[tauri::command]
 pub async fn get_song_lyrics(path: String) -> Result<String, String> {
-    if let Ok(tagged_file) = Probe::open(&path).map_err(|e| e.to_string())?.read() {
-        if let Some(tag) = tagged_file.primary_tag() {
-            if let Some(lyrics) = tag.get_string(&ItemKey::Lyrics) {
-                return Ok(lyrics.to_string());
-            }
-            for item in tag.items() {
-                if item.key() == &ItemKey::Comment {
-                    if let Some(text) = item.value().text() {
-                        if contains_lrc_timestamp(text) {
-                            return Ok(text.to_string());
+    if let Ok(probe) = Probe::open(&path) {
+        if let Ok(tagged_file) = probe.read() {
+            if let Some(tag) = tagged_file.primary_tag() {
+                if let Some(lyrics) = tag.get_string(&ItemKey::Lyrics) {
+                    return Ok(lyrics.to_string());
+                }
+                for item in tag.items() {
+                    if item.key() == &ItemKey::Comment {
+                        if let Some(text) = item.value().text() {
+                            if contains_lrc_timestamp(text) {
+                                return Ok(text.to_string());
+                            }
                         }
                     }
                 }
             }
         }
     }
+
     let path_obj = Path::new(&path);
-    if let Some(stem) = path_obj.file_stem() {
-        if let Some(parent) = path_obj.parent() {
-            let lrc_path = parent.join(format!("{}.lrc", stem.to_string_lossy()));
-            if lrc_path.exists() {
-                if let Ok(content) = fs::read_to_string(lrc_path) {
-                    return Ok(content);
-                }
-            }
-        }
+    if let Some(content) = read_sidecar_lrc(path_obj) {
+        return Ok(content);
     }
+
     Ok(String::new())
 }
 

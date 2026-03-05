@@ -1,5 +1,6 @@
 import { createApp } from 'vue'
 import './style.css'
+import '@applemusic-like-lyrics/core/style.css'
 import App from './App.vue'
 import router from './router' // 👈 1. 引入路由
 
@@ -18,3 +19,4 @@ document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 
 app.mount('#app')
+

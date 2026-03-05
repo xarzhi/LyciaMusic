@@ -1,9 +1,21 @@
 import { ref, computed, reactive } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import {
+  decryptQrcHex,
+  parseEslrc,
+  parseLrc,
+  parseLys,
+  parseQrc,
+  parseTTML,
+  parseYrc,
+  type LyricLine as AmlLyricLine,
+  type LyricWord as AmlLyricWord,
+} from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js';
 import { currentSong, currentTime, AUDIO_DELAY } from './playerState';
 
 export interface LyricLine {
   time: number;
+  endTime: number;
   text: string;
   translation: string;
   romaji: string;
@@ -14,6 +26,7 @@ export interface LyricWord {
   text: string;
   start: number;
   end: number;
+  romaji?: string;
 }
 
 export type LyricsStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
@@ -33,15 +46,16 @@ const lyricsStatus = ref<LyricsStatus>('idle');
 
 let loadRequestId = 0;
 
-function parseTimeTag(match: RegExpMatchArray, offsetMs: number): number {
-  const min = parseInt(match[1], 10);
-  const sec = parseInt(match[2], 10);
-  const rawMs = match[3] ? match[3].slice(0, 3).padEnd(3, '0') : '0';
-  const ms = parseInt(rawMs, 10);
-  return min * 60 + sec + ms / 1000 + offsetMs / 1000;
+interface PreparedLine {
+  startMs: number;
+  endMs: number;
+  text: string;
+  translation: string;
+  romaji: string;
+  words: LyricWord[];
 }
 
-function sanitizeLyricText(text: string): string {
+function sanitizeLineText(text: string): string {
   return text.replace(/\u200b/g, '').trim();
 }
 
@@ -49,122 +63,163 @@ function sanitizeWordText(text: string): string {
   return text.replace(/\u200b/g, '');
 }
 
-function isMetaLine(line: string): boolean {
-  return /^\[(ar|ti|al|by|re|ve|au|length):.*\]$/i.test(line);
+function toSafeMs(value: number, fallback: number): number {
+  if (!Number.isFinite(value) || value < 0) return fallback;
+  return Math.round(value);
 }
 
-function parseWordTimedText(raw: string, offsetMs: number): { text: string; words?: LyricWord[] } {
-  const wordTimeExp = /<(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?>/g;
-  wordTimeExp.lastIndex = 0;
+function normalizeWord(word: AmlLyricWord, fallbackStartMs: number, fallbackEndMs: number): LyricWord {
+  const startMs = toSafeMs(word.startTime, fallbackStartMs);
+  const rawEndMs = toSafeMs(word.endTime, fallbackEndMs);
+  const endMs = Math.max(startMs, rawEndMs);
 
-  const matches = Array.from(raw.matchAll(wordTimeExp));
-  if (matches.length === 0) {
-    return { text: sanitizeLyricText(raw) };
-  }
-
-  const words: LyricWord[] = [];
-
-  for (let i = 0; i < matches.length; i++) {
-    const match = matches[i];
-    const matchStart = match.index ?? 0;
-    const segmentStart = matchStart + match[0].length;
-    const nextStart = i < matches.length - 1 ? (matches[i + 1].index ?? raw.length) : raw.length;
-    const segment = sanitizeWordText(raw.slice(segmentStart, nextStart));
-    if (!segment) continue;
-
-    const start = parseTimeTag(match, offsetMs);
-    if (!Number.isFinite(start) || start < 0) continue;
-
-    words.push({
-      text: segment,
-      start,
-      end: start + 0.35,
-    });
-  }
-
-  if (words.length === 0) {
-    return { text: sanitizeLyricText(raw.replace(wordTimeExp, '')) };
-  }
-
-  for (let i = 0; i < words.length - 1; i++) {
-    words[i].end = Math.max(words[i].start + 0.04, words[i + 1].start);
-  }
-  words[words.length - 1].end = words[words.length - 1].start + 0.5;
-
-  const plain = sanitizeLyricText(raw.replace(wordTimeExp, '')) || sanitizeLyricText(words.map(w => w.text).join(''));
-  return { text: plain, words };
+  return {
+    text: sanitizeWordText(word.word || ''),
+    start: startMs / 1000,
+    end: endMs / 1000,
+    romaji: sanitizeWordText(word.romanWord || ''),
+  };
 }
 
-function parseLrc(lrc: string): LyricLine[] {
-  const normalized = lrc.replace(/^\uFEFF/, '').replace(/\r/g, '');
-  const lines = normalized.split('\n');
-  const rawEntries: { time: number; text: string; words?: LyricWord[] }[] = [];
-  const timeExp = /\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]/g;
-  let offsetMs = 0;
+function prepareLine(line: AmlLyricLine): PreparedLine | null {
+  const fallbackStartMs = toSafeMs(line.startTime, 0);
+  const fallbackEndMs = Math.max(fallbackStartMs + 80, toSafeMs(line.endTime, fallbackStartMs + 500));
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) continue;
+  const words = (line.words || [])
+    .map((word) => normalizeWord(word, fallbackStartMs, fallbackEndMs))
+    .filter((word) => word.text.length > 0)
+    .sort((a, b) => a.start - b.start);
 
-    const offsetMatch = line.match(/^\[offset:([+-]?\d+)\]$/i);
-    if (offsetMatch) {
-      offsetMs = parseInt(offsetMatch[1], 10) || 0;
+  const wordsText = sanitizeLineText((line.words || []).map((word) => word.word || '').join(''));
+  const text = wordsText || sanitizeLineText(words.map((word) => word.text).join(''));
+  const translation = sanitizeLineText(line.translatedLyric || '');
+  const romaji = sanitizeLineText(line.romanLyric || '');
+
+  const firstWordStartMs = words.length > 0 ? Math.round(words[0].start * 1000) : fallbackStartMs;
+  const lastWordEndMs = words.length > 0 ? Math.round(words[words.length - 1].end * 1000) : fallbackEndMs;
+
+  const startMs = toSafeMs(line.startTime, firstWordStartMs);
+  const endMs = Math.max(startMs, toSafeMs(line.endTime, lastWordEndMs));
+
+  if (!text && !translation && !romaji && words.length === 0) return null;
+
+  return {
+    startMs,
+    endMs,
+    text,
+    translation,
+    romaji,
+    words,
+  };
+}
+
+function mergePreparedLines(lines: PreparedLine[]): LyricLine[] {
+  if (lines.length === 0) return [];
+
+  const sorted = [...lines].sort((a, b) => (a.startMs - b.startMs) || (a.endMs - b.endMs));
+  const groups: PreparedLine[][] = [];
+
+  for (const line of sorted) {
+    const currentGroup = groups[groups.length - 1];
+    if (!currentGroup) {
+      groups.push([line]);
       continue;
     }
 
-    if (isMetaLine(line)) continue;
-
-    timeExp.lastIndex = 0;
-    const matches = Array.from(line.matchAll(timeExp));
-    if (matches.length === 0) continue;
-
-    timeExp.lastIndex = 0;
-    const textRaw = line.replace(timeExp, '');
-    const parsedText = parseWordTimedText(textRaw, offsetMs);
-    const text = parsedText.text;
-    if (!text) continue;
-
-    for (const match of matches) {
-      const time = parseTimeTag(match, offsetMs);
-      if (Number.isFinite(time) && time >= 0) {
-        rawEntries.push({ time, text, words: parsedText.words });
-      }
-    }
-  }
-
-  rawEntries.sort((a, b) => a.time - b.time);
-
-  const result: LyricLine[] = [];
-  if (rawEntries.length === 0) return result;
-
-  let currentGroup = { time: rawEntries[0].time, entries: [rawEntries[0]] };
-
-  for (let i = 1; i < rawEntries.length; i++) {
-    const entry = rawEntries[i];
-    if (Math.abs(entry.time - currentGroup.time) < 0.05) {
-      currentGroup.entries.push(entry);
+    if (Math.abs(currentGroup[0].startMs - line.startMs) <= 1) {
+      currentGroup.push(line);
     } else {
-      result.push(mapGroupToLine(currentGroup));
-      currentGroup = { time: entry.time, entries: [entry] };
+      groups.push([line]);
     }
   }
 
-  result.push(mapGroupToLine(currentGroup));
-  return result;
+  return groups.map((group) => {
+    const main = group.find((line) => line.text.length > 0) ?? group[0];
+    const extras = group.filter((line) => line !== main && line.text.length > 0);
+
+    const translation = main.translation || extras[0]?.text || '';
+    const romaji = main.romaji || extras[1]?.text || '';
+
+    const endMs = Math.max(...group.map((line) => line.endMs), main.startMs + 80);
+
+    const words = main.words.length > 0
+      ? main.words
+      : [{
+          text: main.text || translation || romaji || ' ',
+          start: main.startMs / 1000,
+          end: endMs / 1000,
+          romaji: '',
+        }];
+
+    return {
+      time: main.startMs / 1000,
+      endTime: endMs / 1000,
+      text: main.text || words[0].text,
+      translation,
+      romaji,
+      words,
+    };
+  }).filter((line) => line.text.length > 0 || line.translation.length > 0 || line.romaji.length > 0);
 }
 
-function mapGroupToLine(group: { time: number; entries: { text: string; words?: LyricWord[] }[] }): LyricLine {
-  const main = group.entries[0];
-  const translation = group.entries[1];
-  const romaji = group.entries[2];
+function scoreParsedLines(lines: AmlLyricLine[]): number {
+  return lines.reduce((score, line) => {
+    const hasWords = (line.words || []).some((word) => sanitizeWordText(word.word || '').length > 0);
+    const hasTranslation = sanitizeLineText(line.translatedLyric || '').length > 0;
+    const hasRomaji = sanitizeLineText(line.romanLyric || '').length > 0;
 
-  return {
-    time: group.time,
-    text: main?.text || '',
-    translation: translation?.text || '',
-    romaji: romaji?.text || '',
-    words: main?.words,
+    return score + (hasWords ? 2 : 0) + (hasTranslation ? 1 : 0) + (hasRomaji ? 1 : 0);
+  }, 0);
+}
+
+function parseWithAml(raw: string): AmlLyricLine[] {
+  const source = raw.replace(/^\uFEFF/, '').replace(/\r/g, '');
+  const candidates: AmlLyricLine[][] = [];
+
+  const collect = (parser: () => AmlLyricLine[]) => {
+    try {
+      const lines = parser();
+      if (Array.isArray(lines) && lines.length > 0) candidates.push(lines);
+    } catch {
+      // Try next parser.
+    }
   };
+
+  if (/<tt[\s>]/i.test(source)) {
+    collect(() => parseTTML(source).lines);
+  }
+
+  const compactHex = source.replace(/\s+/g, '');
+  if (/^[0-9a-fA-F]+$/.test(compactHex) && compactHex.length > 64 && compactHex.length % 2 === 0) {
+    collect(() => parseQrc(decryptQrcHex(compactHex)));
+  }
+
+  collect(() => parseYrc(source));
+  collect(() => parseQrc(source));
+  collect(() => parseLys(source));
+  collect(() => parseEslrc(source));
+  collect(() => parseLrc(source));
+
+  if (candidates.length === 0) return [];
+
+  candidates.sort((a, b) => {
+    const scoreDiff = scoreParsedLines(b) - scoreParsedLines(a);
+    if (scoreDiff !== 0) return scoreDiff;
+    return b.length - a.length;
+  });
+
+  return candidates[0];
+}
+
+function parseLyrics(raw: string): LyricLine[] {
+  const parsed = parseWithAml(raw);
+  if (parsed.length === 0) return [];
+
+  const prepared = parsed
+    .map((line) => prepareLine(line))
+    .filter((line): line is PreparedLine => line !== null);
+
+  return mergePreparedLines(prepared);
 }
 
 async function loadLyrics() {
@@ -188,7 +243,7 @@ async function loadLyrics() {
     if (requestId !== loadRequestId || currentSong.value?.path !== song.path) return;
 
     rawLyrics.value = lrc || '';
-    parsedLyrics.value = parseLrc(rawLyrics.value);
+    parsedLyrics.value = parseLyrics(rawLyrics.value);
     lyricsStatus.value = parsedLyrics.value.length > 0 ? 'ready' : 'empty';
   } catch (e) {
     if (requestId !== loadRequestId || currentSong.value?.path !== song.path) return;

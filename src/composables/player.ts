@@ -18,6 +18,7 @@ let progressFrameId: number | null = null;
 let syncIntervalId: any = null;
 let seekTimeout: any = null;
 let dominantColorTaskId = 0;
+let playRequestId = 0;
 
 // 插值锚点
 
@@ -1383,6 +1384,7 @@ export function usePlayer() {
   };
 
   async function playSong(song: State.Song) {
+    const requestId = ++playRequestId;
     // 🟢 切歌前：结算上一首
     flushPlaySession();
 
@@ -1404,27 +1406,27 @@ export function usePlayer() {
     }
 
     State.isPlaying.value = true;
-    State.isSongLoaded.value = true;
-    State.currentTime.value = 0;
+    State.isSongLoaded.value = false;
+    stopTimer();
+    reanchorPlaybackClock(0);
     // Keep previous cover until the next one is ready to avoid visual flash.
 
     // 🟢 开始新会话计时
     accumulatedTime = 0;
-    sessionStartTime = Date.now();
+    sessionStartTime = null;
 
     addToHistory(song);
 
     // 🟢 移除旧的 record_play (改为在结束/切歌时记录)
     // invoke('record_play', { songPath: song.path }).catch(e => console.warn('record_play failed:', e));
 
-    loadLyrics();
-    startTimer();
     try {
       // 先尝试获取封面，为了 metadata 完整
       const cover = await invoke<string>('get_song_cover', { path: song.path }).catch(() => "");
+      if (requestId !== playRequestId || State.currentSong.value?.path !== song.path) return;
       State.currentCover.value = cover;
 
-      invoke('play_audio', {
+      await invoke('play_audio', {
         path: song.path,
         title: song.name,
         artist: song.artist || "Unknown Artist",
@@ -1432,7 +1434,19 @@ export function usePlayer() {
         cover: cover,
         duration: Math.floor(song.duration)
       });
-    } catch (e) { State.isPlaying.value = false; }
+      if (requestId !== playRequestId || State.currentSong.value?.path !== song.path) return;
+
+      State.isSongLoaded.value = true;
+      sessionStartTime = Date.now();
+      loadLyrics();
+      startTimer();
+    } catch (e) {
+      if (requestId !== playRequestId || State.currentSong.value?.path !== song.path) return;
+      State.isPlaying.value = false;
+      State.isSongLoaded.value = false;
+      sessionStartTime = null;
+      stopTimer();
+    }
   }
 
   async function pauseSong() {

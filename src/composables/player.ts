@@ -162,7 +162,7 @@ export function usePlayer() {
       useToast().showToast(
         syncLinked && appSettings.value.linkFoldersToLibrary
           ? "已将文件夹同时添加到本地音乐库和侧边栏"
-          : "宸叉坊鍔犳枃浠跺す鍒伴煶涔愬簱",
+          : "已添加文件夹到音乐库",
         "success"
       );
     }
@@ -184,7 +184,7 @@ export function usePlayer() {
       useToast().showToast(
         syncLinked && appSettings.value.linkFoldersToLibrary
           ? "已从本地音乐库和侧边栏同步移除文件夹"
-          : "宸茬Щ闄ゆ枃浠跺す",
+          : "已从音乐库移除文件夹",
         "success"
       );
     }
@@ -206,7 +206,7 @@ export function usePlayer() {
       useToast().showToast(
         syncLinked && appSettings.value.linkFoldersToLibrary
           ? "已将文件夹同时添加到侧边栏和本地音乐库"
-          : "宸叉坊鍔犳枃浠跺す鍒颁晶杈规爮",
+          : "已添加文件夹到侧边栏",
         "success"
       );
     }
@@ -228,7 +228,7 @@ export function usePlayer() {
       useToast().showToast(
         syncLinked && appSettings.value.linkFoldersToLibrary
           ? "已从侧边栏和本地音乐库同步移除文件夹"
-          : "宸茬Щ闄や晶杈规爮鏂囦欢澶?",
+          : "已从侧边栏移除文件夹",
         "success"
       );
     }

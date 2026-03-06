@@ -106,7 +106,7 @@ const metaInfo = computed(() => {
 
         <!-- 右侧歌词 / 元信息 -->
         <div 
-          class="flex-1 h-full flex flex-col justify-center pr-0 pl-2 py-8"
+          class="flex-1 h-full min-h-0 flex flex-col justify-center pr-0 pl-2 py-8"
           :style="staggerStyle(2, 'X', 20)"
         >
           <transition name="fade-scale" mode="out-in">

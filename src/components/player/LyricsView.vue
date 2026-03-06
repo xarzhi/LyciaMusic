@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { LyricLine as AmlLyricLine, LyricLineMouseEvent } from '@applemusic-like-lyrics/core';
-import { LyricPlayer } from '@applemusic-like-lyrics/vue';
 import { useLyrics } from '../../composables/lyrics';
 import { usePlayer } from '../../composables/player';
 import { AUDIO_DELAY } from '../../composables/playerState';
+import AmlLyricPlayer from './AmlLyricPlayer.vue';
 
 const { parsedLyrics, lyricsSettings, lyricsStatus } = useLyrics();
 const { seekTo, currentTime } = usePlayer();
@@ -82,10 +82,10 @@ async function handleLineClick(event: LyricLineMouseEvent) {
 </script>
 
 <template>
-  <div class="relative w-full h-full">
-    <LyricPlayer
+  <div class="relative w-full h-full min-h-0 min-w-0">
+    <AmlLyricPlayer
       v-if="amllLines.length > 0"
-      class="amll-host w-full h-full"
+      class="amll-host w-full h-full min-h-0 min-w-0"
       :lyric-lines="amllLines"
       :current-time="amllCurrentTime"
       align-anchor="center"
@@ -109,7 +109,8 @@ async function handleLineClick(event: LyricLineMouseEvent) {
 
 <style scoped>
 .amll-host {
-  contain: strict;
+  min-width: 0;
+  min-height: 0;
 }
 
 .amll-host :deep(.amll-lyric-player) {

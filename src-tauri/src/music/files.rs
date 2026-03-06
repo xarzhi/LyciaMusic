@@ -23,7 +23,8 @@ fn contains_lrc_timestamp(text: &str) -> bool {
 
             if min_digits > 0 && j < bytes.len() && bytes[j] == b':' {
                 j += 1;
-                if j + 1 < bytes.len() && bytes[j].is_ascii_digit() && bytes[j + 1].is_ascii_digit() {
+                if j + 1 < bytes.len() && bytes[j].is_ascii_digit() && bytes[j + 1].is_ascii_digit()
+                {
                     j += 2;
 
                     if j < bytes.len() && bytes[j] == b'.' {

@@ -26,7 +26,8 @@ walkdir = "2"
 lofty = "0.21" # 专门处理音乐元数据的库
 tauri-plugin-dialog = "2"
 base64 = "0.22.1"
-rodio = "0.20"
+rodio = { version = "0.20", default-features = false, features = ["flac", "vorbis", "wav", "mp3", "symphonia-aac", "symphonia-aiff", "symphonia-alac", "symphonia-isomp4"] }
+symphonia = { version = "0.5.5", default-features = false, features = ["aac", "adpcm", "aiff", "alac", "flac", "isomp4", "mp3", "ogg", "pcm", "vorbis", "wav"] }
 image = { version = "0.25", features = ["jpeg", "png", "webp"] }
 urlencoding = "2"
 rusqlite = { version = "0.38.0", features = ["bundled"] }
@@ -47,4 +48,3 @@ windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_Wind
 # 👇 新增：让依赖库在开发模式下也全速运行
 [profile.dev.package."*"]
 opt-level = 3
-

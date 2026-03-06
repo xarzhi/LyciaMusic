@@ -1,3 +1,4 @@
+use crate::music::utils::is_supported_library_extension;
 use lofty::prelude::*;
 use lofty::probe::Probe;
 use regex::Regex;
@@ -163,7 +164,6 @@ pub fn preview_rename(
     config: RenameConfig,
 ) -> Result<Vec<RenamePreview>, String> {
     let mut results = Vec::new();
-    let supported_exts = ["mp3", "flac", "wav", "m4a", "ogg"];
 
     for entry in WalkDir::new(root_path)
         .max_depth(1)
@@ -173,7 +173,8 @@ pub fn preview_rename(
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
-                if supported_exts.contains(&ext.to_string_lossy().to_lowercase().as_str()) {
+                let ext = ext.to_string_lossy().to_lowercase();
+                if is_supported_library_extension(&ext) {
                     results.push(process_file(path, &config));
                 }
             }

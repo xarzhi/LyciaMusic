@@ -1,15 +1,23 @@
 // music/scanner.rs - 扫描逻辑
 
 use super::types::{FolderNode, GeneratedFolder, Song};
-use super::utils::{descendant_like_patterns, normalize_path};
+use super::utils::{descendant_like_patterns, is_supported_library_extension, normalize_path};
 use crate::database::DbState;
+use lofty::file::FileType;
 use lofty::prelude::*;
 use lofty::probe::Probe;
 use rusqlite::{params, OptionalExtension};
 use std::collections::HashMap;
 use std::fs;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use symphonia::core::codecs::CODEC_TYPE_NULL;
+use symphonia::core::formats::FormatOptions;
+use symphonia::core::io::MediaSourceStream;
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::probe::Hint;
 use tauri::{AppHandle, State};
 use walkdir::WalkDir;
 
@@ -26,6 +34,12 @@ struct ScanDiff {
     to_update: Vec<Song>,
     to_delete: Vec<String>,
     has_disk_songs: bool,
+}
+
+#[derive(Default)]
+struct AudioIdentity {
+    container: Option<String>,
+    codec: Option<String>,
 }
 
 fn clamp_i64_to_u32(v: i64) -> u32 {
@@ -70,6 +84,7 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
     let mut bit_depth: Option<u8> = None;
     let mut file_size = 0u64;
     let mut file_modified_at: Option<u64> = None;
+    let identity = detect_audio_identity(path, format);
 
     if let Ok(meta) = fs::metadata(path) {
         file_size = meta.len();
@@ -117,6 +132,8 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
         sample_rate,
         bit_depth,
         format: format.to_string(),
+        container: identity.container,
+        codec: identity.codec,
         file_size,
         added_at: Some(
             std::time::SystemTime::now()
@@ -128,6 +145,74 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
     })
 }
 
+fn normalize_container(file_type: FileType) -> &'static str {
+    match file_type {
+        FileType::Aac => "aac",
+        FileType::Aiff => "aiff",
+        FileType::Ape => "ape",
+        FileType::Flac => "flac",
+        FileType::Mpeg => "mpeg",
+        FileType::Mp4 => "mp4",
+        FileType::Mpc => "mpc",
+        FileType::Opus | FileType::Speex | FileType::Vorbis => "ogg",
+        FileType::Wav => "wav",
+        FileType::WavPack => "wavpack",
+        FileType::Custom(name) => name,
+        _ => "unknown",
+    }
+}
+
+fn detect_container(path: &Path) -> Option<String> {
+    let file = File::open(path).ok()?;
+    let reader = BufReader::new(file);
+    let probe = Probe::new(reader).guess_file_type().ok()?;
+    let file_type = probe.file_type()?;
+    Some(normalize_container(file_type).to_string())
+}
+
+fn normalize_codec(short_name: &str) -> String {
+    let codec = short_name.to_ascii_lowercase();
+    if codec.starts_with("pcm_") {
+        "pcm".to_string()
+    } else if codec.starts_with("adpcm_") {
+        "adpcm".to_string()
+    } else {
+        codec
+    }
+}
+
+fn detect_codec(path: &Path, ext: &str) -> Option<String> {
+    let file = File::open(path).ok()?;
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+    let mut hint = Hint::new();
+    hint.with_extension(ext);
+
+    let probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .ok()?;
+
+    let track = probed
+        .format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)?;
+
+    let descriptor = symphonia::default::get_codecs().get_codec(track.codec_params.codec)?;
+    Some(normalize_codec(descriptor.short_name))
+}
+
+fn detect_audio_identity(path: &Path, ext: &str) -> AudioIdentity {
+    AudioIdentity {
+        container: detect_container(path),
+        codec: detect_codec(path, ext),
+    }
+}
+
 fn load_db_snapshot_for_folder(
     conn: &rusqlite::Connection,
     normalized_folder: &str,
@@ -137,7 +222,7 @@ fn load_db_snapshot_for_folder(
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at, file_modified_at
+            "SELECT id, path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, container, codec, file_size, added_at, file_modified_at
              FROM songs
              WHERE path = ?1
                 OR path LIKE ?2 ESCAPE '^'
@@ -154,9 +239,9 @@ fn load_db_snapshot_for_folder(
                 let bitrate = clamp_i64_to_u32(row.get::<_, Option<i64>>(7)?.unwrap_or(0));
                 let sample_rate = clamp_i64_to_u32(row.get::<_, Option<i64>>(8)?.unwrap_or(0));
                 let bit_depth = i64_to_u8_opt(row.get::<_, Option<i64>>(9)?);
-                let file_size_i64 = row.get::<_, Option<i64>>(11)?.unwrap_or(0).max(0);
-                let added_at_i64 = row.get::<_, Option<i64>>(12)?;
-                let file_modified_at_i64 = row.get::<_, Option<i64>>(13)?;
+                let file_size_i64 = row.get::<_, Option<i64>>(13)?.unwrap_or(0).max(0);
+                let added_at_i64 = row.get::<_, Option<i64>>(14)?;
+                let file_modified_at_i64 = row.get::<_, Option<i64>>(15)?;
 
                 let name = Path::new(&path)
                     .file_name()
@@ -181,6 +266,8 @@ fn load_db_snapshot_for_folder(
                             sample_rate,
                             bit_depth,
                             format: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
+                            container: row.get::<_, Option<String>>(11)?,
+                            codec: row.get::<_, Option<String>>(12)?,
                             file_size: file_size_i64 as u64,
                             added_at: i64_to_u64_opt(added_at_i64),
                             file_modified_at: i64_to_u64_opt(file_modified_at_i64),
@@ -207,6 +294,18 @@ fn collect_scan_diff(
     let mut to_update: Vec<Song> = Vec::new();
     let mut has_disk_songs = false;
 
+    fn song_identity_missing(song: &Song) -> bool {
+        song.container
+            .as_deref()
+            .map(|v| v.trim().is_empty())
+            .unwrap_or(true)
+            || song
+                .codec
+                .as_deref()
+                .map(|v| v.trim().is_empty())
+                .unwrap_or(true)
+    }
+
     for entry in WalkDir::new(normalized_folder)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -221,7 +320,7 @@ fn collect_scan_diff(
             None => continue,
         };
 
-        if !["mp3", "flac", "wav"].contains(&ext.as_str()) {
+        if !is_supported_library_extension(&ext) {
             continue;
         }
         has_disk_songs = true;
@@ -243,7 +342,10 @@ fn collect_scan_diff(
         };
 
         if let Some(db_info) = db_snapshot.remove(&path_str) {
-            if db_info.file_modified_at != disk_mtime || db_info.file_size != disk_size {
+            if db_info.file_modified_at != disk_mtime
+                || db_info.file_size != disk_size
+                || song_identity_missing(&db_info.song)
+            {
                 if let Some(song) = parse_song_from_file(path, &path_str, &ext) {
                     to_update.push(song.clone());
                     songs.push(song);
@@ -283,8 +385,8 @@ fn apply_scan_changes(
     {
         let mut insert_stmt = tx
             .prepare(
-                "INSERT INTO songs (path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, file_size, added_at, file_modified_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                "INSERT INTO songs (path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, container, codec, file_size, added_at, file_modified_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
                  ON CONFLICT(path) DO UPDATE SET
                     title = excluded.title,
                     artist = excluded.artist,
@@ -295,6 +397,8 @@ fn apply_scan_changes(
                     sample_rate = excluded.sample_rate,
                     bit_depth = excluded.bit_depth,
                     format = excluded.format,
+                    container = excluded.container,
+                    codec = excluded.codec,
                     file_size = excluded.file_size,
                     added_at = COALESCE(songs.added_at, excluded.added_at),
                     file_modified_at = excluded.file_modified_at",
@@ -317,6 +421,8 @@ fn apply_scan_changes(
                     song.sample_rate as i64,
                     song.bit_depth.map(|v| v as i64),
                     &song.format,
+                    &song.container,
+                    &song.codec,
                     file_size_i64,
                     added_at_i64,
                     mtime_i64
@@ -333,13 +439,15 @@ fn apply_scan_changes(
                      artist = ?2,
                      album = ?3,
                      duration = ?4,
-                     bitrate = ?5,
-                     sample_rate = ?6,
-                     bit_depth = ?7,
-                     format = ?8,
-                     file_size = ?9,
-                     file_modified_at = ?10
-                 WHERE path = ?11",
+                    bitrate = ?5,
+                    sample_rate = ?6,
+                    bit_depth = ?7,
+                    format = ?8,
+                    container = ?9,
+                    codec = ?10,
+                    file_size = ?11,
+                    file_modified_at = ?12
+                 WHERE path = ?13",
             )
             .map_err(|e| e.to_string())?;
 
@@ -356,6 +464,8 @@ fn apply_scan_changes(
                     song.sample_rate as i64,
                     song.bit_depth.map(|v| v as i64),
                     &song.format,
+                    &song.container,
+                    &song.codec,
                     file_size_i64,
                     mtime_i64,
                     &song.path
@@ -566,7 +676,7 @@ pub fn scan_folder_recursive(
             } else if path.is_file() {
                 if let Some(ext) = path.extension() {
                     let ext_str = ext.to_string_lossy().to_lowercase();
-                    if ["mp3", "flac", "wav"].contains(&ext_str.as_str()) {
+                    if is_supported_library_extension(&ext_str) {
                         songs_in_this_dir += 1;
                     }
                 }

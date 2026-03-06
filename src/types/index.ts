@@ -14,6 +14,8 @@ export interface Song {
   sample_rate?: number;
   bit_depth?: number;
   format?: string;
+  container?: string;
+  codec?: string;
   file_size?: number;
   added_at?: number;
   file_modified_at?: number;

@@ -4,9 +4,11 @@ import { computed, ref, onMounted, watch } from 'vue';
 const props = defineProps<{
   flac: number;
   mp3: number;
-  ape: number;
+  alac: number;
   wav: number;
+  aiff: number;
   aac: number;
+  ogg: number;
   other: number;
 }>();
 
@@ -46,7 +48,7 @@ const useAnimatedNumber = (target: number, duration = 1500) => {
 };
 
 // --- 数据计算 ---
-const total = computed(() => props.flac + props.mp3 + props.ape + props.wav + props.aac + props.other);
+const total = computed(() => props.flac + props.mp3 + props.alac + props.wav + props.aiff + props.aac + props.ogg + props.other);
 
 // 原始数据定义
 const rawData = computed(() => [
@@ -71,10 +73,10 @@ const rawData = computed(() => [
     shadowColor: 'rgba(59, 130, 246, 0.5)'
   },
   { 
-    id: 'ape',
-    name: 'APE', 
+    id: 'alac',
+    name: 'ALAC', 
     label: '无损',
-    value: props.ape, 
+    value: props.alac, 
     startColor: '#10b981', // Emerald 500
     endColor: '#34d399',   // Emerald 400
     bgClass: 'bg-gradient-to-br from-emerald-400 to-emerald-600',
@@ -90,15 +92,35 @@ const rawData = computed(() => [
     bgClass: 'bg-gradient-to-br from-violet-400 to-violet-600',
     shadowColor: 'rgba(139, 92, 246, 0.5)'
   },
-  { 
+  {
+    id: 'aiff',
+    name: 'AIFF',
+    label: '鏃犳崯',
+    value: props.aiff,
+    startColor: '#14b8a6',
+    endColor: '#2dd4bf',
+    bgClass: 'bg-gradient-to-br from-teal-400 to-teal-600',
+    shadowColor: 'rgba(20, 184, 166, 0.5)'
+  },
+  {
     id: 'aac',
-    name: 'AAC', 
+    name: 'AAC/MP4',
     label: '有损',
     value: props.aac, 
     startColor: '#ec4899', // Pink 500
     endColor: '#f472b6',   // Pink 400
     bgClass: 'bg-gradient-to-br from-pink-400 to-pink-600',
     shadowColor: 'rgba(236, 72, 153, 0.5)'
+  },
+  {
+    id: 'ogg',
+    name: 'OGG',
+    label: '鏈夋崯',
+    value: props.ogg,
+    startColor: '#6366f1',
+    endColor: '#818cf8',
+    bgClass: 'bg-gradient-to-br from-indigo-400 to-indigo-600',
+    shadowColor: 'rgba(99, 102, 241, 0.5)'
   },
   { 
     id: 'other',

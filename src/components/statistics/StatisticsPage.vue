@@ -69,9 +69,11 @@ const expandedCard = ref<string | null>(null);
 interface FormatDistribution {
   flac: number;
   mp3: number;
-  ape: number;
+  alac: number;
   wav: number;
+  aiff: number;
   aac: number;
+  ogg: number;
   other: number;
 }
 const formatDistribution = ref<FormatDistribution | null>(null);
@@ -356,9 +358,11 @@ onMounted(async () => {
             <FormatPieChart
               :flac="formatDistribution.flac"
               :mp3="formatDistribution.mp3"
-              :ape="formatDistribution.ape"
+              :alac="formatDistribution.alac"
               :wav="formatDistribution.wav"
+              :aiff="formatDistribution.aiff"
               :aac="formatDistribution.aac"
+              :ogg="formatDistribution.ogg"
               :other="formatDistribution.other"
             />
           </div>

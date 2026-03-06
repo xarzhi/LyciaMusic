@@ -31,7 +31,15 @@ impl DbState {
                 album TEXT,
                 duration INTEGER,
                 cover_path TEXT,
-                added_at INTEGER
+                bitrate INTEGER,
+                sample_rate INTEGER,
+                bit_depth INTEGER,
+                format TEXT,
+                container TEXT,
+                codec TEXT,
+                file_size INTEGER,
+                added_at INTEGER,
+                file_modified_at INTEGER
             )",
             [],
         )
@@ -103,6 +111,14 @@ impl DbState {
         }
         if !columns.contains(&"format".to_string()) {
             conn.execute("ALTER TABLE songs ADD COLUMN format TEXT", [])
+                .ok();
+        }
+        if !columns.contains(&"container".to_string()) {
+            conn.execute("ALTER TABLE songs ADD COLUMN container TEXT", [])
+                .ok();
+        }
+        if !columns.contains(&"codec".to_string()) {
+            conn.execute("ALTER TABLE songs ADD COLUMN codec TEXT", [])
                 .ok();
         }
         if !columns.contains(&"file_size".to_string()) {

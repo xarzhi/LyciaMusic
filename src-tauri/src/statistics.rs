@@ -1,5 +1,5 @@
 use crate::database::DbState;
-use crate::music::utils::normalize_path;
+use crate::music::utils::{format_distribution_bucket, is_lossless_audio, normalize_path};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
@@ -18,12 +18,6 @@ fn is_invalid_name(name: &str) -> bool {
         || normalized == "unknown"
         || normalized == "unknown album"
         || normalized == "unknown artist"
-}
-
-/// 判断是否为无损格式
-fn is_lossless_format(format: &str) -> bool {
-    let f = format.to_lowercase();
-    f == "flac" || f == "wav" || f == "alac" || f == "ape" || f == "dsd"
 }
 
 /// 判断是否为 Hi-Res (24bit + >=48kHz)
@@ -62,9 +56,11 @@ pub struct QualityDistribution {
 pub struct FormatDistribution {
     pub flac: i64,
     pub mp3: i64,
-    pub ape: i64,
+    pub alac: i64,
     pub wav: i64,
+    pub aiff: i64,
     pub aac: i64,
+    pub ogg: i64,
     pub other: i64,
 }
 
@@ -74,28 +70,37 @@ pub fn get_format_distribution(db: State<DbState>) -> Result<FormatDistribution,
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     let mut stmt = conn
-        .prepare("SELECT format FROM songs")
+        .prepare("SELECT format, container, codec FROM songs")
         .map_err(|e| e.to_string())?;
 
     let rows = stmt
-        .query_map([], |row| Ok(row.get::<_, String>(0).unwrap_or_default()))
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0).unwrap_or_default(),
+                row.get::<_, Option<String>>(1).ok().flatten(),
+                row.get::<_, Option<String>>(2).ok().flatten(),
+            ))
+        })
         .map_err(|e| e.to_string())?;
 
     let mut flac = 0i64;
     let mut mp3 = 0i64;
-    let mut ape = 0i64;
+    let mut alac = 0i64;
     let mut wav = 0i64;
+    let mut aiff = 0i64;
     let mut aac = 0i64;
+    let mut ogg = 0i64;
     let mut other = 0i64;
 
     for row in rows.flatten() {
-        let format = row.to_lowercase();
-        match format.as_str() {
+        match format_distribution_bucket(row.1.as_deref(), row.2.as_deref(), &row.0) {
             "flac" => flac += 1,
             "mp3" => mp3 += 1,
-            "ape" => ape += 1,
+            "alac" => alac += 1,
             "wav" => wav += 1,
-            "aac" | "m4a" => aac += 1,
+            "aiff" => aiff += 1,
+            "aac" => aac += 1,
+            "ogg" => ogg += 1,
             _ => other += 1,
         }
     }
@@ -103,9 +108,11 @@ pub fn get_format_distribution(db: State<DbState>) -> Result<FormatDistribution,
     Ok(FormatDistribution {
         flac,
         mp3,
-        ape,
+        alac,
         wav,
+        aiff,
         aac,
+        ogg,
         other,
     })
 }
@@ -116,16 +123,17 @@ pub fn get_quality_distribution(db: State<DbState>) -> Result<QualityDistributio
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     let mut stmt = conn
-        .prepare("SELECT format, bit_depth, sample_rate, bitrate FROM songs")
+        .prepare("SELECT format, codec, bit_depth, sample_rate, bitrate FROM songs")
         .map_err(|e| e.to_string())?;
 
     let rows = stmt
         .query_map([], |row| {
             Ok((
                 row.get::<_, String>(0).unwrap_or_default(),
-                row.get::<_, Option<i64>>(1).ok().flatten(),
-                row.get::<_, i64>(2).unwrap_or(0),
+                row.get::<_, Option<String>>(1).ok().flatten(),
+                row.get::<_, Option<i64>>(2).ok().flatten(),
                 row.get::<_, i64>(3).unwrap_or(0),
+                row.get::<_, i64>(4).unwrap_or(0),
             ))
         })
         .map_err(|e| e.to_string())?;
@@ -136,8 +144,8 @@ pub fn get_quality_distribution(db: State<DbState>) -> Result<QualityDistributio
     let mut other = 0i64;
 
     for row in rows.flatten() {
-        let (format, bit_depth, sample_rate, bitrate) = row;
-        let is_lossless = is_lossless_format(&format);
+        let (format, codec, bit_depth, sample_rate, bitrate) = row;
+        let is_lossless = is_lossless_audio(codec.as_deref(), &format);
         let is_hr = is_hires(bit_depth, sample_rate);
 
         if is_lossless && is_hr {
@@ -204,14 +212,15 @@ pub fn get_library_stats(db: State<DbState>) -> Result<LibraryStats, String> {
     // 无损数量 + Hi-Res 数量
     let (lossless_count, hires_count): (i64, i64) = {
         let mut stmt = conn
-            .prepare("SELECT format, bit_depth, sample_rate FROM songs")
+            .prepare("SELECT format, codec, bit_depth, sample_rate FROM songs")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0).unwrap_or_default(),
-                    row.get::<_, Option<i64>>(1).ok().flatten(),
-                    row.get::<_, i64>(2).unwrap_or(0),
+                    row.get::<_, Option<String>>(1).ok().flatten(),
+                    row.get::<_, Option<i64>>(2).ok().flatten(),
+                    row.get::<_, i64>(3).unwrap_or(0),
                 ))
             })
             .map_err(|e| e.to_string())?;
@@ -219,11 +228,11 @@ pub fn get_library_stats(db: State<DbState>) -> Result<LibraryStats, String> {
         let mut lossless = 0i64;
         let mut hires = 0i64;
         for row in rows.flatten() {
-            if is_lossless_format(&row.0) {
+            if is_lossless_audio(row.1.as_deref(), &row.0) {
                 lossless += 1;
-            }
-            if is_hires(row.1, row.2) {
-                hires += 1;
+                if is_hires(row.2, row.3) {
+                    hires += 1;
+                }
             }
         }
         (lossless, hires)

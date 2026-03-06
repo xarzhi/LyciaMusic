@@ -20,6 +20,8 @@ pub struct Song {
     pub sample_rate: u32,
     pub bit_depth: Option<u8>,
     pub format: String,
+    pub container: Option<String>,
+    pub codec: Option<String>,
     pub file_size: u64,
     pub added_at: Option<u64>,
     pub file_modified_at: Option<u64>,

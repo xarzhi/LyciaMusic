@@ -247,6 +247,8 @@ const getRowStyle = (songIndex: number, songPath: string) => {
               :sample-rate="song.sample_rate || 0"
               :bit-depth="song.bit_depth || 0"
               :format="song.format || ''"
+              :codec="song.codec || ''"
+              :container="song.container || ''"
             />
             <span class="truncate">{{ song.artist }}</span>
           </div>

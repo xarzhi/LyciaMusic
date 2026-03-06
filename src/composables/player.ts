@@ -6,6 +6,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import * as State from './playerState';
 export * from './playerState';
 import { useLyrics } from './lyrics';
+import { useSettings as useAppSettings } from './settings';
 import { useToast } from './toast';
 import { extractDominantColors } from './colorExtraction';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -70,6 +71,7 @@ export function usePlayer() {
 
 
   const { loadLyrics } = useLyrics();
+  const { settings: appSettings } = useAppSettings();
 
 
 
@@ -121,14 +123,122 @@ export function usePlayer() {
     }
   }
 
+  async function addLibraryFolderRecord(path: string) {
+    await invoke('add_library_folder', { path });
+    await fetchLibraryFolders();
+    await scanLibrary();
+  }
+
+  async function addSidebarFolderRecord(path: string) {
+    await invoke('add_sidebar_folder', { path });
+    await invoke('scan_music_folder', { folderPath: path });
+    await fetchSidebarTree();
+  }
+
+  async function removeLibraryFolderRecord(path: string) {
+    await invoke('remove_library_folder', { path });
+    await fetchLibraryFolders();
+    await scanLibrary();
+  }
+
+  async function removeSidebarFolderRecord(path: string) {
+    await invoke('remove_sidebar_folder', { path });
+    await fetchSidebarTree();
+  }
+
+  async function addLibraryFolderLinked(
+    path: string,
+    options: { syncLinked?: boolean; showToast?: boolean } = {}
+  ) {
+    const { syncLinked = true, showToast = false } = options;
+
+    await addLibraryFolderRecord(path);
+
+    if (syncLinked && appSettings.value.linkFoldersToLibrary) {
+      await addSidebarFolderRecord(path);
+    }
+
+    if (showToast) {
+      useToast().showToast(
+        syncLinked && appSettings.value.linkFoldersToLibrary
+          ? "已将文件夹同时添加到本地音乐库和侧边栏"
+          : "宸叉坊鍔犳枃浠跺す鍒伴煶涔愬簱",
+        "success"
+      );
+    }
+  }
+
+  async function removeLibraryFolderLinked(
+    path: string,
+    options: { syncLinked?: boolean; showToast?: boolean } = {}
+  ) {
+    const { syncLinked = true, showToast = true } = options;
+
+    await removeLibraryFolderRecord(path);
+
+    if (syncLinked && appSettings.value.linkFoldersToLibrary) {
+      await removeSidebarFolderRecord(path);
+    }
+
+    if (showToast) {
+      useToast().showToast(
+        syncLinked && appSettings.value.linkFoldersToLibrary
+          ? "已从本地音乐库和侧边栏同步移除文件夹"
+          : "宸茬Щ闄ゆ枃浠跺す",
+        "success"
+      );
+    }
+  }
+
+  async function addSidebarFolderLinked(
+    path: string,
+    options: { syncLinked?: boolean; showToast?: boolean } = {}
+  ) {
+    const { syncLinked = true, showToast = true } = options;
+
+    await addSidebarFolderRecord(path);
+
+    if (syncLinked && appSettings.value.linkFoldersToLibrary) {
+      await addLibraryFolderRecord(path);
+    }
+
+    if (showToast) {
+      useToast().showToast(
+        syncLinked && appSettings.value.linkFoldersToLibrary
+          ? "已将文件夹同时添加到侧边栏和本地音乐库"
+          : "宸叉坊鍔犳枃浠跺す鍒颁晶杈规爮",
+        "success"
+      );
+    }
+  }
+
+  async function removeSidebarFolderLinked(
+    path: string,
+    options: { syncLinked?: boolean; showToast?: boolean } = {}
+  ) {
+    const { syncLinked = true, showToast = true } = options;
+
+    await removeSidebarFolderRecord(path);
+
+    if (syncLinked && appSettings.value.linkFoldersToLibrary) {
+      await removeLibraryFolderRecord(path);
+    }
+
+    if (showToast) {
+      useToast().showToast(
+        syncLinked && appSettings.value.linkFoldersToLibrary
+          ? "已从侧边栏和本地音乐库同步移除文件夹"
+          : "宸茬Щ闄や晶杈规爮鏂囦欢澶?",
+        "success"
+      );
+    }
+  }
+
   async function addLibraryFolder() {
     try {
       const selected = await open({ directory: true, multiple: false, title: '选择音乐文件夹' });
       if (selected && typeof selected === 'string') {
-        await invoke('add_library_folder', { path: selected });
-        await fetchLibraryFolders();
-        await scanLibrary(); // Trigger scan to update songs immediately
-        useToast().showToast("已添加文件夹到音乐库", "success");
+        await addLibraryFolderLinked(selected, { showToast: true });
       }
     } catch (e) {
       console.error("Failed to add library folder:", e);
@@ -148,10 +258,7 @@ export function usePlayer() {
 
   async function removeLibraryFolder(path: string) {
     try {
-      await invoke('remove_library_folder', { path });
-      await fetchLibraryFolders();
-      await scanLibrary(); // Re-scan to remove songs from that folder
-      useToast().showToast("已移除文件夹", "success");
+      await removeLibraryFolderLinked(path);
     } catch (e) {
       console.error("Failed to remove library folder:", e);
     }
@@ -183,7 +290,7 @@ export function usePlayer() {
 
       if (isRoot) {
         // If it's a root, we should remove it from the sidebar list entirely
-        await removeSidebarFolder(path);
+        await removeSidebarFolderLinked(path, { showToast: false });
       } else {
         // If it's a subfolder, just remove it from the tree view optimistically
         removeNodeFromTree(State.folderTree.value, path);
@@ -336,10 +443,16 @@ export function usePlayer() {
     try {
       const selected = await open({ directory: true, multiple: false, title: '添加文件夹到侧边栏' });
       if (selected && typeof selected === 'string') {
+        const shouldLinkToLibrary = appSettings.value.linkFoldersToLibrary;
         await invoke('add_sidebar_folder', { path: selected });
         // 🟢 扫描歌曲到数据库，确保封面可被查询到
         await invoke('scan_music_folder', { folderPath: selected });
         await fetchSidebarTree();
+        if (shouldLinkToLibrary) {
+          await addLibraryFolderPath(selected);
+          useToast().showToast("已添加文件夹到侧边栏，并关联到本地音乐库", "success");
+          return;
+        }
         useToast().showToast("已添加文件夹到侧边栏", "success");
       }
     } catch (e) {
@@ -1685,7 +1798,9 @@ export function usePlayer() {
     // Library
     fetchLibraryFolders,
     addLibraryFolder,
+    addLibraryFolderLinked,
     removeLibraryFolder,
+    removeLibraryFolderLinked,
     scanLibrary,
     // Existing
     playSong,
@@ -1752,7 +1867,9 @@ export function usePlayer() {
     moveFilePhysical, // 🟢 Export
     fetchFolderTree: fetchSidebarTree,
     addSidebarFolder,
+    addSidebarFolderLinked,
     removeSidebarFolder,
+    removeSidebarFolderLinked,
 
     // 🟢 导出排序状态
     folderSortMode: computed(() => State.folderSortMode.value),

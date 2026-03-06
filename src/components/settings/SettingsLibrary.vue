@@ -28,7 +28,7 @@
       </div>
 
       <!-- 全宽添加文件夹按钮 -->
-      <button class="add-folder-btn" @click="addLibraryFolder">
+      <button class="add-folder-btn" @click="handleAddLibraryFolder">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="5" x2="12" y2="19"/>
           <line x1="5" y1="12" x2="19" y2="12"/>
@@ -85,10 +85,11 @@ import { usePlayer } from '../../composables/player';
 import { libraryFolders } from '../../composables/playerState';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useToast } from '../../composables/toast';
 import ConfirmModal from '../overlays/ConfirmModal.vue';
 
-const { addLibraryFolder, removeLibraryFolder, scanLibrary } = usePlayer();
+const { addLibraryFolderLinked, removeLibraryFolderLinked, scanLibrary } = usePlayer();
 const isScanning = ref(false);
 const isDragging = ref(false);
 
@@ -96,6 +97,13 @@ const isDragging = ref(false);
 const showConfirm = ref(false);
 const folderToRemove = ref('');
 const confirmContent = ref('');
+
+const handleAddLibraryFolder = async () => {
+  const selected = await open({ directory: true, multiple: false, title: '选择音乐文件夹' });
+  if (selected && typeof selected === 'string') {
+    await addLibraryFolderLinked(selected, { showToast: true });
+  }
+};
 
 const requestRemove = (path: string) => {
   folderToRemove.value = path;
@@ -106,7 +114,7 @@ const requestRemove = (path: string) => {
 const confirmRemove = async () => {
   showConfirm.value = false;
   if (folderToRemove.value) {
-    await removeLibraryFolder(folderToRemove.value);
+    await removeLibraryFolderLinked(folderToRemove.value);
     folderToRemove.value = '';
   }
 };
@@ -134,7 +142,7 @@ onMounted(async () => {
         // 检查是否为文件夹
         const isDir = await invoke<boolean>('is_directory', { path: p });
         if (isDir) {
-          await invoke('add_library_folder', { path: p });
+          await addLibraryFolderLinked(p);
           added++;
         }
       } catch (e) {
@@ -143,13 +151,7 @@ onMounted(async () => {
     }
     if (added > 0) {
       // 刷新文件夹列表 & 扫描
-      await invoke<any>('get_library_folders').then((folders: any) => {
-        libraryFolders.value = folders;
-      });
-      isScanning.value = true;
-      await scanLibrary();
-      isScanning.value = false;
-      useToast().showToast(`已添加 ${added} 个文件夹到音乐库`, 'success');
+      useToast().showToast(`已导入 ${added} 个文件夹`, 'success');
     } else if (paths.length > 0) {
       useToast().showToast('拖入的不是文件夹，请拖入包含音乐的文件夹', 'error');
     }

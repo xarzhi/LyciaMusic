@@ -212,7 +212,7 @@ const {
   refreshAllFolders,
   deleteFromDisk,
   addSidebarFolder,
-  removeSidebarFolder,
+  removeSidebarFolderLinked,
   refreshFolder,
   folderTree,
   activeRootPath,
@@ -404,7 +404,7 @@ const handleRemoveFolderWithConfirm = (path: string, name?: string) => {
   confirmMessage.value = name ? `确定要移除「${name}」吗？这不会删除本地文件。` : "确定要移除此文件夹吗？这不会删除本地文件。";
   confirmAction.value = async () => {
     const wasActive = activeRootPath.value === path;
-    await removeSidebarFolder(path);
+    await removeSidebarFolderLinked(path);
     if (wasActive) {
       if (folderTree.value.length > 0) {
         activeRootPath.value = folderTree.value[0].path;

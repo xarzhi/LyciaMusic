@@ -11,7 +11,7 @@ const activeTab = ref<'general' | 'theme' | 'toolbox' | 'library' | 'shortcuts' 
 
 const tabs = [
   { id: 'general', name: '常规' },
-  { id: 'theme', name: '主题' },
+  { id: 'theme', name: '外观' },
   { id: 'toolbox', name: '工具箱' },
   { id: 'library', name: '音乐库' }, // Added tab
   { id: 'shortcuts', name: '快捷键' },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useSettings } from '../../composables/settings';
 import { usePlayer } from '../../composables/player';
 import { invoke } from '@tauri-apps/api/core';
@@ -22,6 +22,26 @@ const currentDeviceId = ref('');
 const showDeviceMenu = ref(false);
 const triggerButtonRef = ref<HTMLElement | null>(null);
 const dropdownStyle = ref({});
+const showLyricsSyncOffsetPanel = ref(false);
+
+const lyricsSyncOffsetMs = computed({
+  get: () => Math.round(settings.value.lyricsSyncOffset * 1000),
+  set: (value: number | string) => {
+    const numericValue = typeof value === 'string' ? parseFloat(value) : value;
+    const next = Number.isFinite(numericValue) ? Math.max(-1000, Math.min(1000, numericValue)) : 0;
+    settings.value.lyricsSyncOffset = next / 1000;
+  }
+});
+
+const lyricsSyncOffsetLabel = computed(() => {
+  const offset = lyricsSyncOffsetMs.value;
+  if (offset === 0) return '0 ms';
+  return `${offset > 0 ? '+' : ''}${offset} ms`;
+});
+
+const resetLyricsSyncOffset = () => {
+  lyricsSyncOffsetMs.value = 0;
+};
 
 const fetchDevices = async () => {
   try {
@@ -204,6 +224,73 @@ onMounted(async () => {
                 </div>
               </div>
             </Teleport>
+          </div>
+        </div>
+
+        <div class="border-t border-gray-100/50 dark:border-white/5">
+          <button
+            type="button"
+            @click="showLyricsSyncOffsetPanel = !showLyricsSyncOffsetPanel"
+            class="w-full p-4 flex items-center justify-between gap-4 hover:bg-white/40 dark:hover:bg-white/5 transition-colors text-left"
+          >
+            <div class="min-w-0">
+              <div class="text-sm font-medium text-gray-800 dark:text-gray-200">歌词同步补偿</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                当前值 {{ lyricsSyncOffsetLabel }}，点击展开调节
+              </div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <div class="text-xs font-medium text-gray-600 dark:text-gray-300 tabular-nums">
+                {{ lyricsSyncOffsetLabel }}
+              </div>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4 text-gray-400 transition-transform duration-200"
+                :class="showLyricsSyncOffsetPanel ? 'rotate-180' : ''"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+              </svg>
+            </div>
+          </button>
+          <div v-if="showLyricsSyncOffsetPanel" class="px-4 pb-4">
+            <div class="pt-1 border-t border-gray-100/50 dark:border-white/5">
+        <div class="p-4 hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+          <div class="flex items-start justify-between gap-6">
+            <div>
+              <div class="text-xs text-gray-500 dark:text-gray-400">
+                正值让歌词更晚显示，负值让歌词更早显示。用于修正不同输出设备的播放缓冲差异，默认值为 0 ms。
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 flex items-center gap-4">
+            <input
+              v-model="lyricsSyncOffsetMs"
+              type="range"
+              min="-1000"
+              max="1000"
+              step="10"
+              class="flex-1 h-1.5 accent-[#EC4141] cursor-pointer"
+            />
+            <input
+              v-model="lyricsSyncOffsetMs"
+              type="number"
+              min="-1000"
+              max="1000"
+              step="10"
+              class="w-24 px-3 py-1.5 text-xs rounded border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-gray-200"
+            />
+            <button
+              @click="resetLyricsSyncOffset"
+              class="shrink-0 text-xs px-3 py-1.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded text-gray-600 dark:text-gray-300 hover:text-[#EC4141] hover:border-[#EC4141] transition ml-auto"
+            >
+              恢复默认
+            </button>
+          </div>
+        </div>
+            </div>
           </div>
         </div>
       </div>

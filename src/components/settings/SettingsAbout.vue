@@ -35,7 +35,7 @@ onMounted(async () => {
       </div>
       
       <div class="space-y-1">
-        <h1 class="text-3xl font-bold text-gray-800 dark:text-white tracking-tight">Lycia Music</h1>
+        <h1 class="text-3xl font-bold text-gray-800 dark:text-white tracking-tight">Lycia Player</h1>
         <p class="text-sm font-medium text-gray-500 dark:text-gray-400">v{{ appVersion }}</p>
       </div>
       
@@ -67,7 +67,7 @@ onMounted(async () => {
 
     <!-- Copyright -->
     <div class="text-xs text-gray-400 dark:text-gray-600 mt-8">
-      © 2026 LyciaMusic Developer. All Rights Reserved.
+      © 2026 LyciaPlayer Developer. All Rights Reserved.
     </div>
 
   </div>

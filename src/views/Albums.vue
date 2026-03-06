@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { usePlayer, dragSession } from '../composables/player';
 import { useRouter } from 'vue-router';
-import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 
-const { albumList, viewAlbum, albumSortMode, updateAlbumOrder } = usePlayer();
+const { filteredAlbumList, viewAlbum, albumSortMode, updateAlbumOrder, searchQuery } = usePlayer();
 const router = useRouter();
+const isSearchActive = computed(() => searchQuery.value.trim().length > 0);
 
 import { useCoverCache } from '../composables/useCoverCache';
 
 // 封面图片加载状态管理
 const { coverCache, loadingSet, preloadCovers } = useCoverCache();
 
-watch(() => albumList.value, (newList) => {
+watch(() => filteredAlbumList.value, (newList) => {
   const paths = newList.map((a: any) => a.firstSongPath).filter(Boolean);
   preloadCovers(paths);
 }, { immediate: true });
@@ -33,6 +34,7 @@ const handleSortChange = (mode: 'count' | 'name' | 'custom') => {
 let mouseDownInfo: { x: number, y: number, index: number, album: any } | null = null;
 
 const handleMouseDown = (e: MouseEvent, index: number, album: any) => {
+  if (isSearchActive.value) return;
   if (e.button !== 0) return;
   mouseDownInfo = { x: e.clientX, y: e.clientY, index, album };
 };
@@ -52,10 +54,10 @@ const handleGlobalMouseUp = () => {
   if (dragSession.active && dragSession.type === 'album') {
     if (dragOverName.value && mouseDownInfo) {
       const fromIndex = mouseDownInfo.index;
-      const toIndex = albumList.value.findIndex(a => a.name === dragOverName.value);
+      const toIndex = filteredAlbumList.value.findIndex(a => a.name === dragOverName.value);
       
       if (toIndex !== -1 && fromIndex !== toIndex) {
-        const list = [...albumList.value];
+        const list = [...filteredAlbumList.value];
         const [removed] = list.splice(fromIndex, 1);
         list.splice(toIndex, 0, removed);
         
@@ -135,7 +137,7 @@ onUnmounted(() => {
       <!-- 增加响应式 breakpoint 控制每行显示个数，由 2 列扩增至 7 列 -->
       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-x-6 gap-y-10">
         <div 
-          v-for="(album, index) in albumList" 
+          v-for="(album, index) in filteredAlbumList" 
           :key="album.name"
           @mousedown="handleMouseDown($event, index, album)"
           @mousemove="handleItemMouseMove($event, album.name)"

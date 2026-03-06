@@ -578,6 +578,21 @@ export function usePlayer() {
 
   });
 
+  const filteredArtistList = computed(() => {
+    const query = State.searchQuery.value.trim().toLowerCase();
+    if (!query) return artistList.value;
+    return artistList.value.filter(artist => (artist.name || '').toLowerCase().includes(query));
+  });
+
+  const filteredAlbumList = computed(() => {
+    const query = State.searchQuery.value.trim().toLowerCase();
+    if (!query) return albumList.value;
+    return albumList.value.filter(album =>
+      (album.name || '').toLowerCase().includes(query) ||
+      (album.artist || '').toLowerCase().includes(query)
+    );
+  });
+
 
 
 
@@ -1665,7 +1680,7 @@ export function usePlayer() {
 
   return {
     ...State,
-    artistList, albumList, genreList, yearList, folderList, favoriteSongList, favArtistList, favAlbumList, recentAlbumList, recentPlaylistList, displaySongList, isLocalMusic, isFolderMode,
+    artistList, albumList, filteredArtistList, filteredAlbumList, genreList, yearList, folderList, favoriteSongList, favArtistList, favAlbumList, recentAlbumList, recentPlaylistList, displaySongList, isLocalMusic, isFolderMode,
     init, formatDuration, formatTimeAgo,
     // Library
     fetchLibraryFolders,

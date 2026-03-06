@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { usePlayer, dragSession } from '../composables/player';
 import { useRouter } from 'vue-router';
-import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useCoverCache } from '../composables/useCoverCache';
 
-const { artistList, viewArtist, artistSortMode, updateArtistOrder } = usePlayer();
+const { filteredArtistList, viewArtist, artistSortMode, updateArtistOrder, searchQuery } = usePlayer();
 const router = useRouter();
+const isSearchActive = computed(() => searchQuery.value.trim().length > 0);
 
 const showSortMenu = ref(false);
 const dragOverName = ref<string | null>(null);
@@ -23,7 +24,7 @@ const handleSortChange = (mode: 'count' | 'name' | 'custom') => {
 // --- Cover Cache ---
 const { coverCache, loadingSet, preloadCovers } = useCoverCache();
 
-watch(() => artistList.value, (newList) => {
+watch(() => filteredArtistList.value, (newList) => {
   const paths = newList.map((a: any) => a.firstSongPath).filter(Boolean);
   preloadCovers(paths);
 }, { immediate: true });
@@ -53,6 +54,7 @@ const getGradientForArtist = (name: string) => {
 let mouseDownInfo: { x: number, y: number, index: number, artist: any } | null = null;
 
 const handleMouseDown = (e: MouseEvent, index: number, artist: any) => {
+  if (isSearchActive.value) return;
   if (e.button !== 0) return;
   mouseDownInfo = { x: e.clientX, y: e.clientY, index, artist };
 };
@@ -72,10 +74,10 @@ const handleGlobalMouseUp = () => {
   if (dragSession.active && dragSession.type === 'artist') {
     if (dragOverName.value && mouseDownInfo) {
       const fromIndex = mouseDownInfo.index;
-      const toIndex = artistList.value.findIndex(a => a.name === dragOverName.value);
+      const toIndex = filteredArtistList.value.findIndex(a => a.name === dragOverName.value);
       
       if (toIndex !== -1 && fromIndex !== toIndex) {
-        const list = [...artistList.value];
+        const list = [...filteredArtistList.value];
         const [removed] = list.splice(fromIndex, 1);
         list.splice(toIndex, 0, removed);
         
@@ -164,7 +166,7 @@ onUnmounted(() => {
       <!-- Grid 布局 -->
       <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-6 gap-y-4">
         <div 
-          v-for="(artist, index) in artistList" 
+          v-for="(artist, index) in filteredArtistList" 
           :key="artist.name"
           @mousedown="handleMouseDown($event, index, artist)"
           @mousemove="handleItemMouseMove($event, artist.name)"

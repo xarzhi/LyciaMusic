@@ -224,7 +224,7 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
 <template>
   <div
     class="flex flex-col h-screen w-full text-gray-800 dark:text-gray-200 relative overflow-hidden font-sans"
-    :class="{ 'bg-transparent': isMiniMode }"
+    :class="{ 'bg-transparent border-0': isMiniMode }"
     :style="{ backgroundColor: isMiniMode ? 'transparent' : '' }"
   >
     <transition name="window-restore">
@@ -285,7 +285,17 @@ html.mini-mode-active,
 #app.mini-mode-active {
   background-color: transparent !important;
   background: transparent !important;
+  border-width: 0 !important;
+  outline: none !important;
+  border-style: none !important;
+  box-shadow: none !important;
 }
+
+.mini-mode-active * {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 
 .page-fade-enter-active,
 .page-fade-leave-active {

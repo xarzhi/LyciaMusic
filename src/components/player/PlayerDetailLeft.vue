@@ -61,7 +61,6 @@ const onBigCoverLoad = () => {
   bigCoverLoaded.value = true;
 };
 
-// --- 鏆撮湶灏侀潰 ref 缁欑埗缁勪欢 ---
 const detailCoverRef = ref<HTMLElement | null>(null);
 defineExpose({ detailCoverRef });
 </script>
@@ -72,7 +71,7 @@ defineExpose({ detailCoverRef });
     <!-- Album Art -->
     <div 
       ref="detailCoverRef"
-      class="absolute aspect-square transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] z-50 will-change-transform detail-cover-reflect pointer-events-auto"
+      class="absolute aspect-square transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] z-50 will-change-transform pointer-events-auto"
       :class="props.isExpanded ? 'top-[45%] left-[calc(100px+18%)] -translate-x-1/2 -translate-y-1/2 w-[clamp(220px,45vh,580px)] rounded-2xl' : 'top-[calc(100vh-64px)] left-[16px] translate-x-0 translate-y-0 w-12 rounded-lg pointer-events-none'"
       :style="{ 
         boxShadow: props.isExpanded && isPlaying
@@ -82,16 +81,19 @@ defineExpose({ detailCoverRef });
         opacity: 1,
       }"
     >
-      <div class="w-full h-full rounded-[inherit] overflow-hidden relative isolate">
-        <!-- 鍗犱綅鍥?(灏忓浘) -->
+      <!-- Main Cover Container -->
+      <div class="w-full h-full rounded-[inherit] overflow-hidden relative isolate z-20">
         <img v-if="localCoverUrl" :src="localCoverUrl" class="absolute inset-0 w-full h-full object-cover select-none transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] z-10" :class="props.isExpanded ? 'scale-100' : 'scale-125'" draggable="false" decoding="async" />
-        
-        <!-- 楂樻竻澶у浘 (鍔犺浇瀹屽悗娓愭樉閬洊灞€閮? -->
         <img v-show="bigCoverUrl" :src="bigCoverUrl" @load="onBigCoverLoad" class="absolute inset-0 w-full h-full object-cover select-none transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] z-20" :class="[props.isExpanded ? 'scale-100' : 'scale-125', bigCoverLoaded ? 'opacity-100' : 'opacity-0']" draggable="false" decoding="async" />
-        
-        <!-- 鏃犲浘鏃剁殑榛樿鍙戝厜鍏冪礌 -->
         <div v-if="!localCoverUrl && !bigCoverUrl" class="absolute inset-0 w-full h-full bg-white/5 flex items-center justify-center text-white/10 z-0">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-32 w-32" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+        </div>
+      </div>
+
+      <!-- Glass Table Reflection Layer -->
+      <div v-if="props.isExpanded" class="absolute top-[calc(100%-2px)] left-0 w-full h-[65%] pointer-events-none z-10 reflection-wrapper rounded-[inherit] overflow-hidden">
+        <div class="absolute inset-0 reflection-glass rounded-[inherit] overflow-hidden">
+          <img :src="bigCoverUrl || localCoverUrl" class="absolute top-0 left-0 w-full aspect-square object-cover scale-y-[-1]" />
         </div>
       </div>
     </div>
@@ -108,14 +110,28 @@ defineExpose({ detailCoverRef });
 </template>
 
 <style scoped>
-/* 灏侀潰鍊掑奖鏁堟灉 */
-.detail-cover-reflect {
-  -webkit-box-reflect: below 8px 
-    linear-gradient(
-      to bottom,
-      transparent 0%,
-      rgba(0, 0, 0, 0.15) 35%,
-      transparent 100%
-    );
+.reflection-wrapper {
+  perspective: 1500px;
+  transform-origin: top;
+  /* rotateX(50deg) 让倒影铺在桌面上 */
+  /* skewX(-15deg) 让它变成平行四边形 */
+  /* scale(1.1) 补偿旋转带来的视觉缩小，确保边缘对齐 */
+  transform: rotateX(40deg) skewX(-18deg) scale(1.0);
+  opacity: 0.2;
+}
+
+.reflection-glass {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    rgba(0, 0, 0, 0.5) 30%,
+    transparent 85%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    rgba(0, 0, 0, 0.5) 30%,
+    transparent 85%
+  );
 }
 </style>

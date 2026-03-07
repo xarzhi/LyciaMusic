@@ -83,20 +83,24 @@ async function handleLineClick(event: LyricLineMouseEvent) {
 
 <template>
   <div class="relative w-full h-full min-h-0 min-w-0">
-    <AmlLyricPlayer
+    <div
       v-if="amllLines.length > 0"
-      class="amll-host w-full h-full min-h-0 min-w-0"
-      :lyric-lines="amllLines"
-      :current-time="amllCurrentTime"
-      align-anchor="center"
-      :align-position="0.5"
-      :enable-spring="true"
-      :enable-blur="true"
-      :enable-scale="true"
-      :hide-passed-lines="false"
-      :word-fade-width="0.5"
-      @line-click="handleLineClick"
-    />
+      class="lyrics-mask-shell w-full h-full min-h-0 min-w-0"
+    >
+      <AmlLyricPlayer
+        class="amll-host w-full h-full min-h-0 min-w-0"
+        :lyric-lines="amllLines"
+        :current-time="amllCurrentTime"
+        align-anchor="center"
+        :align-position="0.5"
+        :enable-spring="true"
+        :enable-blur="true"
+        :enable-scale="true"
+        :hide-passed-lines="false"
+        :word-fade-width="0.5"
+        @line-click="handleLineClick"
+      />
+    </div>
 
     <div
       v-else
@@ -108,6 +112,36 @@ async function handleLineClick(event: LyricLineMouseEvent) {
 </template>
 
 <style scoped>
+.lyrics-mask-shell {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  --lyrics-edge-fade: 16%;
+  --lyrics-edge-softness: 7%;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.24) var(--lyrics-edge-softness),
+    black var(--lyrics-edge-fade),
+    black calc(100% - var(--lyrics-edge-fade)),
+    rgba(0, 0, 0, 0.24) calc(100% - var(--lyrics-edge-softness)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.24) var(--lyrics-edge-softness),
+    black var(--lyrics-edge-fade),
+    black calc(100% - var(--lyrics-edge-fade)),
+    rgba(0, 0, 0, 0.24) calc(100% - var(--lyrics-edge-softness)),
+    transparent 100%
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
 .amll-host {
   min-width: 0;
   min-height: 0;

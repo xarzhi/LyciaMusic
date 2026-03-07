@@ -91,7 +91,7 @@ defineExpose({ detailCoverRef });
       </div>
 
       <!-- Glass Table Reflection Layer -->
-      <div v-if="props.isExpanded" class="absolute top-[calc(100%-2px)] left-0 w-full h-[65%] pointer-events-none z-10 reflection-wrapper rounded-[inherit] overflow-hidden">
+      <div v-if="props.isExpanded" class="absolute top-[calc(100%+2px)] left-0 w-full h-[65%] pointer-events-none z-10 reflection-wrapper rounded-[inherit] overflow-hidden">
         <div class="absolute inset-0 reflection-glass rounded-[inherit] overflow-hidden">
           <img :src="bigCoverUrl || localCoverUrl" class="absolute top-0 left-0 w-full aspect-square object-cover scale-y-[-1]" />
         </div>
@@ -116,7 +116,7 @@ defineExpose({ detailCoverRef });
   /* rotateX(50deg) 让倒影铺在桌面上 */
   /* skewX(-15deg) 让它变成平行四边形 */
   /* scale(1.1) 补偿旋转带来的视觉缩小，确保边缘对齐 */
-  transform: rotateX(40deg) skewX(-18deg) scale(1.0);
+  transform: rotateX(40deg) skewX(-18deg) scale(1.01);
   opacity: 0.2;
 }
 

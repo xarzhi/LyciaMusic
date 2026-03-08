@@ -12,6 +12,7 @@ use music::{
     add_library_folder,
     add_sidebar_folder,
     batch_move_music_files,
+    create_folder,
     delete_folder,
     delete_music_file,
     get_folder_first_song, // 🟢 New: Get first song for cover
@@ -165,6 +166,7 @@ pub fn run() {
             add_sidebar_folder,
             remove_sidebar_folder,
             get_sidebar_hierarchy,
+            create_folder,
             delete_folder,
             move_file_to_folder,
             get_folder_first_song,

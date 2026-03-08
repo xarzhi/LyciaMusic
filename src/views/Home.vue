@@ -12,11 +12,13 @@
       @playAll="handlePlayAll"
       @batchPlay="handleBatchPlay"
       @addToPlaylist="showAddToPlaylistModal = true"
-      @batchDelete="requestBatchDelete"
+      @batchDelete="handleFolderBatchDelete"
       @batchMove="handleBatchMove"
       @addFolder="handleAddFolder"
       @refreshFolder="handleRefreshFolder"
       @removeFolder="handleRemoveFolderWithConfirm"
+      @newFolder="handleRootCreateFolderRequest"
+      @deleteFolderDisk="handleRootDeleteFolderRequest"
       @update:activeRootPath="handleActiveRootChange"
       v-model:isManagementMode="isManagementMode"
     />
@@ -146,10 +148,10 @@
     
     <ModernModal 
       :visible="showConfirm" 
-      title="移除歌曲" 
+      :title="confirmTitle" 
       :content="confirmMessage" 
       type="danger" 
-      confirm-text="移除" 
+      :confirm-text="confirmButtonText" 
       @confirm="executeConfirmAction" 
       @cancel="showConfirm = false" 
     />
@@ -161,6 +163,24 @@
       type="danger"
       confirm-text="永久删除"
       @confirm="executeSongPhysicalDelete" 
+    />
+
+    <ModernModal
+      v-model:visible="showFolderDeleteConfirm"
+      title="删除文件夹"
+      :content="`确定要删除文件夹 '${folderToDeletePath}' 吗？这会同时删除该文件夹及其内部所有本地文件。`"
+      type="danger"
+      confirm-text="删除文件夹"
+      @confirm="executeDeleteFolder"
+    />
+
+    <ModernInputModal
+      :visible="showCreateFolderModal"
+      title="新建文件夹"
+      placeholder="输入文件夹名称"
+      confirm-text="创建"
+      @cancel="showCreateFolderModal = false"
+      @confirm="confirmCreateFolder"
     />
     
     <ModernInputModal
@@ -176,6 +196,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { invoke } from '@tauri-apps/api/core';
 import { usePlayer, Song } from '../composables/player';
 import { useToast } from '../composables/toast';
 
@@ -213,11 +234,16 @@ const {
   refreshAllFolders,
   deleteFromDisk,
   addSidebarFolder,
+  createFolder,
+  deleteFolder,
+  expandFolderPath,
+  fetchFolderTree,
   removeSidebarFolderLinked,
   refreshFolder,
   folderTree,
   activeRootPath,
   currentFolderFilter,
+  recentSongs,
   playlists,
   filterCondition
 } = usePlayer();
@@ -260,7 +286,14 @@ const handleActiveRootChange = (path: string | null) => {
   void syncRootSelection(path, { forceRefresh: true });
 };
 
+const skipNextRootSync = ref(false);
+
 watch(activeRootPath, (newPath, oldPath) => {
+  if (skipNextRootSync.value) {
+    skipNextRootSync.value = false;
+    return;
+  }
+
   if (!newPath || newPath === oldPath) {
     return;
   }
@@ -282,12 +315,19 @@ const { handleTableDragStart } = useSongDrag(localSongList, isBatchMode, selecte
 const showAddToPlaylistModal = ref(false);
 const showMoveToFolderModal = ref(false);
 const showConfirm = ref(false);
+const confirmTitle = ref('移除歌曲');
+const confirmButtonText = ref('移除');
 const confirmMessage = ref('');
-const confirmAction = ref<() => void>(() => {});
+const confirmAction = ref<() => void | Promise<void>>(() => {});
 const showContextMenu = ref(false);
 const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 const contextMenuTargetSong = ref<Song | null>(null);
+const showCreateFolderModal = ref(false);
+const createFolderParentPath = ref('');
+const createFolderRootPath = ref<string | null>(null);
+const showFolderDeleteConfirm = ref(false);
+const folderToDeletePath = ref('');
 
 // 重命名相关
 const showRenameModal = ref(false);
@@ -313,6 +353,143 @@ const playlistDetail = computed(() => {
   }
   return null;
 });
+
+const normalizePath = (path: string | null) => (path || '').replace(/\\/g, '/').replace(/\/+$/, '');
+
+const getOwningRootPath = (path: string) => {
+  const normalizedTarget = normalizePath(path);
+  const matchedRoots = folderTree.value
+    .map(node => node.path)
+    .filter(root => {
+      const normalizedRoot = normalizePath(root);
+      return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}/`);
+    })
+    .sort((a, b) => normalizePath(b).length - normalizePath(a).length);
+
+  return matchedRoots[0] || activeRootPath.value || null;
+};
+
+const getRelativeDepth = (rootPath: string, folderPath: string) => {
+  const normalizedRoot = normalizePath(rootPath);
+  const normalizedFolder = normalizePath(folderPath);
+
+  if (!normalizedRoot || normalizedFolder === normalizedRoot) {
+    return 0;
+  }
+
+  if (!normalizedFolder.startsWith(`${normalizedRoot}/`)) {
+    return 0;
+  }
+
+  return normalizedFolder
+    .slice(normalizedRoot.length + 1)
+    .split('/')
+    .filter(Boolean)
+    .length;
+};
+
+const getParentFolderPath = (path: string) => path.replace(/[\\/][^\\/]+$/, '');
+
+const requestCreateFolder = (parentPath: string) => {
+  if (!isManagementMode.value) {
+    return;
+  }
+
+  const rootPath = getOwningRootPath(parentPath);
+  if (rootPath && getRelativeDepth(rootPath, parentPath) + 1 > 3) {
+    useToast().showToast('当前文件夹视图最多支持 3 层嵌套，请不要继续向更深层级新建。', 'info');
+    return;
+  }
+
+  createFolderParentPath.value = parentPath;
+  createFolderRootPath.value = rootPath;
+  showCreateFolderModal.value = true;
+};
+
+const confirmCreateFolder = async (folderName: string) => {
+  if (!createFolderParentPath.value) {
+    return;
+  }
+
+  try {
+    const newFolderPath = await createFolder(createFolderParentPath.value, folderName);
+    await fetchFolderTree();
+
+    if (createFolderRootPath.value) {
+      skipNextRootSync.value = true;
+      activeRootPath.value = createFolderRootPath.value;
+    }
+
+    expandFolderPath(newFolderPath);
+    currentFolderFilter.value = newFolderPath;
+    useToast().showToast(`已创建文件夹：${folderName}`, 'success');
+  } catch (e: any) {
+    useToast().showToast('新建文件夹失败: ' + (e?.message || e), 'error');
+  } finally {
+    showCreateFolderModal.value = false;
+    createFolderParentPath.value = '';
+    createFolderRootPath.value = null;
+  }
+};
+
+const requestDeleteFolder = (folderPath: string) => {
+  if (!isManagementMode.value) {
+    return;
+  }
+
+  folderToDeletePath.value = folderPath;
+  showFolderDeleteConfirm.value = true;
+};
+
+const executeDeleteFolder = async () => {
+  if (!folderToDeletePath.value) {
+    return;
+  }
+
+  const deletedPath = folderToDeletePath.value;
+  const owningRootPath = getOwningRootPath(deletedPath);
+  const deletedRoot = owningRootPath && normalizePath(owningRootPath) === normalizePath(deletedPath);
+  const fallbackPath = deletedRoot
+    ? null
+    : (() => {
+        const parentPath = getParentFolderPath(deletedPath);
+        if (!owningRootPath) {
+          return parentPath || '';
+        }
+        const normalizedRoot = normalizePath(owningRootPath);
+        const normalizedParent = normalizePath(parentPath);
+        return normalizedParent.startsWith(normalizedRoot) ? parentPath : owningRootPath;
+      })();
+
+  try {
+    await deleteFolder(deletedPath);
+    await fetchFolderTree();
+
+    if (deletedRoot) {
+      const nextRoot = folderTree.value[0]?.path || null;
+      if (nextRoot) {
+        await syncRootSelection(nextRoot, { forceRefresh: true });
+      } else {
+        await syncRootSelection(null);
+        songList.value = [];
+      }
+    } else if (fallbackPath) {
+      if (owningRootPath) {
+        skipNextRootSync.value = true;
+        activeRootPath.value = owningRootPath;
+      }
+      expandFolderPath(fallbackPath);
+      currentFolderFilter.value = fallbackPath;
+    }
+
+    useToast().showToast('文件夹已删除', 'success');
+  } catch (e: any) {
+    useToast().showToast('删除文件夹失败: ' + (e?.message || e), 'error');
+  } finally {
+    showFolderDeleteConfirm.value = false;
+    folderToDeletePath.value = '';
+  }
+};
 
 // ========== 业务逻辑处理 ==========
 
@@ -343,11 +520,69 @@ const executeBatchDelete = () => {
   showConfirm.value = false;
 };
 
+const executeBatchPhysicalDelete = async () => {
+  const paths = Array.from(selectedPaths.value);
+  if (paths.length === 0) {
+    return;
+  }
+
+  const deletedPaths = new Set<string>();
+
+  for (const path of paths) {
+    try {
+      await invoke('delete_music_file', { path });
+      deletedPaths.add(path);
+    } catch (e) {
+      console.error('Failed to delete song from disk:', path, e);
+    }
+  }
+
+  if (deletedPaths.size > 0) {
+    songList.value = songList.value.filter(song => !deletedPaths.has(song.path));
+    favoritePaths.value = favoritePaths.value.filter(path => !deletedPaths.has(path));
+    recentSongs.value = recentSongs.value.filter(item => !deletedPaths.has(item.song.path));
+    playlists.value.forEach(playlist => {
+      playlist.songPaths = playlist.songPaths.filter(path => !deletedPaths.has(path));
+    });
+
+    useToast().showToast(`已删除 ${deletedPaths.size} 首本地歌曲`, 'success');
+  }
+
+  const failedCount = paths.length - deletedPaths.size;
+  if (failedCount > 0) {
+    useToast().showToast(`${failedCount} 首歌曲删除失败`, 'error');
+  }
+
+  selectedPaths.value.clear();
+  isBatchMode.value = false;
+  showConfirm.value = false;
+};
+
 const requestBatchDelete = () => {
   if (selectedPaths.value.size === 0) return;
+  confirmTitle.value = '移除歌曲';
+  confirmButtonText.value = '移除';
   confirmMessage.value = `确定要移除选中的 ${selectedPaths.value.size} 首歌曲吗？`;
   confirmAction.value = executeBatchDelete;
   showConfirm.value = true;
+};
+
+const requestBatchPhysicalDelete = () => {
+  if (selectedPaths.value.size === 0) return;
+  confirmTitle.value = '删除本地歌曲';
+  confirmButtonText.value = '删除';
+  confirmMessage.value = `确定要删除选中的 ${selectedPaths.value.size} 首本地歌曲吗？此操作会删除磁盘上的真实文件，且不可恢复。`;
+  confirmAction.value = executeBatchPhysicalDelete;
+  showConfirm.value = true;
+};
+
+const handleFolderBatchDelete = () => {
+  if (isManagementMode.value) {
+    requestBatchPhysicalDelete();
+    return;
+  }
+
+  requestBatchDelete();
 };
 
 const executeConfirmAction = async () => {
@@ -423,6 +658,14 @@ const handleAddFolder = async () => {
   await addSidebarFolder();
 };
 
+const handleRootCreateFolderRequest = (path: string) => {
+  requestCreateFolder(path);
+};
+
+const handleRootDeleteFolderRequest = (path: string) => {
+  requestDeleteFolder(path);
+};
+
 // 刷新单个文件夹
 const handleRefreshFolder = async () => {
   if (currentFolderFilter.value) {
@@ -437,6 +680,8 @@ const handleRefreshFolder = async () => {
 
 // 移除文件夹
 const handleRemoveFolderWithConfirm = (path: string, name?: string) => {
+  confirmTitle.value = '移除文件夹';
+  confirmButtonText.value = '移除';
   confirmMessage.value = name ? `确定要移除「${name}」吗？这不会删除本地文件。` : "确定要移除此文件夹吗？这不会删除本地文件。";
   confirmAction.value = async () => {
     const wasActive = activeRootPath.value === path;

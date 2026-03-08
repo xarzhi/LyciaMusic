@@ -14,8 +14,8 @@ pub use types::*;
 // Re-export commands for lib.rs registration
 pub use covers::{get_song_cover, get_song_cover_thumbnail, run_cache_cleanup};
 pub use files::{
-    batch_move_music_files, delete_folder, delete_music_file, get_song_lyrics, is_directory,
-    move_file_to_folder, move_music_file, show_in_folder,
+    batch_move_music_files, create_folder, delete_folder, delete_music_file, get_song_lyrics,
+    is_directory, move_file_to_folder, move_music_file, show_in_folder,
 };
 pub use library::{
     add_library_folder, get_library_folders, get_library_hierarchy, remove_library_folder,

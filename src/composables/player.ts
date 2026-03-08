@@ -400,6 +400,15 @@ export function usePlayer() {
       // Update Target Folder Count (increment)
       incrementNodeCount(State.folderTree.value, targetFolderPath);
 
+      try {
+        const targetCoverPath = await invoke<string | null>('get_folder_first_song', {
+          folderPath: targetFolderPath
+        });
+        updateFolderCover(State.folderTree.value, targetFolderPath, targetCoverPath);
+      } catch {
+        updateFolderCover(State.folderTree.value, targetFolderPath, null);
+      }
+
     } catch (e) {
       throw e;
     }
@@ -432,14 +441,54 @@ export function usePlayer() {
 
   // --- Sidebar Folder Management (New) ---
 
+  const collectExpandedPaths = (nodes: State.FolderNode[], expanded = new Set<string>()) => {
+    for (const node of nodes) {
+      if (node.is_expanded) {
+        expanded.add(node.path);
+      }
+      if (node.children.length > 0) {
+        collectExpandedPaths(node.children, expanded);
+      }
+    }
+    return expanded;
+  };
+
+  const applyExpandedPaths = (nodes: State.FolderNode[], expandedPaths: Set<string>) => {
+    for (const node of nodes) {
+      node.is_expanded = expandedPaths.has(node.path);
+      if (node.children.length > 0) {
+        applyExpandedPaths(node.children, expandedPaths);
+      }
+    }
+  };
+
+  const expandTreeToPath = (nodes: State.FolderNode[], targetPath: string): boolean => {
+    for (const node of nodes) {
+      if (node.path === targetPath) {
+        return true;
+      }
+      if (node.children.length > 0 && expandTreeToPath(node.children, targetPath)) {
+        node.is_expanded = true;
+        return true;
+      }
+    }
+    return false;
+  };
+
   async function fetchSidebarTree() {
     try {
+      const expandedPaths = collectExpandedPaths(State.folderTree.value);
       // Use NEW command for independent sidebar
       const tree = await invoke<State.FolderNode[]>('get_sidebar_hierarchy');
+      applyExpandedPaths(tree, expandedPaths);
       State.folderTree.value = tree;
     } catch (e) {
       console.error("Failed to fetch sidebar tree:", e);
     }
+  }
+
+  async function createFolder(parentPath: string, folderName: string) {
+    return invoke<string>('create_folder', { parentPath, folderName });
   }
 
   async function addSidebarFolder() {
@@ -1160,6 +1209,15 @@ export function usePlayer() {
       // Update Target Folder Count
       for (let i = 0; i < count; i++) {
         incrementNodeCount(State.folderTree.value, targetFolder);
+      }
+
+      try {
+        const targetCoverPath = await invoke<string | null>('get_folder_first_song', {
+          folderPath: targetFolder
+        });
+        updateFolderCover(State.folderTree.value, targetFolder, targetCoverPath);
+      } catch {
+        updateFolderCover(State.folderTree.value, targetFolder, null);
       }
 
       return count;
@@ -1979,6 +2037,10 @@ export function usePlayer() {
     addSidebarFolderLinked,
     removeSidebarFolder,
     removeSidebarFolderLinked,
+    createFolder,
+    expandFolderPath: (targetPath: string) => {
+      expandTreeToPath(State.folderTree.value, targetPath);
+    },
 
     // 🟢 导出排序状态
     folderSortMode: computed(() => State.folderSortMode.value),

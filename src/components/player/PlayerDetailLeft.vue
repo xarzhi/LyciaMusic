@@ -72,7 +72,7 @@ defineExpose({ detailCoverRef });
     <div 
       ref="detailCoverRef"
       class="absolute aspect-square transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] z-50 will-change-transform pointer-events-auto"
-      :class="props.isExpanded ? 'top-[45%] left-[calc(100px+18%)] -translate-x-1/2 -translate-y-1/2 w-[clamp(220px,45vh,580px)] rounded-2xl' : 'top-[calc(100vh-64px)] left-[16px] translate-x-0 translate-y-0 w-12 rounded-lg pointer-events-none'"
+      :class="props.isExpanded ? 'top-[45%] left-[calc(75px+18%)] -translate-x-1/2 -translate-y-1/2 w-[clamp(220px,45vh,580px)] rounded-2xl' : 'top-[calc(100vh-64px)] left-[16px] translate-x-0 translate-y-0 w-12 rounded-lg pointer-events-none'"
       :style="{ 
         boxShadow: props.isExpanded && isPlaying
           ? `0 30px 60px -12px rgba(0,0,0,0.6), 0 18px 36px -18px rgba(0,0,0,0.7), 0 0 80px -20px ${dominantColors[0]}44` 
@@ -91,11 +91,13 @@ defineExpose({ detailCoverRef });
       </div>
 
       <!-- Glass Table Reflection Layer -->
-      <div v-if="props.isExpanded" class="absolute top-[calc(100%+2px)] left-0 w-full h-[65%] pointer-events-none z-10 reflection-wrapper rounded-[inherit] overflow-hidden">
-        <div class="absolute inset-0 reflection-glass rounded-[inherit] overflow-hidden">
-          <img :src="bigCoverUrl || localCoverUrl" class="absolute top-0 left-0 w-full aspect-square object-cover scale-y-[-1]" />
+      <transition name="reflection-reveal" appear>
+        <div v-if="props.isExpanded" class="absolute top-[calc(100%+2px)] left-0 w-full h-[65%] pointer-events-none z-10 reflection-wrapper rounded-[inherit] overflow-hidden">
+          <div class="absolute inset-0 reflection-glass rounded-[inherit] overflow-hidden">
+            <img :src="bigCoverUrl || localCoverUrl" class="absolute top-0 left-0 w-full aspect-square object-cover scale-y-[-1]" />
+          </div>
         </div>
-      </div>
+      </transition>
     </div>
 
     <FooterContextMenu 
@@ -133,5 +135,36 @@ defineExpose({ detailCoverRef });
     rgba(0, 0, 0, 0.5) 30%,
     transparent 85%
   );
+}
+
+.reflection-reveal-enter-active,
+.reflection-reveal-appear-active {
+  transition:
+    transform 560ms cubic-bezier(0.22, 1, 0.36, 1) 220ms,
+    opacity 420ms ease-out 220ms,
+    filter 560ms cubic-bezier(0.22, 1, 0.36, 1) 220ms;
+}
+
+.reflection-reveal-leave-active {
+  transition:
+    transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 180ms ease-in,
+    filter 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.reflection-reveal-enter-from,
+.reflection-reveal-appear-from,
+.reflection-reveal-leave-to {
+  opacity: 0;
+  filter: blur(10px);
+}
+
+.reflection-reveal-enter-from,
+.reflection-reveal-appear-from {
+  transform: translateY(-18px) rotateX(58deg) skewX(-22deg) scale(0.96);
+}
+
+.reflection-reveal-leave-to {
+  transform: translateY(-10px) rotateX(48deg) skewX(-20deg) scale(0.985);
 }
 </style>

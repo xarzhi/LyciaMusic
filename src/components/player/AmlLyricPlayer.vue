@@ -15,6 +15,7 @@ const props = withDefaults(defineProps<{
   lyricLines?: AmlLyricLine[];
   currentTime?: number;
   wordFadeWidth?: number;
+  lineGap?: number;
 }>(), {
   disabled: false,
   playing: true,
@@ -27,6 +28,7 @@ const props = withDefaults(defineProps<{
   lyricLines: () => [],
   currentTime: 0,
   wordFadeWidth: 0.5,
+  lineGap: 1,
 });
 
 const emit = defineEmits<{
@@ -83,6 +85,7 @@ function applyPlayerProps() {
   player.setEnableScale(props.enableScale);
   player.setHidePassedLines(props.hidePassedLines);
   player.setWordFadeWidth(props.wordFadeWidth);
+  player.setLineGap(props.lineGap);
 
   if (props.playing) {
     player.resume();
@@ -224,6 +227,11 @@ watch(() => props.hidePassedLines, (value) => {
 watch(() => props.wordFadeWidth, (value) => {
   player?.setWordFadeWidth(value);
   queueRecovery('fade-width');
+});
+
+watch(() => props.lineGap, (value) => {
+  player?.setLineGap(value);
+  queueRecovery('line-gap');
 });
 
 watch(() => props.lyricLines, (value) => {

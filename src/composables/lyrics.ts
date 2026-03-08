@@ -1,4 +1,4 @@
-import { ref, computed, reactive } from 'vue';
+import { ref, computed, reactive, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import {
   decryptQrcHex,
@@ -31,13 +31,72 @@ export interface LyricWord {
 
 export type LyricsStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 
-export const lyricsSettings = reactive({
+const LYRICS_SETTINGS_KEY = 'lyrics_settings';
+export const DEFAULT_PLAYER_FONT_SCALE = 1;
+export const MIN_PLAYER_FONT_SCALE = 0.5;
+export const MAX_PLAYER_FONT_SCALE = 1.5;
+export const DEFAULT_PLAYER_LINE_GAP = 1;
+export const MIN_PLAYER_LINE_GAP = 0.5;
+export const MAX_PLAYER_LINE_GAP = 1.5;
+
+export interface LyricsSettings {
+  showTranslation: boolean;
+  showRomaji: boolean;
+  isAlwaysOnTop: boolean;
+  isLocked: boolean;
+  colorScheme: 'default' | 'pink' | 'blue' | 'green';
+  playerFontScale: number;
+  playerLineGap: number;
+}
+
+const defaultLyricsSettings: LyricsSettings = {
   showTranslation: true,
   showRomaji: true,
   isAlwaysOnTop: false,
   isLocked: false,
   colorScheme: 'default' as 'default' | 'pink' | 'blue' | 'green',
-});
+  playerFontScale: DEFAULT_PLAYER_FONT_SCALE,
+  playerLineGap: DEFAULT_PLAYER_LINE_GAP,
+};
+
+function clampPlayerFontScale(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_PLAYER_FONT_SCALE;
+  return Math.min(MAX_PLAYER_FONT_SCALE, Math.max(MIN_PLAYER_FONT_SCALE, value));
+}
+
+function clampPlayerLineGap(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_PLAYER_LINE_GAP;
+  return Math.min(MAX_PLAYER_LINE_GAP, Math.max(MIN_PLAYER_LINE_GAP, value));
+}
+
+export const lyricsSettings = reactive<LyricsSettings>({ ...defaultLyricsSettings });
+
+const storedLyricsSettings = localStorage.getItem(LYRICS_SETTINGS_KEY);
+if (storedLyricsSettings) {
+  try {
+    const parsed = JSON.parse(storedLyricsSettings) as Partial<LyricsSettings>;
+    Object.assign(lyricsSettings, {
+      ...defaultLyricsSettings,
+      ...parsed,
+      playerFontScale: clampPlayerFontScale(parsed.playerFontScale ?? DEFAULT_PLAYER_FONT_SCALE),
+      playerLineGap: clampPlayerLineGap(parsed.playerLineGap ?? DEFAULT_PLAYER_LINE_GAP),
+    });
+  } catch (error) {
+    console.error('Failed to parse lyrics settings:', error);
+  }
+}
+
+watch(
+  lyricsSettings,
+  (nextSettings) => {
+    localStorage.setItem(LYRICS_SETTINGS_KEY, JSON.stringify({
+      ...nextSettings,
+      playerFontScale: clampPlayerFontScale(nextSettings.playerFontScale),
+      playerLineGap: clampPlayerLineGap(nextSettings.playerLineGap),
+    }));
+  },
+  { deep: true }
+);
 
 export const showDesktopLyrics = ref(false);
 const rawLyrics = ref<string>('');
@@ -145,11 +204,11 @@ function mergePreparedLines(lines: PreparedLine[]): LyricLine[] {
     const words = main.words.length > 0
       ? main.words
       : [{
-          text: main.text || translation || romaji || ' ',
-          start: main.startMs / 1000,
-          end: endMs / 1000,
-          romaji: '',
-        }];
+        text: main.text || translation || romaji || ' ',
+        start: main.startMs / 1000,
+        end: endMs / 1000,
+        romaji: '',
+      }];
 
     return {
       time: main.startMs / 1000,

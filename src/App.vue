@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { watch, computed, defineAsyncComponent } from 'vue';
+import { watch, computed, defineAsyncComponent, nextTick } from 'vue';
 import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
 import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
 import { invoke } from '@tauri-apps/api/core';
 import { usePlayer } from './composables/player';
+import { useWindowMaterial } from './composables/windowMaterial';
 import Sidebar from './components/layout/Sidebar.vue';
 import TitleBar from './components/layout/TitleBar.vue';
 import PlayerFooter from './components/layout/PlayerFooter.vue';
@@ -31,10 +32,13 @@ const {
   closeMiniPlaylist,
   showVolumePopover
 } = usePlayer();
+const { activeWindowMaterial, applyWindowMaterial, loadWindowMaterialCapabilities } = useWindowMaterial();
 
 init();
 
 const isFooterVisible = computed(() => playQueue.value.length > 0);
+const hasWindowMaterial = computed(() => activeWindowMaterial.value !== 'none');
+const isMicaWindowMaterial = computed(() => activeWindowMaterial.value === 'mica');
 
 const applyTheme = () => {
   const theme = settings.value.theme;
@@ -58,11 +62,20 @@ const applyTheme = () => {
   }
 };
 
-watch(settings, () => {
-  applyTheme();
-}, { deep: true });
+const syncWindowMaterial = async () => {
+  await nextTick();
+  await applyWindowMaterial(
+    settings.value.theme.windowMaterial,
+    document.documentElement.classList.contains('dark'),
+  );
+};
 
-applyTheme();
+void loadWindowMaterialCapabilities();
+
+watch(settings, async () => {
+  applyTheme();
+  await syncWindowMaterial();
+}, { deep: true, immediate: true });
 
 const handleGlobalAdd = (playlistId: string) => {
   addSongsToPlaylist(playlistId, playlistAddTargetSongs.value);
@@ -76,12 +89,26 @@ const mainBlurStyle = computed(() => {
 
   const { dynamicBgType, mode, customBackground } = settings.value.theme;
 
+  if (isMicaWindowMaterial.value) {
+    if (dynamicBgType === 'flow') {
+      return 'none';
+    }
+
+    if (dynamicBgType === 'blur') {
+      return 'blur(6px)';
+    }
+
+    if (mode === 'custom') {
+      return customBackground.blur <= 0 ? 'none' : `blur(${Math.min(customBackground.blur, 8)}px)`;
+    }
+  }
+
   if (dynamicBgType === 'flow' || dynamicBgType === 'blur') {
-    return 'blur(40px)';
+    return hasWindowMaterial.value ? 'blur(20px)' : 'blur(40px)';
   }
 
   if (mode === 'custom') {
-    const b = customBackground.blur;
+    const b = hasWindowMaterial.value ? Math.min(customBackground.blur, 16) : customBackground.blur;
     return b <= 0 ? 'none' : `blur(${b}px)`;
   }
 
@@ -210,6 +237,7 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
       if (wasMaximized) await appWindow.maximize();
       
       await appWindow.show();
+      await syncWindowMaterial();
     }
   } catch (error: any) {
     console.error('Mini Mode Resize Error:', error);
@@ -237,7 +265,15 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
       <div
         v-if="!isMiniMode"
         class="flex-1 flex overflow-hidden relative z-10 transition-colors duration-500"
-        :class="[settings.theme.mode === 'custom' ? 'bg-transparent' : 'bg-white/30 dark:bg-black/60']"
+        :class="[
+          settings.theme.mode === 'custom'
+            ? 'bg-transparent'
+            : isMicaWindowMaterial
+              ? 'bg-white/[0.03] dark:bg-black/[0.06]'
+              : hasWindowMaterial
+              ? 'bg-white/10 dark:bg-black/20'
+              : 'bg-white/30 dark:bg-black/60'
+        ]"
         :style="{ backdropFilter: mainBlurStyle }"
       >
         <Sidebar />

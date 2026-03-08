@@ -97,6 +97,7 @@ export const settings = ref<AppSettings>({
   theme: {
     mode: 'light',
     dynamicBgType: 'flow',
+    windowMaterial: 'none',
     customBgPath: '',
     opacity: 0.8,
     blur: 20,

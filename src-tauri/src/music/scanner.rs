@@ -18,8 +18,12 @@ use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
+use symphonia::core::units::TimeBase;
 use tauri::{AppHandle, State};
 use walkdir::WalkDir;
+
+const UNKNOWN_ARTIST: &str = "未知歌手";
+const UNKNOWN_ALBUM: &str = "未知专辑";
 
 /// 数据库中歌曲的快照信息
 struct DbSongSnapshot {
@@ -40,6 +44,9 @@ struct ScanDiff {
 struct AudioIdentity {
     container: Option<String>,
     codec: Option<String>,
+    duration_seconds: Option<u32>,
+    sample_rate: Option<u32>,
+    bit_depth: Option<u8>,
 }
 
 fn clamp_i64_to_u32(v: i64) -> u32 {
@@ -71,6 +78,97 @@ fn u64_to_i64_saturated(v: u64) -> i64 {
 
 fn u64_opt_to_i64_saturated(v: Option<u64>) -> Option<i64> {
     v.map(u64_to_i64_saturated)
+}
+
+fn is_missing_text(value: &str, placeholder: &str) -> bool {
+    let trimmed = value.trim();
+    trimmed.is_empty() || trimmed == placeholder
+}
+
+fn pick_tag_value(current: &str, candidate: Option<&str>, placeholder: &str) -> Option<String> {
+    if !is_missing_text(current, placeholder) {
+        return None;
+    }
+
+    candidate
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn pick_optional_tag_value(current: &str, candidate: Option<&str>) -> Option<String> {
+    if !current.trim().is_empty() {
+        return None;
+    }
+
+    candidate
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn fill_text_fields_from_tag(
+    tag: &lofty::tag::Tag,
+    artist: &mut String,
+    album: &mut String,
+    title: &mut String,
+) {
+    if let Some(value) = pick_tag_value(artist, tag.artist().as_deref(), UNKNOWN_ARTIST) {
+        *artist = value;
+    }
+
+    if let Some(value) = pick_tag_value(album, tag.album().as_deref(), UNKNOWN_ALBUM) {
+        *album = value;
+    }
+
+    if let Some(value) = pick_optional_tag_value(title, tag.title().as_deref()) {
+        *title = value;
+    }
+}
+
+fn fill_text_fields_from_tags(
+    tagged_file: &impl lofty::file::TaggedFileExt,
+    artist: &mut String,
+    album: &mut String,
+    title: &mut String,
+) {
+    if let Some(primary_tag) = tagged_file.primary_tag() {
+        fill_text_fields_from_tag(primary_tag, artist, album, title);
+    }
+
+    for tag in tagged_file.tags() {
+        fill_text_fields_from_tag(tag, artist, album, title);
+
+        if !is_missing_text(artist, UNKNOWN_ARTIST)
+            && !is_missing_text(album, UNKNOWN_ALBUM)
+            && !title.trim().is_empty()
+        {
+            break;
+        }
+    }
+}
+
+fn duration_seconds_from_timebase(time_base: TimeBase, frames: u64) -> u32 {
+    let time = time_base.calc_time(frames);
+    let rounded = time.seconds.saturating_add(u64::from(time.frac > 0.0));
+    rounded.min(u32::MAX as u64) as u32
+}
+
+fn derive_bitrate_kbps(file_size: u64, duration: u32) -> u32 {
+    if file_size == 0 || duration == 0 {
+        return 0;
+    }
+
+    let bits = (file_size as u128).saturating_mul(8);
+    let kbps = bits / (duration as u128) / 1000;
+    kbps.min(u32::MAX as u128) as u32
+}
+
+fn song_metadata_incomplete(song: &Song) -> bool {
+    is_missing_text(&song.artist, UNKNOWN_ARTIST)
+        || is_missing_text(&song.album, UNKNOWN_ALBUM)
+        || song.title.trim().is_empty()
+        || song.duration == 0
 }
 
 /// 从文件解析歌曲信息
@@ -106,17 +204,20 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
         sample_rate = props.sample_rate().unwrap_or(0);
         bit_depth = props.bit_depth().map(|b| b as u8);
 
-        if let Some(tag) = tagged_file.primary_tag() {
-            if let Some(art) = tag.artist() {
-                artist = art.to_string();
-            }
-            if let Some(alb) = tag.album() {
-                album = alb.to_string();
-            }
-            if let Some(tit) = tag.title() {
-                title = tit.to_string();
-            }
-        }
+        fill_text_fields_from_tags(&tagged_file, &mut artist, &mut album, &mut title);
+    }
+
+    if duration == 0 {
+        duration = identity.duration_seconds.unwrap_or(0);
+    }
+    if sample_rate == 0 {
+        sample_rate = identity.sample_rate.unwrap_or(0);
+    }
+    if bit_depth.is_none() {
+        bit_depth = identity.bit_depth;
+    }
+    if bitrate == 0 {
+        bitrate = derive_bitrate_kbps(file_size, duration);
     }
 
     Some(Song {
@@ -206,10 +307,61 @@ fn detect_codec(path: &Path, ext: &str) -> Option<String> {
     Some(normalize_codec(descriptor.short_name))
 }
 
+fn detect_stream_details(path: &Path, ext: &str) -> (Option<u32>, Option<u32>, Option<u8>) {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return (None, None, None),
+    };
+
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+    let mut hint = Hint::new();
+    hint.with_extension(ext);
+
+    let probed = match symphonia::default::get_probe().format(
+        &hint,
+        mss,
+        &FormatOptions::default(),
+        &MetadataOptions::default(),
+    ) {
+        Ok(probed) => probed,
+        Err(_) => return (None, None, None),
+    };
+
+    let track = match probed
+        .format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+    {
+        Some(track) => track,
+        None => return (None, None, None),
+    };
+
+    let duration_seconds = match (track.codec_params.time_base, track.codec_params.n_frames) {
+        (Some(time_base), Some(frames)) if frames > 0 => {
+            Some(duration_seconds_from_timebase(time_base, frames))
+        }
+        _ => None,
+    };
+    let sample_rate = track.codec_params.sample_rate;
+    let bit_depth = track
+        .codec_params
+        .bits_per_sample
+        .or(track.codec_params.bits_per_coded_sample)
+        .and_then(|depth| u8::try_from(depth).ok());
+
+    (duration_seconds, sample_rate, bit_depth)
+}
+
 fn detect_audio_identity(path: &Path, ext: &str) -> AudioIdentity {
+    let (duration_seconds, sample_rate, bit_depth) = detect_stream_details(path, ext);
+
     AudioIdentity {
         container: detect_container(path),
         codec: detect_codec(path, ext),
+        duration_seconds,
+        sample_rate,
+        bit_depth,
     }
 }
 
@@ -345,6 +497,7 @@ fn collect_scan_diff(
             if db_info.file_modified_at != disk_mtime
                 || db_info.file_size != disk_size
                 || song_identity_missing(&db_info.song)
+                || song_metadata_incomplete(&db_info.song)
             {
                 if let Some(song) = parse_song_from_file(path, &path_str, &ext) {
                     to_update.push(song.clone());

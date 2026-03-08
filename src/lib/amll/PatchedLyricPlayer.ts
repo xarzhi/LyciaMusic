@@ -1,6 +1,8 @@
 import { DomLyricPlayer } from '@applemusic-like-lyrics/core';
 
 export class PatchedLyricPlayer extends DomLyricPlayer {
+  private lineGap = 1;
+
   private clamp(min: number, value: number, max: number) {
     return Math.max(min, Math.min(value, max));
   }
@@ -237,6 +239,22 @@ export class PatchedLyricPlayer extends DomLyricPlayer {
     return Math.max(36, this.getSafeLineHeight(lineObj, playerHeight));
   }
 
+  private getPositionedLineHeight(
+    lineObj: (typeof this.currentLyricLineObjects)[number],
+    playerHeight: number,
+  ) {
+    return Math.max(36, this.getLayoutLineHeight(lineObj, playerHeight) * this.lineGap);
+  }
+
+  setLineGap(value: number) {
+    if (!Number.isFinite(value)) {
+      this.lineGap = 1;
+      return;
+    }
+
+    this.lineGap = this.clamp(0.6, value, 2);
+  }
+
   override onResize(): void {
     this.syncMeasuredSize();
     super.onResize();
@@ -280,7 +298,7 @@ export class PatchedLyricPlayer extends DomLyricPlayer {
     const scrollOffset = this.currentLyricLineObjects
       .slice(0, targetAlignIndex)
       .reduce((acc, lineObj) => {
-        const lineHeight = this.getLayoutLineHeight(lineObj, playerHeight);
+        const lineHeight = this.getPositionedLineHeight(lineObj, playerHeight);
         return acc + (lineObj.getLine().isBG && this.isPlaying ? 0 : lineHeight);
       }, 0);
 
@@ -375,7 +393,7 @@ export class PatchedLyricPlayer extends DomLyricPlayer {
         delay,
       );
 
-      const lineHeight = this.getLayoutLineHeight(lineObj, playerHeight);
+      const lineHeight = this.getPositionedLineHeight(lineObj, playerHeight);
       if (line.isBG && (isActive || !this.isPlaying)) {
         curPos += lineHeight;
       } else if (!line.isBG) {

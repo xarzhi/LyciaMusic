@@ -1799,13 +1799,20 @@ export function usePlayer() {
                 dynamicBgType = savedTheme.enableDynamicBg ? 'flow' : 'none';
               }
 
+              const savedWindowMaterial = ['none', 'mica', 'acrylic'].includes(savedTheme.windowMaterial)
+                ? savedTheme.windowMaterial
+                : State.settings.value.theme.windowMaterial;
+
               const merged = {
                 ...State.settings.value,
                 ...saved,
                 theme: {
                   ...State.settings.value.theme,
                   ...savedTheme,
-                  dynamicBgType: dynamicBgType || State.settings.value.theme.dynamicBgType,
+                  windowMaterial: savedWindowMaterial,
+                  dynamicBgType: savedWindowMaterial !== 'none'
+                    ? 'none'
+                    : (dynamicBgType || State.settings.value.theme.dynamicBgType),
                   customBackground: {
                     ...State.settings.value.theme.customBackground,
                     ...savedCustomBg

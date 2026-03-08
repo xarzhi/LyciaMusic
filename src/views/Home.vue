@@ -5,7 +5,7 @@
     <FoldersHeader
       v-if="localViewMode === 'folder'"
       v-model:isBatchMode="isBatchMode"
-      v-model:activeRootPath="activeRootPath"
+      :activeRootPath="activeRootPath"
       :selectedCount="selectedPaths.size"
       :folderTree="folderTree"
       :currentFolderFilter="currentFolderFilter"
@@ -17,6 +17,7 @@
       @addFolder="handleAddFolder"
       @refreshFolder="handleRefreshFolder"
       @removeFolder="handleRemoveFolderWithConfirm"
+      @update:activeRootPath="handleActiveRootChange"
       v-model:isManagementMode="isManagementMode"
     />
     <DetailHeader
@@ -232,6 +233,41 @@ watch(displaySongList, (newVal) => {
 }, { immediate: true });
 
 // ========== 状态管理 ==========
+const syncRootSelection = async (path: string | null, options: { forceRefresh?: boolean } = {}) => {
+  const normalizedPath = path || '';
+  const shouldRefresh =
+    !!normalizedPath && (
+      options.forceRefresh ||
+      activeRootPath.value !== normalizedPath ||
+      currentFolderFilter.value !== normalizedPath
+    );
+
+  activeRootPath.value = path;
+  currentFolderFilter.value = normalizedPath;
+
+  if (!shouldRefresh) {
+    return;
+  }
+
+  try {
+    await refreshFolder(normalizedPath);
+  } catch (e: any) {
+    useToast().showToast("切换文件夹失败: " + (e?.message || e), 'error');
+  }
+};
+
+const handleActiveRootChange = (path: string | null) => {
+  void syncRootSelection(path, { forceRefresh: true });
+};
+
+watch(activeRootPath, (newPath, oldPath) => {
+  if (!newPath || newPath === oldPath) {
+    return;
+  }
+
+  void syncRootSelection(newPath);
+});
+
 const isBatchMode = ref(false);
 const isManagementMode = ref(false); // 🟢 Local Management Mode State
 const selectedPaths = ref<Set<string>>(new Set());
@@ -407,9 +443,9 @@ const handleRemoveFolderWithConfirm = (path: string, name?: string) => {
     await removeSidebarFolderLinked(path);
     if (wasActive) {
       if (folderTree.value.length > 0) {
-        activeRootPath.value = folderTree.value[0].path;
+        await syncRootSelection(folderTree.value[0].path, { forceRefresh: true });
       } else {
-        activeRootPath.value = '';
+        await syncRootSelection(null);
         songList.value = [];
       }
     }

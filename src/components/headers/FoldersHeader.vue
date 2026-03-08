@@ -144,7 +144,7 @@ onUnmounted(() => {
             @click="emit('update:activeRootPath', rootNode.path)"
             @contextmenu.prevent="handleRootContextMenu($event, rootNode.path)"
             :class="[
-                'group relative px-5 py-1.5 rounded-full text-sm font-medium transition-all duration-300 cursor-pointer select-none shrink-0',
+                'group relative px-5 py-1.5 rounded-full text-sm font-medium transition-all duration-300 cursor-pointer select-none shrink-0 border border-transparent',
                 activeRootPath === rootNode.path 
                     ? 'liquid-glass shadow-md' 
                     : 'bg-gray-50 text-gray-500 hover:bg-gray-100 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10'
@@ -286,7 +286,7 @@ onUnmounted(() => {
   background: linear-gradient(135deg, rgba(235, 240, 255, 0.4), rgba(255, 255, 255, 0.2));
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-color: rgba(255, 255, 255, 0.6);
   box-shadow: 
     inset 0 0 0 1px rgba(255, 255, 255, 0.3),
     inset 0 2px 8px rgba(255, 255, 255, 0.5);
@@ -295,7 +295,7 @@ onUnmounted(() => {
 
 :global(.dark) .liquid-glass {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.15);
   color: #fff;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
 }

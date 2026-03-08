@@ -16,9 +16,9 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 let progressFrameId: number | null = null;
 // 校准定时器 ID
 let syncIntervalId: any = null;
-let seekTimeout: any = null;
 let dominantColorTaskId = 0;
 let playRequestId = 0;
+let latestSeekRequestId = 0;
 const shuffleHistory: string[] = [];
 const shuffleFuture: string[] = [];
 
@@ -34,6 +34,11 @@ let accumulatedTime = 0;
 
 // 🟢 Seek 状态标志位（用于禁止同步期间回滚 UI）
 let isSeeking = false;
+
+interface SeekCompletedPayload {
+  request_id: number;
+  time: number;
+}
 
 
 
@@ -1696,33 +1701,34 @@ export function usePlayer() {
   async function seekTo(newTime: number) {
     if (!State.currentSong.value) return;
 
-    // 🟢 Seek 前：累计已播放时间并重置会话起点，避免 Seek 等待时间被计入
     if (State.isPlaying.value && sessionStartTime) {
       accumulatedTime += (Date.now() - sessionStartTime) / 1000;
       sessionStartTime = Date.now();
     }
 
-    if (seekTimeout) clearTimeout(seekTimeout);
     isSeeking = true;
     stopTimer();
-    let targetTime = Math.max(0, Math.min(newTime, State.currentSong.value.duration));
+    const targetTime = Math.max(0, Math.min(newTime, State.currentSong.value.duration));
+    const requestId = ++latestSeekRequestId;
     reanchorPlaybackClock(targetTime);
 
-    seekTimeout = setTimeout(async () => {
-      const originalVolume = State.volume.value / 100.0;
-      // 快速静音（避免 seek 时的爆音）
-      await invoke('set_volume', { volume: 0.0 });
-      await invoke('seek_audio', { time: Math.floor(targetTime), isPlaying: State.isPlaying.value });
+    try {
+      await invoke('seek_audio', {
+        time: targetTime,
+        isPlaying: State.isPlaying.value,
+        requestId
+      });
       reanchorPlaybackClock(targetTime);
-      // 🎵 简单的淡入效果（3 步，共 60ms）
-      for (let i = 1; i <= 3; i++) {
-        await new Promise(r => setTimeout(r, 20));
-        await invoke('set_volume', { volume: (originalVolume * i) / 3 });
-      }
       if (State.isPlaying.value) {
         startTimer();
       }
-    }, 50); // 减少去抖动延迟
+    } catch (error) {
+      isSeeking = false;
+      if (State.isPlaying.value) {
+        startTimer();
+      }
+      throw error;
+    }
   }
   async function playAt(time: number) { await seekTo(time); if (!State.isPlaying.value) { setTimeout(async () => { if (!State.isPlaying.value) await togglePlay(); }, 150); } }
   async function handleSeek(e: MouseEvent) { if (!State.currentSong.value) return; const t = e.currentTarget as HTMLElement; const r = t.getBoundingClientRect(); const p = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); const tm = p * State.currentSong.value.duration; await seekTo(tm); }
@@ -1740,9 +1746,10 @@ export function usePlayer() {
     listen('player:prev', () => { prevSong(); });
 
     // 🟢 监听 seek_completed 事件，恢复同步
-    listen<number>('seek_completed', (e) => {
+    listen<SeekCompletedPayload>('seek_completed', (e) => {
+      if (e.payload.request_id !== latestSeekRequestId) return;
       isSeeking = false;
-      reanchorPlaybackClock(e.payload);
+      reanchorPlaybackClock(e.payload.time);
     });
 
     watch(State.volume, (v) => localStorage.setItem('player_volume', v.toString()));

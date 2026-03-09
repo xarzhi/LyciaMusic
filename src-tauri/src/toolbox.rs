@@ -1,6 +1,6 @@
+use crate::music::tags::{extract_text_metadata, read_tagged_file_from_path};
 use crate::music::utils::is_supported_library_extension;
 use lofty::prelude::*;
-use lofty::probe::Probe;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -58,48 +58,49 @@ fn process_file(path: &Path, config: &RenameConfig) -> RenamePreview {
 
     // Mode A: Standardize via Tags
     if config.mode == "tags" || config.mode == "auto" {
-        // Explicitly typed probe result handling
-        let tagged_file_result = Probe::open(path);
+        if let Ok(tagged_file) = read_tagged_file_from_path(path) {
+            let metadata = extract_text_metadata(&tagged_file);
+            let title = metadata.title.unwrap_or_default();
+            let artist = metadata.artist.unwrap_or_default();
+            let album = metadata.album.unwrap_or_default();
 
-        if let Ok(probe) = tagged_file_result {
-            if let Ok(tagged_file) = probe.read() {
-                if let Some(tag) = tagged_file.primary_tag() {
-                    // Fix E0716: Own the strings immediately
-                    let title = tag.title().as_deref().unwrap_or("").to_string();
-                    let artist = tag.artist().as_deref().unwrap_or("").to_string();
-                    let album = tag.album().as_deref().unwrap_or("").to_string();
-                    let year = tag.year().map(|y| y.to_string()).unwrap_or_default();
-                    let track = tag.track().map(|t| format!("{:02}", t)).unwrap_or_default();
+            let year = tagged_file
+                .primary_tag()
+                .and_then(|tag| tag.year())
+                .map(|y| y.to_string())
+                .unwrap_or_default();
+            let track = tagged_file
+                .primary_tag()
+                .and_then(|tag| tag.track())
+                .map(|t| format!("{:02}", t))
+                .unwrap_or_default();
 
-                    if !title.is_empty() {
-                        // Assume title is minimum requirement
-                        let mut new_name_base = config.template.clone();
-                        new_name_base = new_name_base.replace("{title}", &title);
-                        new_name_base = new_name_base.replace("{artist}", &artist);
-                        new_name_base = new_name_base.replace("{album}", &album);
-                        new_name_base = new_name_base.replace("{year}", &year);
-                        new_name_base = new_name_base.replace("{track}", &track);
+            if !title.is_empty() {
+                let mut new_name_base = config.template.clone();
+                new_name_base = new_name_base.replace("{title}", &title);
+                new_name_base = new_name_base.replace("{artist}", &artist);
+                new_name_base = new_name_base.replace("{album}", &album);
+                new_name_base = new_name_base.replace("{year}", &year);
+                new_name_base = new_name_base.replace("{track}", &track);
 
-                        let new_name = format!("{}.{}", sanitize_filename(&new_name_base), ext);
+                let new_name = format!("{}.{}", sanitize_filename(&new_name_base), ext);
 
-                        if new_name != original_name {
-                            return RenamePreview {
-                                original_path: original_path_str,
-                                original_name,
-                                new_name,
-                                status: "tags".to_string(),
-                                error: None,
-                            };
-                        } else if config.mode == "tags" {
-                            return RenamePreview {
-                                original_path: original_path_str,
-                                original_name: original_name.clone(),
-                                new_name: original_name,
-                                status: "skipped".to_string(),
-                                error: Some("Already named correctly".to_string()),
-                            };
-                        }
-                    }
+                if new_name != original_name {
+                    return RenamePreview {
+                        original_path: original_path_str,
+                        original_name,
+                        new_name,
+                        status: "tags".to_string(),
+                        error: None,
+                    };
+                } else if config.mode == "tags" {
+                    return RenamePreview {
+                        original_path: original_path_str,
+                        original_name: original_name.clone(),
+                        new_name: original_name,
+                        status: "skipped".to_string(),
+                        error: Some("Already named correctly".to_string()),
+                    };
                 }
             }
         }

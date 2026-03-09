@@ -5,6 +5,7 @@ pub mod files;
 pub mod library;
 pub mod scanner;
 pub mod sidebar;
+pub mod tags;
 pub mod types;
 pub mod utils;
 

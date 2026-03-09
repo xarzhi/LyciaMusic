@@ -292,11 +292,10 @@ pub fn init_player(app: &AppHandle) -> PlayerState {
                                         if let Ok(source) = Decoder::new(reader) {
                                             let rate = source.sample_rate();
                                             let channels = source.channels();
-                                            let samples_to_skip = (clamped_time
-                                                * rate as f64
-                                                * channels as f64)
-                                                .round()
-                                                as u64;
+                                            let samples_to_skip =
+                                                (clamped_time * rate as f64 * channels as f64)
+                                                    .round()
+                                                    as u64;
                                             thread_progress
                                                 .samples_played
                                                 .store(samples_to_skip, Ordering::Relaxed);
@@ -473,7 +472,7 @@ pub fn seek_audio(
         is_playing,
         request_id,
     })
-        .map_err(|e| e.to_string())?;
+    .map_err(|e| e.to_string())?;
     if let Ok(mut controls) = state.controls.lock() {
         if let Some(mc) = controls.as_mut() {
             let progress = MediaPosition(Duration::from_secs_f64(time.max(0.0)));

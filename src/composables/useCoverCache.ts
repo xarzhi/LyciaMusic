@@ -23,11 +23,10 @@ export function useCoverCache() {
             let finalUrl = '';
             if (coverPath) {
                 finalUrl = convertFileSrc(coverPath);
+                coverCache.set(path, finalUrl);
             }
-            coverCache.set(path, finalUrl);
             return finalUrl;
         } catch (e) {
-            coverCache.set(path, '');
             return '';
         } finally {
             loadingSet.delete(path);

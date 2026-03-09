@@ -1,5 +1,6 @@
 // music/scanner.rs - 扫描逻辑
 
+use super::tags::{extract_text_metadata, read_tagged_file_from_path};
 use super::types::{FolderNode, GeneratedFolder, Song};
 use super::utils::{descendant_like_patterns, is_supported_library_extension, normalize_path};
 use crate::database::DbState;
@@ -107,44 +108,24 @@ fn pick_optional_tag_value(current: &str, candidate: Option<&str>) -> Option<Str
         .map(ToOwned::to_owned)
 }
 
-fn fill_text_fields_from_tag(
-    tag: &lofty::tag::Tag,
-    artist: &mut String,
-    album: &mut String,
-    title: &mut String,
-) {
-    if let Some(value) = pick_tag_value(artist, tag.artist().as_deref(), UNKNOWN_ARTIST) {
-        *artist = value;
-    }
-
-    if let Some(value) = pick_tag_value(album, tag.album().as_deref(), UNKNOWN_ALBUM) {
-        *album = value;
-    }
-
-    if let Some(value) = pick_optional_tag_value(title, tag.title().as_deref()) {
-        *title = value;
-    }
-}
-
 fn fill_text_fields_from_tags(
     tagged_file: &impl lofty::file::TaggedFileExt,
     artist: &mut String,
     album: &mut String,
     title: &mut String,
 ) {
-    if let Some(primary_tag) = tagged_file.primary_tag() {
-        fill_text_fields_from_tag(primary_tag, artist, album, title);
+    let metadata = extract_text_metadata(tagged_file);
+
+    if let Some(value) = pick_tag_value(artist, metadata.artist.as_deref(), UNKNOWN_ARTIST) {
+        *artist = value;
     }
 
-    for tag in tagged_file.tags() {
-        fill_text_fields_from_tag(tag, artist, album, title);
+    if let Some(value) = pick_tag_value(album, metadata.album.as_deref(), UNKNOWN_ALBUM) {
+        *album = value;
+    }
 
-        if !is_missing_text(artist, UNKNOWN_ARTIST)
-            && !is_missing_text(album, UNKNOWN_ALBUM)
-            && !title.trim().is_empty()
-        {
-            break;
-        }
+    if let Some(value) = pick_optional_tag_value(title, metadata.title.as_deref()) {
+        *title = value;
     }
 }
 
@@ -194,10 +175,7 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
         }
     }
 
-    if let Ok(tagged_file) = Probe::open(path)
-        .map_err(|e| e.to_string())
-        .and_then(|p| p.read().map_err(|e| e.to_string()))
-    {
+    if let Ok(tagged_file) = read_tagged_file_from_path(path).map_err(|e| e.to_string()) {
         let props = tagged_file.properties();
         duration = props.duration().as_secs() as u32;
         bitrate = props.audio_bitrate().unwrap_or(0);
@@ -218,6 +196,9 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
     }
     if bitrate == 0 {
         bitrate = derive_bitrate_kbps(file_size, duration);
+    }
+    if title.trim().is_empty() {
+        title = path.file_stem()?.to_string_lossy().to_string();
     }
 
     Some(Song {

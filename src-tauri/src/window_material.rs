@@ -66,9 +66,7 @@ fn query_windows_build_number() -> Option<u32> {
 #[cfg(target_os = "windows")]
 fn query_transparency_enabled() -> Option<bool> {
     use std::{mem::size_of, ptr::null_mut};
-    use windows_sys::Win32::System::Registry::{
-        RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD,
-    };
+    use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
 
     let sub_key: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
         .encode_utf16()

@@ -1,9 +1,8 @@
 // music/covers.rs - 封面缓存与缩略图生成
 
+use super::tags::{find_embedded_picture, read_tagged_file_from_path};
 use super::types::ImageConcurrencyLimit;
 use image::ImageFormat;
-use lofty::prelude::*;
-use lofty::probe::Probe;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -96,21 +95,13 @@ pub fn get_or_create_thumbnail(path: &Path, app: &AppHandle) -> Option<String> {
         return Some(cache_path.to_string_lossy().into_owned());
     }
 
-    if let Ok(tagged_file) = Probe::open(path).ok()?.read() {
-        if let Some(tag) = tagged_file.primary_tag() {
-            let pictures = tag.pictures();
-            let pic_opt = pictures
-                .iter()
-                .find(|p| p.pic_type() == lofty::picture::PictureType::CoverFront)
-                .or(pictures.first());
-
-            if let Some(pic) = pic_opt {
-                if let Ok(img) = image::load_from_memory(pic.data()) {
-                    let resized = img.resize(300, 300, image::imageops::FilterType::Triangle);
-                    if let Ok(mut file) = fs::File::create(&cache_path) {
-                        if resized.write_to(&mut file, ImageFormat::Jpeg).is_ok() {
-                            return Some(cache_path.to_string_lossy().into_owned());
-                        }
+    if let Ok(tagged_file) = read_tagged_file_from_path(path) {
+        if let Some(pic) = find_embedded_picture(&tagged_file) {
+            if let Ok(img) = image::load_from_memory(pic.data()) {
+                let resized = img.resize(300, 300, image::imageops::FilterType::Triangle);
+                if let Ok(mut file) = fs::File::create(&cache_path) {
+                    if resized.write_to(&mut file, ImageFormat::Jpeg).is_ok() {
+                        return Some(cache_path.to_string_lossy().into_owned());
                     }
                 }
             }
@@ -128,17 +119,13 @@ pub fn get_or_create_full_cover(path: &Path, app: &AppHandle) -> Option<String> 
         return Some(cache_path.to_string_lossy().into_owned());
     }
 
-    if let Ok(tagged_file) = Probe::open(path).ok()?.read() {
-        if let Some(tag) = tagged_file.primary_tag() {
-            let pictures = tag.pictures();
-            let pic_opt = pictures
-                .iter()
-                .find(|p| p.pic_type() == lofty::picture::PictureType::CoverFront)
-                .or(pictures.first());
-
-            if let Some(pic) = pic_opt {
-                if fs::write(&cache_path, pic.data()).is_ok() {
-                    return Some(cache_path.to_string_lossy().into_owned());
+    if let Ok(tagged_file) = read_tagged_file_from_path(path) {
+        if let Some(pic) = find_embedded_picture(&tagged_file) {
+            if let Ok(img) = image::load_from_memory(pic.data()) {
+                if let Ok(mut file) = fs::File::create(&cache_path) {
+                    if img.write_to(&mut file, ImageFormat::Jpeg).is_ok() {
+                        return Some(cache_path.to_string_lossy().into_owned());
+                    }
                 }
             }
         }

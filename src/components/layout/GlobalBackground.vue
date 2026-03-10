@@ -65,8 +65,8 @@ const bgImageSrc = computed(() => {
 });
 
 const dynamicShellClass = computed(() => {
-  if (isMicaWindowMaterial.value) return 'bg-white/10 dark:bg-black/8';
-  if (hasWindowMaterial.value) return 'bg-white/35 dark:bg-black/25';
+  if (isMicaWindowMaterial.value) return 'bg-white/40 dark:bg-black/8';
+  if (hasWindowMaterial.value) return 'bg-white/60 dark:bg-black/25';
   return 'bg-white dark:bg-[#1a1a1a]';
 });
 
@@ -81,7 +81,7 @@ const dynamicOverlayClass = computed(() => {
 });
 
 const staticMaskClass = computed(() => {
-  if (isMicaWindowMaterial.value) return 'bg-white/10 dark:bg-black/35';
+  if (isMicaWindowMaterial.value) return 'bg-white/40 dark:bg-black/35';
   return 'bg-black/20';
 });
 

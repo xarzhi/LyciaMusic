@@ -1,15 +1,8 @@
 import { ref, computed, reactive, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import {
-  decryptQrcHex,
-  parseEslrc,
-  parseLrc,
-  parseLys,
-  parseQrc,
-  parseTTML,
-  parseYrc,
-  type LyricLine as AmlLyricLine,
-  type LyricWord as AmlLyricWord,
+import type {
+  LyricLine as AmlLyricLine,
+  LyricWord as AmlLyricWord,
 } from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js';
 import { currentSong, currentTime, AUDIO_DELAY } from './playerState';
 
@@ -104,6 +97,14 @@ const parsedLyrics = ref<LyricLine[]>([]);
 const lyricsStatus = ref<LyricsStatus>('idle');
 
 let loadRequestId = 0;
+let amlModule: typeof import('@applemusic-like-lyrics/lyric/pkg/amll_lyric.js') | null = null;
+
+async function getAmlModule() {
+  if (!amlModule) {
+    amlModule = await import('@applemusic-like-lyrics/lyric/pkg/amll_lyric.js');
+  }
+  return amlModule;
+}
 
 interface PreparedLine {
   startMs: number;
@@ -231,7 +232,16 @@ function scoreParsedLines(lines: AmlLyricLine[]): number {
   }, 0);
 }
 
-function parseWithAml(raw: string): AmlLyricLine[] {
+async function parseWithAml(raw: string): Promise<AmlLyricLine[]> {
+  const {
+    decryptQrcHex,
+    parseEslrc,
+    parseLrc,
+    parseLys,
+    parseQrc,
+    parseTTML,
+    parseYrc,
+  } = await getAmlModule();
   const source = raw.replace(/^\uFEFF/, '').replace(/\r/g, '');
   const candidates: AmlLyricLine[][] = [];
 
@@ -270,8 +280,8 @@ function parseWithAml(raw: string): AmlLyricLine[] {
   return candidates[0];
 }
 
-function parseLyrics(raw: string): LyricLine[] {
-  const parsed = parseWithAml(raw);
+async function parseLyrics(raw: string): Promise<LyricLine[]> {
+  const parsed = await parseWithAml(raw);
   if (parsed.length === 0) return [];
 
   const prepared = parsed
@@ -302,7 +312,10 @@ async function loadLyrics() {
     if (requestId !== loadRequestId || currentSong.value?.path !== song.path) return;
 
     rawLyrics.value = lrc || '';
-    parsedLyrics.value = parseLyrics(rawLyrics.value);
+    const parsed = await parseLyrics(rawLyrics.value);
+    if (requestId !== loadRequestId || currentSong.value?.path !== song.path) return;
+
+    parsedLyrics.value = parsed;
     lyricsStatus.value = parsedLyrics.value.length > 0 ? 'ready' : 'empty';
   } catch (e) {
     if (requestId !== loadRequestId || currentSong.value?.path !== song.path) return;

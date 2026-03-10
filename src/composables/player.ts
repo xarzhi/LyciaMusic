@@ -1,4 +1,4 @@
-import { computed, watch, onMounted } from 'vue';
+import { computed, watch, onMounted, onScopeDispose } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -111,9 +111,9 @@ export function usePlayer() {
     if (isInitialized) return;
     isInitialized = true;
 
-    // Initialize Library
-    await fetchLibraryFolders();
-    scanLibrary(); // Run in background
+    // Initialize Library (run in parallel to reduce startup wait)
+    fetchLibraryFolders();
+    scanLibrary();
 
     // startTimer(); // This function is not defined in the provided context, commenting out to avoid errors.
 
@@ -1739,6 +1739,46 @@ export function usePlayer() {
   function openAddToPlaylistDialog(songPath: string) { State.playlistAddTargetSongs.value = [songPath]; State.showAddToPlaylistModal.value = true; }
 
   function init() {
+    let persistTimer: ReturnType<typeof setTimeout> | null = null;
+    let restoreTimer: ReturnType<typeof setTimeout> | null = null;
+    let restoreIdleId: number | null = null;
+
+    const flushPersistedState = () => {
+      if (persistTimer) {
+        clearTimeout(persistTimer);
+        persistTimer = null;
+      }
+
+      localStorage.setItem('player_playlist', JSON.stringify(State.songList.value));
+      localStorage.setItem('player_watched_folders', JSON.stringify(State.watchedFolders.value));
+      localStorage.setItem('player_favorites', JSON.stringify(State.favoritePaths.value));
+      localStorage.setItem('player_custom_playlists', JSON.stringify(State.playlists.value));
+      localStorage.setItem('player_settings', JSON.stringify(State.settings.value));
+      localStorage.setItem('player_history', JSON.stringify(State.recentSongs.value));
+      localStorage.setItem('player_queue', JSON.stringify(State.playQueue.value));
+      localStorage.setItem('player_artist_custom_order', JSON.stringify(State.artistCustomOrder.value));
+      localStorage.setItem('player_album_custom_order', JSON.stringify(State.albumCustomOrder.value));
+      localStorage.setItem('player_folder_custom_order', JSON.stringify(State.folderCustomOrder.value));
+      localStorage.setItem('player_local_custom_order', JSON.stringify(State.localCustomOrder.value));
+    };
+
+    const schedulePersistedState = () => {
+      if (persistTimer) clearTimeout(persistTimer);
+      persistTimer = setTimeout(() => {
+        flushPersistedState();
+      }, 200);
+    };
+
+    const cancelRestoreState = () => {
+      if (restoreTimer) {
+        clearTimeout(restoreTimer);
+        restoreTimer = null;
+      }
+      if (restoreIdleId !== null && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(restoreIdleId);
+        restoreIdleId = null;
+      }
+    };
     // 注册系统媒体控制事件监听
     listen('player:play', () => { if (!State.isPlaying.value) togglePlay(); });
     listen('player:pause', () => { if (State.isPlaying.value) togglePlay(); });
@@ -1754,26 +1794,32 @@ export function usePlayer() {
 
     watch(State.volume, (v) => localStorage.setItem('player_volume', v.toString()));
     watch(State.playMode, (v) => localStorage.setItem('player_mode', v.toString()));
-    watch(State.songList, (v) => localStorage.setItem('player_playlist', JSON.stringify(v)), { deep: true });
-    watch(State.watchedFolders, (v) => localStorage.setItem('player_watched_folders', JSON.stringify(v)), { deep: true });
-    watch(State.favoritePaths, (v) => localStorage.setItem('player_favorites', JSON.stringify(v)), { deep: true });
-    watch(State.playlists, (v) => localStorage.setItem('player_custom_playlists', JSON.stringify(v)), { deep: true });
-    watch(State.settings, (v) => localStorage.setItem('player_settings', JSON.stringify(v)), { deep: true });
-    watch(State.recentSongs, (v) => localStorage.setItem('player_history', JSON.stringify(v)), { deep: true });
-
-    // 🟢 持久化 playQueue
-    watch(State.playQueue, (v) => localStorage.setItem('player_queue', JSON.stringify(v)), { deep: true });
+    watch(
+      [
+        State.songList,
+        State.watchedFolders,
+        State.favoritePaths,
+        State.playlists,
+        State.settings,
+        State.recentSongs,
+        State.playQueue,
+        State.artistCustomOrder,
+        State.albumCustomOrder,
+        State.folderCustomOrder,
+        State.localCustomOrder,
+      ],
+      () => {
+        schedulePersistedState();
+      },
+      { deep: true }
+    );
 
     // 🟢 持久化排序状态
     watch(State.artistSortMode, (v) => localStorage.setItem('player_artist_sort_mode', v));
     watch(State.albumSortMode, (v) => localStorage.setItem('player_album_sort_mode', v));
-    watch(State.artistCustomOrder, (v) => localStorage.setItem('player_artist_custom_order', JSON.stringify(v)), { deep: true });
-    watch(State.albumCustomOrder, (v) => localStorage.setItem('player_album_custom_order', JSON.stringify(v)), { deep: true });
     watch(State.folderSortMode, (v) => localStorage.setItem('player_folder_sort_mode', v));
     watch(State.localSortMode, (v) => localStorage.setItem('player_local_sort_mode', v));
     watch(State.playlistSortMode, (v) => localStorage.setItem('player_playlist_sort_mode', v));
-    watch(State.folderCustomOrder, (v) => localStorage.setItem('player_folder_custom_order', JSON.stringify(v)), { deep: true });
-    watch(State.localCustomOrder, (v) => localStorage.setItem('player_local_custom_order', JSON.stringify(v)), { deep: true });
 
     watch(State.currentSong, (newSong) => {
       if (newSong) {
@@ -1804,8 +1850,8 @@ export function usePlayer() {
     });
 
     onMounted(async () => {
-      // 🟢 性能优化：将持久化数据的读取放入 setTimeout，确保首屏 Skeleton 优先渲染
-      setTimeout(async () => {
+      // 🟢 性能优化：空闲时恢复持久化数据，避免与首屏渲染竞争
+      const restoreState = async () => {
         const sVol = localStorage.getItem('player_volume'); if (sVol) { State.volume.value = parseInt(sVol); await invoke('set_volume', { volume: State.volume.value / 100.0 }); }
         const sFolders = localStorage.getItem('player_watched_folders'); if (sFolders) try { State.watchedFolders.value = JSON.parse(sFolders); } catch (e) { }
         const sList = localStorage.getItem('player_playlist'); if (sList) try { State.songList.value = JSON.parse(sList); } catch (e) { }
@@ -1916,11 +1962,29 @@ export function usePlayer() {
         if (lastTime) {
           State.currentTime.value = parseFloat(lastTime);
         }
-      }, 50);
+      };
+
+      if ('requestIdleCallback' in window) {
+        restoreIdleId = window.requestIdleCallback(() => {
+          restoreIdleId = null;
+          restoreState();
+        }, { timeout: 150 });
+      } else {
+        restoreTimer = setTimeout(() => {
+          restoreTimer = null;
+          restoreState();
+        }, 80);
+      }
 
       window.addEventListener('beforeunload', () => {
+        flushPersistedState();
         localStorage.setItem('player_last_time', State.currentTime.value.toString());
       });
+    });
+
+    onScopeDispose(() => {
+      cancelRestoreState();
+      if (persistTimer) clearTimeout(persistTimer);
     });
   }
 

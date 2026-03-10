@@ -40,25 +40,34 @@ const isFooterVisible = computed(() => playQueue.value.length > 0);
 const hasWindowMaterial = computed(() => activeWindowMaterial.value !== 'none');
 const isMicaWindowMaterial = computed(() => activeWindowMaterial.value === 'mica');
 
-const applyTheme = () => {
+const applyTheme = async () => {
   const theme = settings.value.theme;
   const isDarkSystem = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  let isDarkMode = false;
 
   if (theme.mode === 'custom') {
     const style = theme.customBackground.foregroundStyle || 'auto';
     if (style === 'light') {
-      document.documentElement.classList.add('dark');
+      isDarkMode = true;
     } else if (style === 'dark') {
-      document.documentElement.classList.remove('dark');
+      isDarkMode = false;
     } else if (isDarkSystem) {
-      document.documentElement.classList.add('dark');
+      isDarkMode = true;
     } else {
-      document.documentElement.classList.remove('dark');
+      isDarkMode = false;
     }
   } else if (theme.mode === 'dark') {
+    isDarkMode = true;
+  } else {
+    isDarkMode = false;
+  }
+
+  if (isDarkMode) {
     document.documentElement.classList.add('dark');
+    try { await getCurrentWindow().setTheme('dark'); } catch (e) { console.warn('Failed to set window theme:', e); }
   } else {
     document.documentElement.classList.remove('dark');
+    try { await getCurrentWindow().setTheme('light'); } catch (e) { console.warn('Failed to set window theme:', e); }
   }
 };
 
@@ -266,13 +275,9 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
         v-if="!isMiniMode"
         class="flex-1 flex overflow-hidden relative z-10 transition-colors duration-500"
         :class="[
-          settings.theme.mode === 'custom'
+          settings.theme.mode === 'custom' || hasWindowMaterial
             ? 'bg-transparent'
-            : isMicaWindowMaterial
-              ? 'bg-white/[0.03] dark:bg-black/[0.06]'
-              : hasWindowMaterial
-              ? 'bg-white/10 dark:bg-black/20'
-              : 'bg-white/30 dark:bg-black/60'
+            : 'bg-white/30 dark:bg-black/60'
         ]"
         :style="{ backdropFilter: mainBlurStyle }"
       >

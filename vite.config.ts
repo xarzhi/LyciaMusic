@@ -9,6 +9,29 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [vue(), wasm(), topLevelAwait()],
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-pixi': [
+            '@pixi/app',
+            '@pixi/core',
+            '@pixi/display',
+            '@pixi/sprite',
+            '@pixi/filter-blur',
+            '@pixi/filter-bulge-pinch',
+            '@pixi/filter-color-matrix',
+          ],
+          'vendor-amll': [
+            '@applemusic-like-lyrics/core',
+            '@applemusic-like-lyrics/lyric',
+            '@applemusic-like-lyrics/vue',
+          ],
+        },
+      },
+    },
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

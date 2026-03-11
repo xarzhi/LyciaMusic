@@ -10,6 +10,7 @@ const { activeWindowMaterial } = useWindowMaterial();
 const hasWindowMaterial = computed(() => activeWindowMaterial.value !== 'none');
 const isMicaWindowMaterial = computed(() => activeWindowMaterial.value === 'mica');
 const reduceDynamicEffects = computed(() => showPlayerDetail.value);
+const isDarkTheme = computed(() => settings.value.theme.mode === 'dark');
 
 const activeBackgroundInfo = computed(() => {
   const theme = settings.value.theme;
@@ -86,6 +87,22 @@ const staticMaskClass = computed(() => {
 });
 
 const staticImageOpacity = computed(() => (isMicaWindowMaterial.value ? 0.35 : 1));
+
+const materialScrimStyle = computed(() => {
+  if (!hasWindowMaterial.value) {
+    return null;
+  }
+
+  if (isDarkTheme.value) {
+    return {
+      backgroundColor: isMicaWindowMaterial.value ? 'rgba(14, 16, 18, 0.42)' : 'rgba(12, 14, 16, 0.34)',
+    };
+  }
+
+  return {
+    backgroundColor: isMicaWindowMaterial.value ? 'rgba(248, 249, 251, 0.62)' : 'rgba(250, 250, 252, 0.5)',
+  };
+});
 </script>
 
 <template>
@@ -99,6 +116,12 @@ const staticImageOpacity = computed(() => (isMicaWindowMaterial.value ? 0.35 : 1
           : 'bg-[#fafafa] dark:bg-[#121212]',
     ]"
   >
+    <div
+      v-if="hasWindowMaterial"
+      class="absolute inset-0 z-[1] transition-colors duration-500"
+      :style="materialScrimStyle"
+    ></div>
+
     <transition name="fade">
       <div
         v-if="activeBackgroundInfo?.isDynamic"

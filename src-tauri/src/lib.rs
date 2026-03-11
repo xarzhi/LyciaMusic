@@ -6,6 +6,7 @@ mod statistics;
 mod toolbox;
 mod window_boundary;
 mod window_material;
+mod window_theme;
 
 use database::DbState;
 use music::{
@@ -53,6 +54,7 @@ use tokio::sync::Semaphore;
 use toolbox::{apply_rename, open_external_program, preview_rename, refresh_folder_songs};
 use window_boundary::set_mini_boundary_enabled;
 use window_material::get_window_material_capabilities;
+use window_theme::set_dark_mode_for_window;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -180,7 +182,8 @@ pub fn run() {
             open_external_program,
             refresh_folder_songs,
             set_mini_boundary_enabled,
-            get_window_material_capabilities
+            get_window_material_capabilities,
+            set_dark_mode_for_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

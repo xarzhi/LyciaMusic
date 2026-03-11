@@ -27,6 +27,9 @@ const isWindowMaterialReady = ref(false);
 
 let loadPromise: Promise<WindowMaterialCapabilities> | null = null;
 
+const MICA_DARK_EFFECT = 'micaDark' as Effect;
+const MICA_LIGHT_EFFECT = 'micaLight' as Effect;
+
 function normalizeCapabilities(
   value: Partial<WindowMaterialCapabilities> | null | undefined,
 ): WindowMaterialCapabilities {
@@ -117,9 +120,12 @@ export async function applyWindowMaterial(mode: WindowMaterialMode, isDark: bool
   try {
     if (resolved === 'mica') {
       await trySetWindowBackgroundColor(getTransparentWindowColor());
-      await appWindow.setEffects({ effects: [Effect.Mica] });
+      await appWindow.setEffects({
+        effects: [isDark ? MICA_DARK_EFFECT : MICA_LIGHT_EFFECT],
+      });
     } else if (resolved === 'acrylic') {
       await trySetWindowBackgroundColor(getTransparentWindowColor());
+      await invoke('set_dark_mode_for_window', { dark: isDark });
       await appWindow.setEffects({
         effects: [Effect.Acrylic],
         color: getAcrylicTint(isDark),

@@ -73,7 +73,7 @@ export const recentSongs = ref<HistoryItem[]>([]);
 
 // --- 排序状态 ---
 export const artistSortMode = ref<'count' | 'name' | 'custom'>('count');
-export const albumSortMode = ref<'count' | 'name' | 'custom'>('count');
+export const albumSortMode = ref<'count' | 'name' | 'artist' | 'custom'>('artist');
 export const artistCustomOrder = ref<string[]>([]);
 export const albumCustomOrder = ref<string[]>([]);
 

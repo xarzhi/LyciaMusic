@@ -13,6 +13,7 @@ pub struct TagTextMetadata {
     pub title: Option<String>,
     pub artist: Option<String>,
     pub album: Option<String>,
+    pub album_artist: Option<String>,
 }
 
 pub fn read_tagged_file_from_path(path: &Path) -> lofty::error::Result<TaggedFile> {
@@ -44,7 +45,15 @@ where
             metadata.album = read_album(tag);
         }
 
-        if metadata.title.is_some() && metadata.artist.is_some() && metadata.album.is_some() {
+        if metadata.album_artist.is_none() {
+            metadata.album_artist = read_album_artist(tag);
+        }
+
+        if metadata.title.is_some()
+            && metadata.artist.is_some()
+            && metadata.album.is_some()
+            && metadata.album_artist.is_some()
+        {
             break;
         }
     }
@@ -434,6 +443,14 @@ fn read_album(tag: &Tag) -> Option<String> {
             &["ALBUM", "IPRD"],
         )
     })
+}
+
+fn read_album_artist(tag: &Tag) -> Option<String> {
+    read_tag_text(
+        tag,
+        &[ItemKey::AlbumArtist, ItemKey::TrackArtist, ItemKey::Performer],
+        &["ALBUMARTIST", "ALBUM ARTIST", "TPE2", "IART"],
+    )
 }
 
 fn read_tag_text(tag: &Tag, keys: &[ItemKey], unknown_keys: &[&str]) -> Option<String> {

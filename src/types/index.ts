@@ -4,7 +4,13 @@ export interface Song {
   title?: string;
   path: string;
   artist: string;
+  artist_names: string[];
+  effective_artist_names: string[];
   album: string;
+  album_artist: string;
+  album_key: string;
+  is_various_artists_album: boolean;
+  collapse_artist_credits: boolean;
   duration: number;
   genre?: string;
   year?: string;

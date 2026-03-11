@@ -5,6 +5,7 @@ import { currentSong, isPlaying } from '../../composables/playerState';
 import { useSettings } from '../../composables/settings';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { useRouter } from 'vue-router';
 import QualityBadge from '../common/QualityBadge.vue';
 import { INDEX_KEYS, getAlphabetIndexKey, type AlphabetIndexKey } from '../../utils/alphabetIndex';
 
@@ -28,6 +29,7 @@ const {
   toggleFavorite,
   formatDuration,
   currentViewMode,
+  viewArtist,
   addLibraryFolder,
   searchQuery,
   librarySongs,
@@ -39,6 +41,7 @@ const {
   refreshFolder,
   expandFolderPath,
 } = usePlayer();
+const router = useRouter();
 
 const ROW_HEIGHT = 72;
 const containerRef = ref<HTMLElement | null>(null);
@@ -476,6 +479,14 @@ const emptyStateMessage = computed(() => {
   return '列表为空';
 });
 
+const getClickableArtistNames = (song: Song) =>
+  (Array.isArray(song.artist_names) && song.artist_names.length > 0 ? song.artist_names : [song.artist]).filter(Boolean);
+
+const handleArtistClick = (artistName: string) => {
+  viewArtist(artistName);
+  router.push('/');
+};
+
 onMounted(() => {
   window.addEventListener('resize', updateContainerHeight);
   if (containerRef.value) {
@@ -617,7 +628,15 @@ const getRowStyle = (songIndex: number, songPath: string) => {
                 :codec="song.codec || ''"
                 :container="song.container || ''"
               />
-              <span class="truncate">{{ song.artist }}</span>
+              <span v-if="currentViewMode === 'album'" class="truncate flex items-center gap-1 flex-wrap" :title="song.artist">
+                <template v-for="(artistName, artistIndex) in getClickableArtistNames(song)" :key="`${song.path}-${artistName}`">
+                  <button type="button" class="truncate hover:text-[#EC4141] transition-colors" @click.stop="handleArtistClick(artistName)">
+                    {{ artistName }}
+                  </button>
+                  <span v-if="artistIndex < getClickableArtistNames(song).length - 1" class="opacity-60">/</span>
+                </template>
+              </span>
+              <span v-else class="truncate">{{ song.artist }}</span>
             </div>
           </div>
 

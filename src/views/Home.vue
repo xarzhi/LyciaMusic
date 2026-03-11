@@ -77,7 +77,8 @@
         <AlbumDetailHeader
           v-else-if="localViewMode === 'album'"
           v-model:isBatchMode="isBatchMode"
-          :albumName="localFilterCondition || '未知专辑'"
+          :albumName="selectedAlbumSong?.album || '未知专辑'"
+          :albumArtist="selectedAlbumSong?.album_artist || selectedAlbumSong?.artist || '未知歌手'"
           :songs="localSongList"
           :selectedCount="selectedPaths.size"
           @playAll="handlePlayAll"
@@ -101,8 +102,8 @@
           >
             <div
               v-for="album in artistAlbumList"
-              :key="`${album.artist}-${album.name}`"
-              @click="handleArtistAlbumClick(album.name)"
+              :key="album.key"
+              @click="handleArtistAlbumClick(album.key)"
               class="group cursor-pointer rounded-xl p-2 md:p-3 transition-all duration-300 flex flex-col relative select-none hover:bg-white/40 dark:hover:bg-white/5"
             >
               <div class="relative w-full aspect-square mb-3 mt-4">
@@ -274,6 +275,7 @@ import ModernModal from '../components/common/ModernModal.vue';
 import ModernInputModal from '../components/common/ModernInputModal.vue';
 import StatisticsPage from '../components/statistics/StatisticsPage.vue';
 import { useSongDrag } from '../composables/useSongDrag';
+import { compareByAlphabetIndex } from '../utils/alphabetIndex';
 
 const route = useRoute();
 
@@ -320,6 +322,10 @@ watch(displaySongList, (newVal) => {
     localSongList.value = newVal;
   }
 }, { immediate: true });
+
+const selectedAlbumSong = computed(() => localSongList.value[0] || null);
+const songHasArtistName = (song: Song, artistName: string) =>
+  (song.effective_artist_names?.length ? song.effective_artist_names : song.artist_names || [song.artist]).includes(artistName);
 
 // ========== 状态管理 ==========
 const syncRootSelection = async (path: string | null, options: { forceRefresh?: boolean } = {}) => {
@@ -423,26 +429,27 @@ const artistAlbumList = computed(() => {
     return [];
   }
 
-  const albumMap = new Map<string, { name: string; count: number; artist: string; firstSongPath: string }>();
+  const albumMap = new Map<string, { key: string; name: string; count: number; artist: string; firstSongPath: string }>();
 
   librarySongs.value.forEach(song => {
-    const songArtist = song.artist || 'Unknown';
-    if (songArtist !== artistName) {
+    if (!songHasArtistName(song, artistName)) {
       return;
     }
 
+    const albumKey = song.album_key || `${song.album || 'Unknown'}::${song.album_artist || song.artist || 'Unknown'}`;
     const albumName = song.album || 'Unknown';
-    const existing = albumMap.get(albumName);
+    const existing = albumMap.get(albumKey);
 
     if (existing) {
       existing.count++;
       return;
     }
 
-    albumMap.set(albumName, {
+    albumMap.set(albumKey, {
+      key: albumKey,
       name: albumName,
       count: 1,
-      artist: songArtist,
+      artist: song.album_artist || song.artist || 'Unknown',
       firstSongPath: song.path
     });
   });
@@ -450,16 +457,21 @@ const artistAlbumList = computed(() => {
   const albums = Array.from(albumMap.values());
 
   if (albumSortMode.value === 'name') {
-    albums.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+    albums.sort((a, b) => compareByAlphabetIndex(a.name, b.name));
   } else if (albumSortMode.value === 'custom') {
-    const orderMap = new Map(albumCustomOrder.value.map((name, index) => [name, index]));
+    const orderMap = new Map(albumCustomOrder.value.map((key, index) => [key, index]));
     albums.sort((a, b) => {
-      const aIndex = orderMap.has(a.name) ? orderMap.get(a.name)! : Number.MAX_SAFE_INTEGER;
-      const bIndex = orderMap.has(b.name) ? orderMap.get(b.name)! : Number.MAX_SAFE_INTEGER;
+      const aIndex = orderMap.has(a.key) ? orderMap.get(a.key)! : Number.MAX_SAFE_INTEGER;
+      const bIndex = orderMap.has(b.key) ? orderMap.get(b.key)! : Number.MAX_SAFE_INTEGER;
       return aIndex - bIndex;
     });
+  } else if (albumSortMode.value === 'artist') {
+    albums.sort((a, b) => {
+      const artistDiff = compareByAlphabetIndex(a.artist, b.artist);
+      return artistDiff !== 0 ? artistDiff : compareByAlphabetIndex(a.name, b.name);
+    });
   } else {
-    albums.sort((a, b) => b.count - a.count);
+    albums.sort((a, b) => b.count - a.count || compareByAlphabetIndex(a.artist, b.artist));
   }
 
   return albums;
@@ -839,8 +851,8 @@ const executeSongPhysicalDelete = async () => {
   }
 };
 
-const handleArtistAlbumClick = (albumName: string) => {
-  viewAlbum(albumName);
+const handleArtistAlbumClick = (albumKey: string) => {
+  viewAlbum(albumKey);
 };
 
 watch(currentViewMode, (newMode) => {

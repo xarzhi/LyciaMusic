@@ -7,12 +7,14 @@ use crate::database::DbState;
 use lofty::file::FileType;
 use lofty::prelude::*;
 use lofty::probe::Probe;
+use regex::Regex;
 use rusqlite::{params, OptionalExtension};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
 use symphonia::core::codecs::CODEC_TYPE_NULL;
 use symphonia::core::formats::FormatOptions;
@@ -22,6 +24,9 @@ use symphonia::core::probe::Hint;
 use symphonia::core::units::TimeBase;
 use tauri::{AppHandle, State};
 use walkdir::WalkDir;
+
+const VARIOUS_ARTISTS: &str = "Various Artists";
+const VARIOUS_ARTISTS_THRESHOLD: usize = 5;
 
 const UNKNOWN_ARTIST: &str = "未知歌手";
 const UNKNOWN_ALBUM: &str = "未知专辑";
@@ -81,6 +86,19 @@ fn u64_opt_to_i64_saturated(v: Option<u64>) -> Option<i64> {
     v.map(u64_to_i64_saturated)
 }
 
+fn deserialize_string_list(raw: Option<String>) -> Vec<String> {
+    raw.and_then(|value| serde_json::from_str::<Vec<String>>(&value).ok())
+        .unwrap_or_default()
+}
+
+fn serialize_string_list(values: &[String]) -> Result<String, String> {
+    serde_json::to_string(values).map_err(|e| e.to_string())
+}
+
+fn i64_to_bool(v: Option<i64>) -> bool {
+    v.unwrap_or(0) != 0
+}
+
 fn is_missing_text(value: &str, placeholder: &str) -> bool {
     let trimmed = value.trim();
     trimmed.is_empty() || trimmed == placeholder
@@ -108,11 +126,64 @@ fn pick_optional_tag_value(current: &str, candidate: Option<&str>) -> Option<Str
         .map(ToOwned::to_owned)
 }
 
+fn artist_split_regex() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| Regex::new(r"(?i)[;,&/]|feat\.|\s+with\s+").expect("artist split regex"))
+}
+
+fn split_artist_names(artist: &str) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut result = Vec::new();
+
+    for part in artist_split_regex().split(artist) {
+        let trimmed = part.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let dedupe_key = trimmed.to_lowercase();
+        if seen.insert(dedupe_key) {
+            result.push(trimmed.to_string());
+        }
+    }
+
+    if result.is_empty() && !artist.trim().is_empty() {
+        result.push(artist.trim().to_string());
+    }
+
+    result
+}
+
+fn primary_artist_name(song: &Song) -> String {
+    song.artist_names
+        .first()
+        .cloned()
+        .unwrap_or_else(|| song.artist.clone())
+}
+
+fn normalize_album_key_part(value: &str, fallback: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        fallback.to_ascii_lowercase()
+    } else {
+        trimmed.to_ascii_lowercase()
+    }
+}
+
+fn build_album_key(album: &str, album_artist: &str) -> String {
+    format!(
+        "{}::{}",
+        normalize_album_key_part(album, UNKNOWN_ALBUM),
+        normalize_album_key_part(album_artist, VARIOUS_ARTISTS)
+    )
+}
+
 fn fill_text_fields_from_tags(
     tagged_file: &impl lofty::file::TaggedFileExt,
     artist: &mut String,
     album: &mut String,
     title: &mut String,
+    album_artist: &mut String,
 ) {
     let metadata = extract_text_metadata(tagged_file);
 
@@ -126,6 +197,10 @@ fn fill_text_fields_from_tags(
 
     if let Some(value) = pick_optional_tag_value(title, metadata.title.as_deref()) {
         *title = value;
+    }
+
+    if let Some(value) = pick_optional_tag_value(album_artist, metadata.album_artist.as_deref()) {
+        *album_artist = value;
     }
 }
 
@@ -148,6 +223,9 @@ fn derive_bitrate_kbps(file_size: u64, duration: u32) -> u32 {
 fn song_metadata_incomplete(song: &Song) -> bool {
     is_missing_text(&song.artist, UNKNOWN_ARTIST)
         || is_missing_text(&song.album, UNKNOWN_ALBUM)
+        || song.artist_names.is_empty()
+        || song.album_artist.trim().is_empty()
+        || song.album_key.trim().is_empty()
         || song.title.trim().is_empty()
         || song.duration == 0
 }
@@ -156,6 +234,7 @@ fn song_metadata_incomplete(song: &Song) -> bool {
 fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Song> {
     let mut artist = String::from("未知歌手");
     let mut album = String::from("未知专辑");
+    let mut album_artist = String::new();
     let mut title = String::new();
     let mut duration = 0u32;
     let mut bitrate = 0u32;
@@ -182,7 +261,13 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
         sample_rate = props.sample_rate().unwrap_or(0);
         bit_depth = props.bit_depth().map(|b| b as u8);
 
-        fill_text_fields_from_tags(&tagged_file, &mut artist, &mut album, &mut title);
+        fill_text_fields_from_tags(
+            &tagged_file,
+            &mut artist,
+            &mut album,
+            &mut title,
+            &mut album_artist,
+        );
     }
 
     if duration == 0 {
@@ -200,6 +285,12 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
     if title.trim().is_empty() {
         title = path.file_stem()?.to_string_lossy().to_string();
     }
+    if album_artist.trim().is_empty() {
+        album_artist = artist.clone();
+    }
+
+    let artist_names = split_artist_names(&artist);
+    let album_key = build_album_key(&album, &album_artist);
 
     Some(Song {
         id: None,
@@ -207,7 +298,13 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
         path: path_str.to_string(),
         title,
         artist,
+        artist_names: artist_names.clone(),
+        effective_artist_names: artist_names,
         album,
+        album_artist,
+        album_key,
+        is_various_artists_album: false,
+        collapse_artist_credits: false,
         duration,
         cover: None,
         bitrate,
@@ -346,6 +443,117 @@ fn detect_audio_identity(path: &Path, ext: &str) -> AudioIdentity {
     }
 }
 
+fn resolve_album_artist_for_group(songs: &[Song]) -> (String, bool, bool) {
+    let tagged_album_artists: Vec<String> = songs
+        .iter()
+        .filter_map(|song| {
+            let trimmed = song.album_artist.trim();
+            (!trimmed.is_empty() && !trimmed.eq_ignore_ascii_case(&song.artist))
+                .then(|| trimmed.to_string())
+        })
+        .collect();
+
+    let primary_artists: Vec<String> = songs.iter().map(primary_artist_name).collect();
+    let unique_primary_artists: HashSet<String> = primary_artists
+        .iter()
+        .map(|name| name.to_lowercase())
+        .collect();
+
+    if !tagged_album_artists.is_empty() {
+        let unique_tagged: HashSet<String> = tagged_album_artists
+            .iter()
+            .map(|name| name.to_lowercase())
+            .collect();
+        let resolved = tagged_album_artists[0].clone();
+        let is_various = unique_tagged.len() > 1 && unique_primary_artists.len() > 1;
+        let collapse = unique_primary_artists.len() > VARIOUS_ARTISTS_THRESHOLD;
+        return (
+            if is_various {
+                VARIOUS_ARTISTS.to_string()
+            } else {
+                resolved
+            },
+            is_various,
+            collapse,
+        );
+    }
+
+    if unique_primary_artists.len() <= 1 {
+        return (
+            primary_artists
+                .first()
+                .cloned()
+                .unwrap_or_else(|| UNKNOWN_ARTIST.to_string()),
+            false,
+            false,
+        );
+    }
+
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for name in &primary_artists {
+        *counts.entry(name.clone()).or_insert(0) += 1;
+    }
+
+    let dominant_artist = counts
+        .into_iter()
+        .max_by(|(left_name, left_count), (right_name, right_count)| {
+            left_count
+                .cmp(right_count)
+                .then_with(|| right_name.cmp(left_name))
+        })
+        .map(|(name, _)| name)
+        .unwrap_or_else(|| UNKNOWN_ARTIST.to_string());
+
+    let all_unique = unique_primary_artists.len() == songs.len();
+    let collapse = unique_primary_artists.len() > VARIOUS_ARTISTS_THRESHOLD;
+    let is_various = collapse || all_unique;
+
+    (
+        if is_various {
+            VARIOUS_ARTISTS.to_string()
+        } else {
+            dominant_artist
+        },
+        is_various,
+        collapse,
+    )
+}
+
+fn enrich_album_groups(songs: &mut [Song]) {
+    let mut grouped_paths: HashMap<String, Vec<usize>> = HashMap::new();
+
+    for (index, song) in songs.iter().enumerate() {
+        let parent_folder = Path::new(&song.path)
+            .parent()
+            .map(|path| path.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let album_group_key = format!(
+            "{}::{}",
+            parent_folder,
+            normalize_album_key_part(&song.album, UNKNOWN_ALBUM)
+        );
+        grouped_paths.entry(album_group_key).or_default().push(index);
+    }
+
+    for indexes in grouped_paths.into_values() {
+        let group_songs: Vec<Song> = indexes.iter().map(|index| songs[*index].clone()).collect();
+        let (album_artist, is_various, collapse) = resolve_album_artist_for_group(&group_songs);
+
+        for index in indexes {
+            let song = &mut songs[index];
+            song.album_artist = album_artist.clone();
+            song.album_key = build_album_key(&song.album, &song.album_artist);
+            song.is_various_artists_album = is_various;
+            song.collapse_artist_credits = collapse;
+            song.effective_artist_names = if collapse {
+                vec![VARIOUS_ARTISTS.to_string()]
+            } else {
+                song.artist_names.clone()
+            };
+        }
+    }
+}
+
 fn load_db_snapshot_for_folder(
     conn: &rusqlite::Connection,
     normalized_folder: &str,
@@ -355,7 +563,7 @@ fn load_db_snapshot_for_folder(
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, container, codec, file_size, added_at, file_modified_at
+            "SELECT id, path, title, artist, artist_names, effective_artist_names, album, album_artist, album_key, is_various_artists_album, collapse_artist_credits, duration, cover_path, bitrate, sample_rate, bit_depth, format, container, codec, file_size, added_at, file_modified_at
              FROM songs
              WHERE path = ?1
                 OR path LIKE ?2 ESCAPE '^'
@@ -368,13 +576,15 @@ fn load_db_snapshot_for_folder(
             params![normalized_folder, pattern_forward, pattern_back],
             |row| {
                 let path: String = row.get(1)?;
-                let duration = clamp_i64_to_u32(row.get::<_, Option<i64>>(5)?.unwrap_or(0));
-                let bitrate = clamp_i64_to_u32(row.get::<_, Option<i64>>(7)?.unwrap_or(0));
-                let sample_rate = clamp_i64_to_u32(row.get::<_, Option<i64>>(8)?.unwrap_or(0));
-                let bit_depth = i64_to_u8_opt(row.get::<_, Option<i64>>(9)?);
-                let file_size_i64 = row.get::<_, Option<i64>>(13)?.unwrap_or(0).max(0);
-                let added_at_i64 = row.get::<_, Option<i64>>(14)?;
-                let file_modified_at_i64 = row.get::<_, Option<i64>>(15)?;
+                let duration = clamp_i64_to_u32(row.get::<_, Option<i64>>(11)?.unwrap_or(0));
+                let bitrate = clamp_i64_to_u32(row.get::<_, Option<i64>>(13)?.unwrap_or(0));
+                let sample_rate = clamp_i64_to_u32(row.get::<_, Option<i64>>(14)?.unwrap_or(0));
+                let bit_depth = i64_to_u8_opt(row.get::<_, Option<i64>>(15)?);
+                let file_size_i64 = row.get::<_, Option<i64>>(19)?.unwrap_or(0).max(0);
+                let added_at_i64 = row.get::<_, Option<i64>>(20)?;
+                let file_modified_at_i64 = row.get::<_, Option<i64>>(21)?;
+                let artist_names = deserialize_string_list(row.get::<_, Option<String>>(4)?);
+                let effective_artist_names = deserialize_string_list(row.get::<_, Option<String>>(5)?);
 
                 let name = Path::new(&path)
                     .file_name()
@@ -392,15 +602,21 @@ fn load_db_snapshot_for_folder(
                             path,
                             title: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
                             artist: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
-                            album: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                            artist_names,
+                            effective_artist_names,
+                            album: row.get::<_, Option<String>>(6)?.unwrap_or_default(),
+                            album_artist: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
+                            album_key: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
+                            is_various_artists_album: i64_to_bool(row.get::<_, Option<i64>>(9)?),
+                            collapse_artist_credits: i64_to_bool(row.get::<_, Option<i64>>(10)?),
                             duration,
-                            cover: row.get::<_, Option<String>>(6)?,
+                            cover: row.get::<_, Option<String>>(12)?,
                             bitrate,
                             sample_rate,
                             bit_depth,
-                            format: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
-                            container: row.get::<_, Option<String>>(11)?,
-                            codec: row.get::<_, Option<String>>(12)?,
+                            format: row.get::<_, Option<String>>(16)?.unwrap_or_default(),
+                            container: row.get::<_, Option<String>>(17)?,
+                            codec: row.get::<_, Option<String>>(18)?,
                             file_size: file_size_i64 as u64,
                             added_at: i64_to_u64_opt(added_at_i64),
                             file_modified_at: i64_to_u64_opt(file_modified_at_i64),
@@ -495,6 +711,34 @@ fn collect_scan_diff(
 
     let to_delete: Vec<String> = db_snapshot.keys().cloned().collect();
 
+    enrich_album_groups(&mut songs);
+
+    let song_by_path: HashMap<String, Song> = songs
+        .iter()
+        .cloned()
+        .map(|song| (song.path.clone(), song))
+        .collect();
+
+    let to_add = to_add
+        .into_iter()
+        .map(|song| {
+            song_by_path
+                .get(&song.path)
+                .cloned()
+                .unwrap_or(song)
+        })
+        .collect();
+
+    let to_update = to_update
+        .into_iter()
+        .map(|song| {
+            song_by_path
+                .get(&song.path)
+                .cloned()
+                .unwrap_or(song)
+        })
+        .collect();
+
     ScanDiff {
         songs,
         to_add,
@@ -502,6 +746,64 @@ fn collect_scan_diff(
         to_delete,
         has_disk_songs,
     }
+}
+
+fn get_song_id_by_path(
+    conn: &rusqlite::Transaction<'_>,
+    path: &str,
+) -> Result<Option<i64>, String> {
+    conn.query_row("SELECT id FROM songs WHERE path = ?1", params![path], |row| row.get(0))
+        .optional()
+        .map_err(|e| e.to_string())
+}
+
+fn ensure_artist_id(
+    conn: &rusqlite::Transaction<'_>,
+    artist_name: &str,
+) -> Result<i64, String> {
+    conn.execute(
+        "INSERT INTO artists (name) VALUES (?1)
+         ON CONFLICT(name) DO NOTHING",
+        params![artist_name],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.query_row(
+        "SELECT id FROM artists WHERE name = ?1 COLLATE NOCASE",
+        params![artist_name],
+        |row| row.get(0),
+    )
+    .map_err(|e| e.to_string())
+}
+
+fn sync_song_artists(
+    conn: &rusqlite::Transaction<'_>,
+    song_id: i64,
+    artist_names: &[String],
+) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM song_artists WHERE song_id = ?1",
+        params![song_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    let normalized_names = if artist_names.is_empty() {
+        vec![UNKNOWN_ARTIST.to_string()]
+    } else {
+        artist_names.to_vec()
+    };
+
+    for (sort_order, artist_name) in normalized_names.iter().enumerate() {
+        let artist_id = ensure_artist_id(conn, artist_name)?;
+        conn.execute(
+            "INSERT INTO song_artists (song_id, artist_id, sort_order)
+             VALUES (?1, ?2, ?3)",
+            params![song_id, artist_id, sort_order as i64],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }
 
 fn apply_scan_changes(
@@ -519,12 +821,40 @@ fn apply_scan_changes(
     {
         let mut insert_stmt = tx
             .prepare(
-                "INSERT INTO songs (path, title, artist, album, duration, cover_path, bitrate, sample_rate, bit_depth, format, container, codec, file_size, added_at, file_modified_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                "INSERT INTO songs (
+                    path,
+                    title,
+                    artist,
+                    artist_names,
+                    effective_artist_names,
+                    album,
+                    album_artist,
+                    album_key,
+                    is_various_artists_album,
+                    collapse_artist_credits,
+                    duration,
+                    cover_path,
+                    bitrate,
+                    sample_rate,
+                    bit_depth,
+                    format,
+                    container,
+                    codec,
+                    file_size,
+                    added_at,
+                    file_modified_at
+                 )
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
                  ON CONFLICT(path) DO UPDATE SET
                     title = excluded.title,
                     artist = excluded.artist,
+                    artist_names = excluded.artist_names,
+                    effective_artist_names = excluded.effective_artist_names,
                     album = excluded.album,
+                    album_artist = excluded.album_artist,
+                    album_key = excluded.album_key,
+                    is_various_artists_album = excluded.is_various_artists_album,
+                    collapse_artist_credits = excluded.collapse_artist_credits,
                     duration = excluded.duration,
                     cover_path = COALESCE(songs.cover_path, excluded.cover_path),
                     bitrate = excluded.bitrate,
@@ -543,12 +873,20 @@ fn apply_scan_changes(
             let file_size_i64 = u64_to_i64_saturated(song.file_size);
             let added_at_i64 = u64_opt_to_i64_saturated(song.added_at);
             let mtime_i64 = u64_opt_to_i64_saturated(song.file_modified_at);
+            let artist_names_json = serialize_string_list(&song.artist_names)?;
+            let effective_artist_names_json = serialize_string_list(&song.effective_artist_names)?;
             insert_stmt
                 .execute(params![
                     &song.path,
                     &song.title,
                     &song.artist,
+                    artist_names_json,
+                    effective_artist_names_json,
                     &song.album,
+                    &song.album_artist,
+                    &song.album_key,
+                    if song.is_various_artists_album { 1 } else { 0 },
+                    if song.collapse_artist_credits { 1 } else { 0 },
                     song.duration as i64,
                     &song.cover,
                     song.bitrate as i64,
@@ -562,6 +900,10 @@ fn apply_scan_changes(
                     mtime_i64
                 ])
                 .map_err(|e| format!("insert failed for '{}': {}", song.path, e))?;
+
+            if let Some(song_id) = get_song_id_by_path(&tx, &song.path)? {
+                sync_song_artists(&tx, song_id, &song.artist_names)?;
+            }
         }
     }
 
@@ -571,28 +913,42 @@ fn apply_scan_changes(
                 "UPDATE songs
                  SET title = ?1,
                      artist = ?2,
-                     album = ?3,
-                     duration = ?4,
-                    bitrate = ?5,
-                    sample_rate = ?6,
-                    bit_depth = ?7,
-                    format = ?8,
-                    container = ?9,
-                    codec = ?10,
-                    file_size = ?11,
-                    file_modified_at = ?12
-                 WHERE path = ?13",
+                     artist_names = ?3,
+                     effective_artist_names = ?4,
+                     album = ?5,
+                     album_artist = ?6,
+                     album_key = ?7,
+                     is_various_artists_album = ?8,
+                     collapse_artist_credits = ?9,
+                     duration = ?10,
+                     bitrate = ?11,
+                     sample_rate = ?12,
+                     bit_depth = ?13,
+                     format = ?14,
+                     container = ?15,
+                     codec = ?16,
+                     file_size = ?17,
+                     file_modified_at = ?18
+                 WHERE path = ?19",
             )
             .map_err(|e| e.to_string())?;
 
         for song in to_update {
             let file_size_i64 = u64_to_i64_saturated(song.file_size);
             let mtime_i64 = u64_opt_to_i64_saturated(song.file_modified_at);
+            let artist_names_json = serialize_string_list(&song.artist_names)?;
+            let effective_artist_names_json = serialize_string_list(&song.effective_artist_names)?;
             update_stmt
                 .execute(params![
                     &song.title,
                     &song.artist,
+                    artist_names_json,
+                    effective_artist_names_json,
                     &song.album,
+                    &song.album_artist,
+                    &song.album_key,
+                    if song.is_various_artists_album { 1 } else { 0 },
+                    if song.collapse_artist_credits { 1 } else { 0 },
                     song.duration as i64,
                     song.bitrate as i64,
                     song.sample_rate as i64,
@@ -605,6 +961,10 @@ fn apply_scan_changes(
                     &song.path
                 ])
                 .map_err(|e| format!("update failed for '{}': {}", song.path, e))?;
+
+            if let Some(song_id) = get_song_id_by_path(&tx, &song.path)? {
+                sync_song_artists(&tx, song_id, &song.artist_names)?;
+            }
         }
     }
 
@@ -618,6 +978,13 @@ fn apply_scan_changes(
                 .map_err(|e| format!("delete failed for '{}': {}", path, e))?;
         }
     }
+
+    tx.execute(
+        "DELETE FROM artists
+         WHERE id NOT IN (SELECT DISTINCT artist_id FROM song_artists)",
+        [],
+    )
+    .ok();
 
     tx.commit().map_err(|e| e.to_string())?;
     Ok(())

@@ -10,7 +10,7 @@ import { useSettings as useAppSettings } from './settings';
 import { useToast } from './toast';
 import { extractDominantColors } from './colorExtraction';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { sortItemsByAlphabetIndex } from '../utils/alphabetIndex';
+import { compareByAlphabetIndex, sortItemsByAlphabetIndex } from '../utils/alphabetIndex';
 
 // 动画帧 ID
 
@@ -72,6 +72,40 @@ interface GeneratedFolder {
   songs: State.Song[];
 
 }
+
+interface ArtistListItem {
+  name: string;
+  count: number;
+  firstSongPath: string;
+}
+
+interface AlbumListItem {
+  key: string;
+  name: string;
+  count: number;
+  artist: string;
+  firstSongPath: string;
+}
+
+const getSongArtistNames = (song: State.Song) => {
+  if (Array.isArray(song.effective_artist_names) && song.effective_artist_names.length > 0) {
+    return song.effective_artist_names;
+  }
+  if (Array.isArray(song.artist_names) && song.artist_names.length > 0) {
+    return song.artist_names;
+  }
+  return [song.artist || 'Unknown'];
+};
+
+const songHasArtist = (song: State.Song, artistName: string) =>
+  getSongArtistNames(song).some(name => name === artistName);
+
+const getSongAlbumKey = (song: State.Song) =>
+  song.album_key || `${song.album || 'Unknown'}::${song.album_artist || song.artist || 'Unknown'}`;
+
+const matchesAlbumKey = (song: State.Song, albumKey: string) => getSongAlbumKey(song) === albumKey;
+const getSongArtistSearchText = (song: State.Song) =>
+  [song.artist, song.album_artist, ...getSongArtistNames(song)].join(' ').toLowerCase();
 
 const getSongTitleLabel = (song: State.Song) => song.title || song.name;
 const getSongFileNameLabel = (song: State.Song) => song.name;
@@ -534,34 +568,25 @@ export function usePlayer() {
 
 
 
-  const artistList = computed(() => {
+  const artistList = computed<ArtistListItem[]>(() => {
 
 
 
-    const map = new Map<string, { count: number, firstSongPath: string }>();
+    const map = new Map<string, { count: number; firstSongPath: string }>();
 
 
 
-    librarySongs.value.forEach(s => {
+    librarySongs.value.forEach(song => {
+      getSongArtistNames(song).forEach(artistName => {
+        const key = artistName || 'Unknown';
+        const existing = map.get(key);
 
-
-
-      const k = s.artist || 'Unknown';
-
-
-
-      const existing = map.get(k);
-
-
-
-      if (existing) { existing.count++; }
-
-
-
-      else { map.set(k, { count: 1, firstSongPath: s.path }); }
-
-
-
+        if (existing) {
+          existing.count += 1;
+        } else {
+          map.set(key, { count: 1, firstSongPath: song.path });
+        }
+      });
     });
 
 
@@ -570,7 +595,11 @@ export function usePlayer() {
 
 
 
-    let list = Array.from(map).map(([n, v]) => ({ name: n, count: v.count, firstSongPath: v.firstSongPath }));
+    const list = Array.from(map, ([name, value]) => ({
+      name,
+      count: value.count,
+      firstSongPath: value.firstSongPath,
+    }));
 
 
 
@@ -586,7 +615,7 @@ export function usePlayer() {
 
 
 
-      list.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+      list.sort((a, b) => compareByAlphabetIndex(a.name, b.name));
 
 
 
@@ -594,7 +623,7 @@ export function usePlayer() {
 
 
 
-      const orderMap = new Map(State.artistCustomOrder.value.map((n, i) => [n, i]));
+      const orderMap = new Map(State.artistCustomOrder.value.map((name, index) => [name, index]));
 
 
 
@@ -602,15 +631,10 @@ export function usePlayer() {
 
 
 
-        const ia = orderMap.has(a.name) ? orderMap.get(a.name)! : 999999;
+        const left = orderMap.has(a.name) ? orderMap.get(a.name)! : Number.MAX_SAFE_INTEGER;
+        const right = orderMap.has(b.name) ? orderMap.get(b.name)! : Number.MAX_SAFE_INTEGER;
 
-
-
-        const ib = orderMap.has(b.name) ? orderMap.get(b.name)! : 999999;
-
-
-
-        return ia - ib;
+        return left - right;
 
 
 
@@ -626,7 +650,7 @@ export function usePlayer() {
 
 
 
-      list.sort((a, b) => b.count - a.count);
+      list.sort((a, b) => b.count - a.count || compareByAlphabetIndex(a.name, b.name));
 
 
 
@@ -646,34 +670,29 @@ export function usePlayer() {
 
 
 
-  const albumList = computed(() => {
+  const albumList = computed<AlbumListItem[]>(() => {
 
 
 
-    const map = new Map<string, { count: number, artist: string, firstSongPath: string }>();
+    const map = new Map<string, AlbumListItem>();
 
 
 
-    librarySongs.value.forEach(s => {
+    librarySongs.value.forEach(song => {
+      const key = getSongAlbumKey(song);
+      const existing = map.get(key);
 
-
-
-      const k = s.album || 'Unknown';
-
-
-
-      const existing = map.get(k);
-
-
-
-      if (existing) { existing.count++; }
-
-
-
-      else { map.set(k, { count: 1, artist: s.artist, firstSongPath: s.path }); }
-
-
-
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(key, {
+          key,
+          name: song.album || 'Unknown',
+          count: 1,
+          artist: song.album_artist || song.artist || 'Unknown',
+          firstSongPath: song.path,
+        });
+      }
     });
 
 
@@ -682,7 +701,7 @@ export function usePlayer() {
 
 
 
-    let list = Array.from(map).map(([n, v]) => ({ name: n, count: v.count, artist: v.artist, firstSongPath: v.firstSongPath }));
+    const list = Array.from(map.values());
 
 
 
@@ -698,7 +717,7 @@ export function usePlayer() {
 
 
 
-      list.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+      list.sort((a, b) => compareByAlphabetIndex(a.name, b.name));
 
 
 
@@ -706,7 +725,7 @@ export function usePlayer() {
 
 
 
-      const orderMap = new Map(State.albumCustomOrder.value.map((n, i) => [n, i]));
+      const orderMap = new Map(State.albumCustomOrder.value.map((key, index) => [key, index]));
 
 
 
@@ -714,15 +733,10 @@ export function usePlayer() {
 
 
 
-        const ia = orderMap.has(a.name) ? orderMap.get(a.name)! : 999999;
+        const left = orderMap.has(a.key) ? orderMap.get(a.key)! : Number.MAX_SAFE_INTEGER;
+        const right = orderMap.has(b.key) ? orderMap.get(b.key)! : Number.MAX_SAFE_INTEGER;
 
-
-
-        const ib = orderMap.has(b.name) ? orderMap.get(b.name)! : 999999;
-
-
-
-        return ia - ib;
+        return left - right;
 
 
 
@@ -730,18 +744,13 @@ export function usePlayer() {
 
 
 
+    } else if (State.albumSortMode.value === 'count') {
+      list.sort((a, b) => b.count - a.count || compareByAlphabetIndex(a.artist, b.artist));
     } else {
-
-
-
-      // Default: count
-
-
-
-      list.sort((a, b) => b.count - a.count);
-
-
-
+      list.sort((a, b) => {
+        const artistDiff = compareByAlphabetIndex(a.artist, b.artist);
+        return artistDiff !== 0 ? artistDiff : compareByAlphabetIndex(a.name, b.name);
+      });
     }
 
 
@@ -825,11 +834,52 @@ export function usePlayer() {
 
   const favoriteSongList = computed(() => { return librarySongs.value.filter(s => State.favoritePaths.value.includes(s.path)); });
 
-  const favArtistList = computed(() => { const map = new Map<string, { count: number, firstSongPath: string }>(); favoriteSongList.value.forEach(s => { const k = s.artist || 'Unknown'; const existing = map.get(k); if (existing) { existing.count++; } else { map.set(k, { count: 1, firstSongPath: s.path }); } }); return Array.from(map).map(([name, val]) => ({ name, count: val.count, firstSongPath: val.firstSongPath })).sort((a, b) => b.count - a.count); });
+  const favArtistList = computed(() => {
+    const map = new Map<string, { count: number; firstSongPath: string }>();
+    favoriteSongList.value.forEach(song => {
+      getSongArtistNames(song).forEach(name => {
+        const existing = map.get(name);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          map.set(name, { count: 1, firstSongPath: song.path });
+        }
+      });
+    });
+    return Array.from(map, ([name, value]) => ({ name, count: value.count, firstSongPath: value.firstSongPath }))
+      .sort((a, b) => b.count - a.count || compareByAlphabetIndex(a.name, b.name));
+  });
 
-  const favAlbumList = computed(() => { const map = new Map<string, { count: number, artist: string, firstSongPath: string }>(); favoriteSongList.value.forEach(s => { const k = s.album || 'Unknown'; const existing = map.get(k); if (existing) { existing.count++; } else { map.set(k, { count: 1, artist: s.artist, firstSongPath: s.path }); } }); return Array.from(map).map(([name, val]) => ({ name, count: val.count, artist: val.artist, firstSongPath: val.firstSongPath })).sort((a, b) => b.count - a.count); });
+  const favAlbumList = computed(() => {
+    const map = new Map<string, { key: string; name: string; count: number; artist: string; firstSongPath: string }>();
+    favoriteSongList.value.forEach(song => {
+      const key = getSongAlbumKey(song);
+      const existing = map.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(key, { key, name: song.album || 'Unknown', count: 1, artist: song.album_artist || song.artist || 'Unknown', firstSongPath: song.path });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => b.count - a.count || compareByAlphabetIndex(a.artist, b.artist));
+  });
 
-  const recentAlbumList = computed(() => { const map = new Map<string, { artist: string, playedAt: number, firstSongPath: string }>(); State.recentSongs.value.forEach(item => { const k = item.song.album || 'Unknown'; if (!map.has(k) || item.playedAt > map.get(k)!.playedAt) { map.set(k, { artist: item.song.artist, playedAt: item.playedAt, firstSongPath: item.song.path }); } }); return Array.from(map).map(([name, val]) => ({ name, artist: val.artist, playedAt: val.playedAt, firstSongPath: val.firstSongPath })).sort((a, b) => b.playedAt - a.playedAt); });
+  const recentAlbumList = computed(() => {
+    const map = new Map<string, { key: string; name: string; artist: string; playedAt: number; firstSongPath: string }>();
+    State.recentSongs.value.forEach(item => {
+      const key = getSongAlbumKey(item.song);
+      if (!map.has(key) || item.playedAt > map.get(key)!.playedAt) {
+        map.set(key, {
+          key,
+          name: item.song.album || 'Unknown',
+          artist: item.song.album_artist || item.song.artist || 'Unknown',
+          playedAt: item.playedAt,
+          firstSongPath: item.song.path
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => b.playedAt - a.playedAt);
+  });
 
   const recentPlaylistList = computed(() => { const result: { id: string, name: string, count: number, playedAt: number, firstSongPath: string }[] = []; State.playlists.value.forEach(pl => { let lastPlayedTime = 0; let hasPlayed = false; const plSongPaths = new Set(pl.songPaths); for (const historyItem of State.recentSongs.value) { if (plSongPaths.has(historyItem.song.path)) { if (historyItem.playedAt > lastPlayedTime) { lastPlayedTime = historyItem.playedAt; hasPlayed = true; } } } if (hasPlayed) { result.push({ id: pl.id, name: pl.name, count: pl.songPaths.length, playedAt: lastPlayedTime, firstSongPath: pl.songPaths.length > 0 ? pl.songPaths[0] : '' }); } }); return result.sort((a, b) => b.playedAt - a.playedAt); });
 
@@ -877,7 +927,7 @@ export function usePlayer() {
 
       const q = State.searchQuery.value.toLowerCase();
 
-      if (State.currentViewMode.value === 'favorites') return favoriteSongList.value.filter(s => s.name.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q));
+      if (State.currentViewMode.value === 'favorites') return favoriteSongList.value.filter(s => s.name.toLowerCase().includes(q) || getSongArtistSearchText(s).includes(q));
 
       if (State.currentViewMode.value === 'recent') return State.recentSongs.value.map(h => h.song).filter(s => s.name.toLowerCase().includes(q));
 
@@ -885,7 +935,7 @@ export function usePlayer() {
         return sortItemsByAlphabetIndex(
           librarySongs.value.filter(s =>
             s.name.toLowerCase().includes(q) ||
-            s.artist.toLowerCase().includes(q) ||
+            getSongArtistSearchText(s).includes(q) ||
             s.album.toLowerCase().includes(q),
           ),
           getSongTitleLabel,
@@ -896,7 +946,7 @@ export function usePlayer() {
         return sortItemsByAlphabetIndex(
           State.songList.value.filter(s =>
             s.name.toLowerCase().includes(q) ||
-            s.artist.toLowerCase().includes(q) ||
+            getSongArtistSearchText(s).includes(q) ||
             s.album.toLowerCase().includes(q),
           ),
           getSongTitleLabel,
@@ -904,16 +954,16 @@ export function usePlayer() {
       }
 
       // 🟢 搜索逻辑：优先搜库，也可以搜当前文件夹的
-      return librarySongs.value.filter(s => s.name.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q) || s.album.toLowerCase().includes(q));
+      return librarySongs.value.filter(s => s.name.toLowerCase().includes(q) || getSongArtistSearchText(s).includes(q) || s.album.toLowerCase().includes(q));
 
     }
 
     if (State.currentViewMode.value === 'all') {
       let base = [...librarySongs.value];
       if (State.localMusicTab.value === 'artist' && State.currentArtistFilter.value) {
-        base = base.filter(s => s.artist === State.currentArtistFilter.value);
+        base = base.filter(s => songHasArtist(s, State.currentArtistFilter.value));
       } else if (State.localMusicTab.value === 'album' && State.currentAlbumFilter.value) {
-        base = base.filter(s => s.album === State.currentAlbumFilter.value);
+        base = base.filter(s => matchesAlbumKey(s, State.currentAlbumFilter.value));
       }
 
       // 🟢 应用本地音乐排序
@@ -999,9 +1049,9 @@ export function usePlayer() {
       if (State.favTab.value === 'songs') {
         songs = [...favoriteSongList.value];
       } else if (State.favTab.value === 'artists') {
-        songs = State.favDetailFilter.value?.type === 'artist' ? favoriteSongList.value.filter(s => s.artist === State.favDetailFilter.value!.name) : [];
+        songs = State.favDetailFilter.value?.type === 'artist' ? favoriteSongList.value.filter(s => songHasArtist(s, State.favDetailFilter.value!.name)) : [];
       } else if (State.favTab.value === 'albums') {
-        songs = State.favDetailFilter.value?.type === 'album' ? favoriteSongList.value.filter(s => s.album === State.favDetailFilter.value!.name) : [];
+        songs = State.favDetailFilter.value?.type === 'album' ? favoriteSongList.value.filter(s => matchesAlbumKey(s, State.favDetailFilter.value!.name)) : [];
       } else {
         songs = [...favoriteSongList.value];
       }
@@ -1049,7 +1099,12 @@ export function usePlayer() {
       return songs;
     }
 
-    return librarySongs.value.filter(s => (s.artist || 'Unknown') === State.filterCondition.value || (s.album || 'Unknown') === State.filterCondition.value || (s.genre || 'Unknown') === State.filterCondition.value || ((s.year?.substring(0, 4)) || 'Unknown') === State.filterCondition.value);
+    return librarySongs.value.filter(s =>
+      songHasArtist(s, State.filterCondition.value) ||
+      matchesAlbumKey(s, State.filterCondition.value) ||
+      (s.genre || 'Unknown') === State.filterCondition.value ||
+      ((s.year?.substring(0, 4)) || 'Unknown') === State.filterCondition.value
+    );
 
   });
 
@@ -1323,7 +1378,7 @@ export function usePlayer() {
 
   function setSearch(q: string) { State.searchQuery.value = q; }
 
-  function switchLocalTab(tab: 'default' | 'artist' | 'album') { State.localMusicTab.value = tab; State.currentArtistFilter.value = ''; State.currentAlbumFilter.value = ''; if (tab === 'artist' && artistList.value.length > 0) State.currentArtistFilter.value = artistList.value[0].name; if (tab === 'album' && albumList.value.length > 0) State.currentAlbumFilter.value = albumList.value[0].name; }
+  function switchLocalTab(tab: 'default' | 'artist' | 'album') { State.localMusicTab.value = tab; State.currentArtistFilter.value = ''; State.currentAlbumFilter.value = ''; if (tab === 'artist' && artistList.value.length > 0) State.currentArtistFilter.value = artistList.value[0].name; if (tab === 'album' && albumList.value.length > 0) State.currentAlbumFilter.value = albumList.value[0].key; }
 
   function switchFavTab(tab: 'songs' | 'artists' | 'albums') { State.favTab.value = tab; }
 
@@ -1882,7 +1937,7 @@ export function usePlayer() {
 
         // 🟢 读取排序状态
         const sArtistSort = localStorage.getItem('player_artist_sort_mode'); if (sArtistSort) State.artistSortMode.value = sArtistSort as any;
-        const sAlbumSort = localStorage.getItem('player_album_sort_mode'); if (sAlbumSort) State.albumSortMode.value = sAlbumSort as any;
+        const sAlbumSort = localStorage.getItem('player_album_sort_mode'); if (sAlbumSort && ['count', 'name', 'artist', 'custom'].includes(sAlbumSort)) State.albumSortMode.value = sAlbumSort as any;
         const sArtistOrder = localStorage.getItem('player_artist_custom_order'); if (sArtistOrder) try { State.artistCustomOrder.value = JSON.parse(sArtistOrder); } catch (e) { }
         const sAlbumOrder = localStorage.getItem('player_album_custom_order'); if (sAlbumOrder) try { State.albumCustomOrder.value = JSON.parse(sAlbumOrder); } catch (e) { }
         const sFolderSort = localStorage.getItem('player_folder_sort_mode');

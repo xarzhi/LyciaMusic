@@ -10,6 +10,7 @@ import { useSettings as useAppSettings } from './settings';
 import { useToast } from './toast';
 import { extractDominantColors } from './colorExtraction';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { sortItemsByAlphabetIndex } from '../utils/alphabetIndex';
 
 // 动画帧 ID
 
@@ -71,6 +72,9 @@ interface GeneratedFolder {
   songs: State.Song[];
 
 }
+
+const getSongTitleLabel = (song: State.Song) => song.title || song.name;
+const getSongFileNameLabel = (song: State.Song) => song.name;
 
 
 
@@ -877,6 +881,28 @@ export function usePlayer() {
 
       if (State.currentViewMode.value === 'recent') return State.recentSongs.value.map(h => h.song).filter(s => s.name.toLowerCase().includes(q));
 
+      if (State.currentViewMode.value === 'all') {
+        return sortItemsByAlphabetIndex(
+          librarySongs.value.filter(s =>
+            s.name.toLowerCase().includes(q) ||
+            s.artist.toLowerCase().includes(q) ||
+            s.album.toLowerCase().includes(q),
+          ),
+          getSongTitleLabel,
+        );
+      }
+
+      if (State.currentViewMode.value === 'folder') {
+        return sortItemsByAlphabetIndex(
+          State.songList.value.filter(s =>
+            s.name.toLowerCase().includes(q) ||
+            s.artist.toLowerCase().includes(q) ||
+            s.album.toLowerCase().includes(q),
+          ),
+          getSongTitleLabel,
+        );
+      }
+
       // 🟢 搜索逻辑：优先搜库，也可以搜当前文件夹的
       return librarySongs.value.filter(s => s.name.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q) || s.album.toLowerCase().includes(q));
 
@@ -892,9 +918,9 @@ export function usePlayer() {
 
       // 🟢 应用本地音乐排序
       if (State.localSortMode.value === 'title') {
-        base.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'zh-CN'));
+        base = sortItemsByAlphabetIndex(base, getSongTitleLabel);
       } else if (State.localSortMode.value === 'name') {
-        base.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+        base = sortItemsByAlphabetIndex(base, getSongFileNameLabel);
       } else if (State.localSortMode.value === 'artist') {
         base.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
       } else if (State.localSortMode.value === 'added_at') {
@@ -906,6 +932,8 @@ export function usePlayer() {
           const ib = orderMap.has(b.path) ? orderMap.get(b.path)! : 999999;
           return ia - ib;
         });
+      } else {
+        base = sortItemsByAlphabetIndex(base, getSongTitleLabel);
       }
 
       return base;
@@ -918,15 +946,9 @@ export function usePlayer() {
 
         // 🟢 添加排序逻辑
         if (State.folderSortMode.value === 'title') {
-          // 按歌曲名(title优先,否则用文件名)排序
-          songs.sort((a, b) => {
-            const titleA = a.title || a.name;
-            const titleB = b.title || b.name;
-            return titleA.localeCompare(titleB, 'zh-CN');
-          });
+          songs = sortItemsByAlphabetIndex(songs, getSongTitleLabel);
         } else if (State.folderSortMode.value === 'name') {
-          // 按文件名排序
-          songs.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+          songs = sortItemsByAlphabetIndex(songs, getSongFileNameLabel);
         } else if (State.folderSortMode.value === 'artist') {
           // 按歌手名排序
           songs.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));

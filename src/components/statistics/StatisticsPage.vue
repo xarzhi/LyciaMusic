@@ -1,172 +1,156 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
+import { storeToRefs } from 'pinia';
 import StatsOverviewCards from './StatsOverviewCards.vue';
 import BehaviorStatsSection from './BehaviorStatsSection.vue';
 import QualityPieChart from './QualityPieChart.vue';
 import FormatPieChart from './FormatPieChart.vue';
+import { useStatisticsStore, type TimeRangeType } from '../../stores/statistics';
 
-// 类型定义
-interface LibraryStats {
-  total_songs: number;
-  total_duration: number;
-  total_file_size: number;
-  album_count: number;
-  artist_count: number;
-  lossless_count: number;
-  hires_count: number;
-  this_month_added: number;
-}
+const TEXT = {
+  range7Days: '\u8fd17\u5929',
+  range30Days: '\u8fd130\u5929',
+  thisYear: '\u4eca\u5e74',
+  allTime: '\u5168\u90e8',
+  totalSongs: '\u603b\u6b4c\u66f2',
+  albums: '\u4e13\u8f91',
+  artists: '\u6b4c\u624b',
+  totalDuration: '\u603b\u65f6\u957f',
+  librarySize: '\u5e93\u5927\u5c0f',
+  losslessRate: '\u65e0\u635f\u5360\u6bd4',
+  totalListenDuration: '\u603b\u542c\u6b4c\u65f6\u957f',
+  playCount: '\u64ad\u653e\u6b21\u6570',
+  peakPeriod: '\u6700\u6d3b\u8dc3\u65f6\u6bb5',
+  topByCount: '\u6700\u5e38\u64ad\u653e(\u6309\u6b21\u6570)',
+  topByDuration: '\u6700\u5e38\u64ad\u653e(\u6309\u65f6\u957f)',
+  hourlyDistribution: '24 \u5c0f\u65f6\u64ad\u653e\u5206\u5e03',
+  topArtists: '\u5e38\u542c\u6b4c\u624b',
+  topAlbums: '\u5e38\u542c\u4e13\u8f91',
+  loadFailed: '\u52a0\u8f7d\u5931\u8d25\uff1a',
+  retry: '\u91cd\u8bd5',
+  noData: '\u6682\u65e0\u6570\u636e',
+  noLibraryHint: '\u5148\u53bb\u8bbe\u7f6e\u4e2d\u6dfb\u52a0\u97f3\u4e50\u5e93\u6587\u4ef6\u5939\u5427',
+  libraryOverview: '\u66f2\u5e93\u6982\u89c8',
+  manageCards: '\u7ba1\u7406\u5361\u7247',
+  updatedAt: '\u66f4\u65b0\u4e8e',
+  managerHint: '\u52fe\u9009\u4ee5\u663e\u793a\u5361\u7247\uff1a',
+  qualityDetail: '\u97f3\u8d28\u5206\u5e03\u8be6\u60c5',
+  formatDetail: '\u97f3\u4e50\u683c\u5f0f\u5206\u5e03',
+  behaviorTitle: '\u542c\u6b4c\u884c\u4e3a',
+};
 
-interface TopSong {
-  song_path: string;
-  play_count: number;
-  value: number;
-}
+const CARD_TITLES = {
+  totalSongs: TEXT.totalSongs,
+  albums: TEXT.albums,
+  artists: TEXT.artists,
+  totalDuration: TEXT.totalDuration,
+  librarySize: TEXT.librarySize,
+  losslessRate: TEXT.losslessRate,
+  totalListenDuration: TEXT.totalListenDuration,
+  playCount: TEXT.playCount,
+  peakPeriod: TEXT.peakPeriod,
+  topByCount: TEXT.topByCount,
+  topByDuration: TEXT.topByDuration,
+  hourlyDistribution: TEXT.hourlyDistribution,
+  topArtists: TEXT.topArtists,
+  topAlbums: TEXT.topAlbums,
+} as const;
 
-interface TopArtist {
-  artist: string;
-  play_count: number;
-}
-
-interface TopAlbum {
-  album: string;
-  play_count: number;
-}
-
-interface BehaviorStats {
-  total_plays: number;
-  total_duration: number;
-  top_songs: TopSong[];
-  top_songs_by_duration: TopSong[];
-  top_artists: TopArtist[];
-  top_albums: TopAlbum[];
-  hour_distribution: number[];
-  recent_activity: number[];
-}
-
-type TimeRangeType = 'All' | 'Days7' | 'Days30' | 'ThisYear';
-type TimeRange = { type: TimeRangeType };
-
-const stats = ref<LibraryStats | null>(null);
-const behaviorStats = ref<BehaviorStats | null>(null);
-const loading = ref(true);
-const error = ref<string | null>(null);
-const lastUpdated = ref<Date | null>(null);
-const isRefreshing = ref(false);
-
-// 音质分布数据
-interface QualityDistribution {
-  hires: number;
-  super_quality: number;
-  high_quality: number;
-  other: number;
-}
-const qualityDistribution = ref<QualityDistribution | null>(null);
-const expandedCard = ref<string | null>(null);
-
-// 格式分布数据
-interface FormatDistribution {
-  flac: number;
-  mp3: number;
-  alac: number;
-  wav: number;
-  aiff: number;
-  aac: number;
-  ogg: number;
-  other: number;
-}
-const formatDistribution = ref<FormatDistribution | null>(null);
-
-// 卡片点击处理
-async function handleCardClick(cardTitle: string) {
-  if (expandedCard.value === cardTitle) {
-    // 收起
-    expandedCard.value = null;
-  } else {
-    // 展开
-    expandedCard.value = cardTitle;
-    // 如果是无损占比，加载音质分布数据
-    if (cardTitle === '无损占比' && !qualityDistribution.value) {
-      try {
-        qualityDistribution.value = await invoke<QualityDistribution>('get_quality_distribution');
-      } catch (e) {
-        console.warn('Failed to fetch quality distribution:', e);
-      }
-    }
-    // 如果是库大小，加载格式分布数据
-    if (cardTitle === '库大小' && !formatDistribution.value) {
-      try {
-        formatDistribution.value = await invoke<FormatDistribution>('get_format_distribution');
-      } catch (e) {
-        console.warn('Failed to fetch format distribution:', e);
-      }
-    }
-  }
-}
-
-// 行为统计时间范围
-const currentBehaviorTimeRange = ref<TimeRangeType>('Days7');
 const behaviorTimeOptions: { label: string; value: TimeRangeType }[] = [
-  { label: '近7天', value: 'Days7' },
-  { label: '近30天', value: 'Days30' },
-  { label: '今年', value: 'ThisYear' },
-  { label: '全部', value: 'All' },
+  { label: TEXT.range7Days, value: 'Days7' },
+  { label: TEXT.range30Days, value: 'Days30' },
+  { label: TEXT.thisYear, value: 'ThisYear' },
+  { label: TEXT.allTime, value: 'All' },
 ];
 
-function updateBehaviorTime(range: TimeRangeType) {
-  currentBehaviorTimeRange.value = range;
-  fetchBehaviorStats();
-}
+const managerCards = [
+  CARD_TITLES.totalSongs,
+  CARD_TITLES.albums,
+  CARD_TITLES.artists,
+  CARD_TITLES.totalDuration,
+  CARD_TITLES.librarySize,
+  CARD_TITLES.losslessRate,
+  CARD_TITLES.totalListenDuration,
+  CARD_TITLES.playCount,
+  CARD_TITLES.peakPeriod,
+  CARD_TITLES.topByCount,
+  CARD_TITLES.topByDuration,
+  CARD_TITLES.hourlyDistribution,
+  CARD_TITLES.topArtists,
+  CARD_TITLES.topAlbums,
+];
 
-async function fetchStats() {
-  try {
-    stats.value = await invoke<LibraryStats>('get_library_stats');
-  } catch (e) {
-    console.warn('Failed to fetch library stats:', e);
-    error.value = String(e);
+const statisticsStore = useStatisticsStore();
+const {
+  currentBehaviorTimeRange,
+  stats,
+  behaviorStats,
+  loading,
+  error,
+  lastUpdated,
+  isRefreshing,
+  qualityDistribution,
+  formatDistribution,
+} = storeToRefs(statisticsStore);
+
+const expandedCard = ref<string | null>(null);
+const hiddenCards = ref<Set<string>>(new Set());
+const showManager = ref(false);
+
+async function handleCardClick(cardTitle: string) {
+  if (expandedCard.value === cardTitle) {
+    expandedCard.value = null;
+    return;
+  }
+
+  expandedCard.value = cardTitle;
+
+  if (cardTitle === CARD_TITLES.losslessRate && !qualityDistribution.value) {
+    try {
+      await statisticsStore.ensureQualityDistribution();
+    } catch (e) {
+      console.warn('Failed to fetch quality distribution:', e);
+    }
+  }
+
+  if (cardTitle === CARD_TITLES.librarySize && !formatDistribution.value) {
+    try {
+      await statisticsStore.ensureFormatDistribution();
+    } catch (e) {
+      console.warn('Failed to fetch format distribution:', e);
+    }
   }
 }
 
-async function fetchBehaviorStats() {
+async function updateBehaviorTime(range: TimeRangeType) {
   try {
-    const timeRange: TimeRange = { type: currentBehaviorTimeRange.value };
-    behaviorStats.value = await invoke<BehaviorStats>('get_behavior_stats', { timeRange });
+    await statisticsStore.refreshBehaviorOnly(range);
   } catch (e) {
     console.warn('Failed to fetch behavior stats:', e);
   }
 }
 
-// 刷新按钮：并发请求 + 防抖
 async function handleRefresh() {
-  if (isRefreshing.value) return;
-  isRefreshing.value = true;
-  
   try {
-    await Promise.all([fetchStats(), fetchBehaviorStats()]);
-    lastUpdated.value = new Date();
-  } finally {
-    isRefreshing.value = false;
+    await statisticsStore.refreshAll(currentBehaviorTimeRange.value);
+  } catch {
+    // Store state already carries the error.
   }
 }
 
-// 隐藏卡片管理
-const hiddenCards = ref<Set<string>>(new Set());
-const showManager = ref(false);
-
-// 从 localStorage 加载隐藏设置
 function loadHiddenSettings() {
   const saved = localStorage.getItem('lycia-hidden-stats-cards');
-  if (saved) {
-    try {
-      hiddenCards.value = new Set(JSON.parse(saved));
-    } catch (e) {
-      console.error('Failed to parse hidden cards settings:', e);
-    }
+  if (!saved) {
+    return;
+  }
+
+  try {
+    hiddenCards.value = new Set(JSON.parse(saved));
+  } catch (e) {
+    console.error('Failed to parse hidden cards settings:', e);
   }
 }
 
-// 保存隐藏设置
 function saveHiddenSettings() {
   localStorage.setItem('lycia-hidden-stats-cards', JSON.stringify(Array.from(hiddenCards.value)));
 }
@@ -187,63 +171,50 @@ function hideCard(cardTitle: string) {
 
 onMounted(async () => {
   loadHiddenSettings();
-  loading.value = true;
-  error.value = null;
-  try {
-    await Promise.all([fetchStats(), fetchBehaviorStats()]);
-    lastUpdated.value = new Date();
-  } catch (e) {
-    error.value = String(e);
-  } finally {
-    loading.value = false;
-  }
+  await statisticsStore.ensureLoaded(currentBehaviorTimeRange.value);
 });
 </script>
 
 <template>
   <div class="statistics-page h-full overflow-y-auto custom-scrollbar w-full select-none">
     <div class="px-6 py-6">
-      <!-- Loading State -->
       <div v-if="loading && !stats" class="grid grid-cols-3 gap-4">
         <div v-for="i in 6" :key="i" class="h-24 rounded-xl bg-gray-100/50 dark:bg-white/5 animate-pulse"></div>
       </div>
 
-      <!-- Error State -->
       <div v-else-if="error" class="p-6 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-        <p class="text-red-600 dark:text-red-400">加载失败：{{ error }}</p>
+        <p class="text-red-600 dark:text-red-400">{{ TEXT.loadFailed }}{{ error }}</p>
         <button @click="handleRefresh" class="mt-2 px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors">
-          重试
+          {{ TEXT.retry }}
         </button>
       </div>
 
-      <!-- Empty State -->
       <div v-else-if="stats && stats.total_songs === 0" class="text-center py-12">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-300 dark:text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
         </svg>
-        <p class="text-gray-500 dark:text-gray-400 text-lg">暂无数据</p>
-        <p class="text-gray-400 dark:text-gray-500 text-sm mt-1">先去设置中添加音乐库文件夹吧</p>
+        <p class="text-gray-500 dark:text-gray-400 text-lg">{{ TEXT.noData }}</p>
+        <p class="text-gray-400 dark:text-gray-500 text-sm mt-1">{{ TEXT.noLibraryHint }}</p>
       </div>
 
-      <!-- Stats Content -->
       <template v-else-if="stats">
         <div class="flex items-center justify-between mb-4 animate-fade-in-up" style="animation-delay: 0ms;">
           <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100 italic flex items-center gap-2">
-            曲库概览
-            <button 
+            {{ TEXT.libraryOverview }}
+            <button
               @click="showManager = !showManager"
               class="text-[10px] font-normal not-italic px-1.5 py-0.5 rounded border border-gray-200 dark:border-white/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
               :class="{ 'bg-blue-500/10 text-blue-500 border-blue-500/20': showManager }"
             >
-              管理卡片
+              {{ TEXT.manageCards }}
             </button>
           </h2>
-          
+
           <div class="flex items-center gap-3">
             <span v-if="lastUpdated" class="text-xs text-gray-400 dark:text-gray-500">
-              更新于 {{ lastUpdated.toLocaleTimeString() }}
+              {{ TEXT.updatedAt }} {{ lastUpdated.toLocaleTimeString() }}
             </span>
-            <button 
+            <button
               @click="handleRefresh"
               class="bg-white/1 hover:bg-white/10 border border-white/1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 w-7 h-7 flex items-center justify-center rounded-full transition active:scale-95 shadow-sm hover:border-gray-200 dark:hover:border-white/20"
               :class="{ 'animate-spin': isRefreshing }"
@@ -256,7 +227,6 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- 卡片管理器 -->
         <transition
           enter-active-class="transition duration-200 ease-out"
           enter-from-class="transform -translate-y-2 opacity-0"
@@ -266,24 +236,23 @@ onMounted(async () => {
           leave-to-class="transform -translate-y-2 opacity-0"
         >
           <div v-if="showManager" class="mb-6 p-4 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10">
-            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">勾选以显示卡片：</p>
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">{{ TEXT.managerHint }}</p>
             <div class="flex flex-wrap gap-x-6 gap-y-2">
-              <label v-for="c in ['总曲目', '专辑', '歌手', '总时长', '库大小', '无损占比', '总听歌时长', '播放次数', '最活跃时段', '最常播放 (按次数)', '最常播放 (按时长)', '24 小时播放分布', '常听歌手', '常听专辑']" :key="c" class="flex items-center gap-2 cursor-pointer group">
-                <input 
-                  type="checkbox" 
-                  :checked="!hiddenCards.has(c)" 
-                  @change="toggleCardVisibility(c)"
+              <label v-for="card in managerCards" :key="card" class="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  :checked="!hiddenCards.has(card)"
+                  @change="toggleCardVisibility(card)"
                   class="w-3.5 h-3.5 rounded border-gray-300 text-blue-500 focus:ring-blue-500/20"
                 />
                 <span class="text-xs text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
-                  {{ c }}
+                  {{ card }}
                 </span>
               </label>
             </div>
           </div>
         </transition>
 
-        <!-- Section 1: 曲库概览 -->
         <StatsOverviewCards
           :total-songs="stats.total_songs"
           :total-duration="stats.total_duration"
@@ -298,7 +267,6 @@ onMounted(async () => {
           @card-click="handleCardClick"
         />
 
-        <!-- 展开区域：音质分布饼图 -->
         <transition
           enter-active-class="transition-all duration-400 ease-out"
           enter-from-class="opacity-0 max-h-0 -translate-y-4"
@@ -307,13 +275,13 @@ onMounted(async () => {
           leave-from-class="opacity-100 max-h-[500px] translate-y-0"
           leave-to-class="opacity-0 max-h-0 -translate-y-4"
         >
-          <div 
-            v-if="expandedCard === '无损占比' && qualityDistribution" 
+          <div
+            v-if="expandedCard === CARD_TITLES.losslessRate && qualityDistribution"
             class="overflow-hidden rounded-xl bg-white/40 dark:bg-white/5 backdrop-blur-md border border-white/20 dark:border-white/5 mb-4"
           >
             <div class="flex items-center justify-between px-6 pt-4">
-              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">音质分布详情</h3>
-              <button 
+              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ TEXT.qualityDetail }}</h3>
+              <button
                 @click="expandedCard = null"
                 class="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
               >
@@ -331,7 +299,6 @@ onMounted(async () => {
           </div>
         </transition>
 
-        <!-- 展开区域：格式分布饼图 -->
         <transition
           enter-active-class="transition-all duration-400 ease-out"
           enter-from-class="opacity-0 max-h-0 -translate-y-4"
@@ -340,13 +307,13 @@ onMounted(async () => {
           leave-from-class="opacity-100 max-h-[500px] translate-y-0"
           leave-to-class="opacity-0 max-h-0 -translate-y-4"
         >
-          <div 
-            v-if="expandedCard === '库大小' && formatDistribution" 
+          <div
+            v-if="expandedCard === CARD_TITLES.librarySize && formatDistribution"
             class="overflow-hidden rounded-xl bg-white/40 dark:bg-white/5 backdrop-blur-md border border-white/20 dark:border-white/5 mb-4"
           >
             <div class="flex items-center justify-between px-6 pt-4">
-              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">音乐格式分布</h3>
-              <button 
+              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ TEXT.formatDetail }}</h3>
+              <button
                 @click="expandedCard = null"
                 class="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
               >
@@ -368,32 +335,26 @@ onMounted(async () => {
           </div>
         </transition>
 
-        <!-- Divider -->
         <hr class="border-gray-100 dark:border-gray-800 my-8 animate-fade-in" style="animation-delay: 600ms;" />
 
-        <!-- Section 2: 听歌行为 -->
-        <section class="mt-8 animate-fade-in-up" style="animation-delay: 700ms;"> <!-- Added top margin -->
-          <div class="flex items-center justify-between mb-6"> <!-- Increased bottom margin -->
-            <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100 italic">听歌行为</h2>
+        <section class="mt-8 animate-fade-in-up" style="animation-delay: 700ms;">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100 italic">{{ TEXT.behaviorTitle }}</h2>
 
-            <!-- Segmented Control 时间选择器 -->
-             <div class="relative bg-gray-100 dark:bg-white/5 rounded-lg p-1 shrink-0 grid grid-cols-4" style="min-width: 240px;">
-               <!-- Gliding Background - 使用 transform 实现滑动动画 -->
-               <div
-                 class="rounded-md bg-white dark:bg-gray-700 shadow-sm transition-transform duration-300 ease-spring row-start-1 col-start-1"
-                 :style="{
-                   transform: `translateX(${behaviorTimeOptions.findIndex(o => o.value === currentBehaviorTimeRange) * 100}%)`
-                 }"
-               ></div>
+            <div class="relative bg-gray-100 dark:bg-white/5 rounded-lg p-1 shrink-0 grid grid-cols-4" style="min-width: 240px;">
+              <div
+                class="rounded-md bg-white dark:bg-gray-700 shadow-sm transition-transform duration-300 ease-spring row-start-1 col-start-1"
+                :style="{ transform: `translateX(${behaviorTimeOptions.findIndex(option => option.value === currentBehaviorTimeRange) * 100}%)` }"
+              ></div>
 
-              <button 
-                v-for="(range, index) in behaviorTimeOptions" 
+              <button
+                v-for="(range, index) in behaviorTimeOptions"
                 :key="range.value"
                 @click="updateBehaviorTime(range.value)"
                 class="row-start-1 z-10 px-2 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 text-center whitespace-nowrap"
                 :style="{ gridColumn: index + 1 }"
-                :class="currentBehaviorTimeRange === range.value 
-                  ? 'text-gray-900 dark:text-white' 
+                :class="currentBehaviorTimeRange === range.value
+                  ? 'text-gray-900 dark:text-white'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
               >
                 {{ range.label }}
@@ -424,26 +385,29 @@ onMounted(async () => {
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.1);
   border-radius: 10px;
 }
+
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
 }
 </style>
 
 <style>
-/* 统一入场动画定义 */
 @keyframes fadeInUp {
   from {
     opacity: 0;
     transform: translateY(20px);
     filter: blur(4px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -455,6 +419,7 @@ onMounted(async () => {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -466,6 +431,7 @@ onMounted(async () => {
     transform: translateY(16px) scale(0.98);
     filter: blur(2px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -473,38 +439,27 @@ onMounted(async () => {
   }
 }
 
-/* 柱状图生长动画 */
-@keyframes barGrow {
-  from {
-    transform: scaleY(0);
-    opacity: 0;
-  }
-  to {
-    transform: scaleY(1);
-    opacity: 1;
-  }
-}
-
-/* 数字计数动画（弹跳效果） */
 @keyframes popIn {
   0% {
     opacity: 0;
     transform: scale(0.8);
   }
+
   60% {
     transform: scale(1.05);
   }
+
   100% {
     opacity: 1;
     transform: scale(1);
   }
 }
 
-/* 渐变扫光效果（用于分割线） */
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
   }
+
   100% {
     background-position: 200% 0;
   }
@@ -530,32 +485,25 @@ onMounted(async () => {
   animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
-/* 分割线渐变扫光 */
 hr.animate-fade-in {
-  background: linear-gradient(
-    90deg, 
-    transparent, 
-    rgba(99, 102, 241, 0.3), 
-    transparent
-  );
+  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.3), transparent);
   background-size: 200% 100%;
-  animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards,
-             shimmer 2s ease-in-out 0.5s;
+  animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards, shimmer 2s ease-in-out 0.5s;
   border: none;
   height: 1px;
 }
 
-/* 卡片悬停时的微动效 */
 .animate-slide-up-fade:hover {
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* prefer-reduced-motion 支持 */
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in-up,
   .animate-fade-in,
   .animate-slide-up-fade,
-  .animate-pop-in {
+  .animate-pop-in,
+  .animate-list-item,
+  .animate-bar-grow {
     animation: none;
     opacity: 1;
     transform: none;

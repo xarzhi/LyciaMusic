@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue';
-import { usePlayer, dragSession } from '../../composables/player';
 import { useRouter } from 'vue-router';
-import { invoke } from '@tauri-apps/api/core';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { usePlayer, dragSession } from '../../composables/player';
+import { useCoverCache } from '../../composables/useCoverCache';
 
 import ModernModal from '../common/ModernModal.vue';
 import ModernInputModal from '../common/ModernInputModal.vue';
 import PlaylistContextMenu from '../overlays/PlaylistContextMenu.vue';
-import { useCoverCache } from '../../composables/useCoverCache';
 
 const {
   playlists,
-  songList,
   artistList,
   albumList,
   switchViewToAll,
@@ -20,7 +17,7 @@ const {
   switchToStatistics,
   createPlaylist,
   deletePlaylist,
-  viewPlaylist,   
+  viewPlaylist,
   currentViewMode,
   filterCondition,
   playSong,
@@ -28,36 +25,51 @@ const {
   getSongsFromPlaylist,
   clearQueue,
   settings,
-  reorderPlaylists // 🟢 引入排序函数
+  reorderPlaylists,
 } = usePlayer();
 
 const router = useRouter();
+const { preloadCovers, loadCover } = useCoverCache();
 
 const isPlaylistOpen = ref(true);
 const dragOverId = ref<string | null>(null);
 const dragPosition = ref<'top' | 'bottom' | null>(null);
 
-const { preloadCovers } = useCoverCache();
+const showContextMenu = ref(false);
+const contextMenuX = ref(0);
+const contextMenuY = ref(0);
+const targetPlaylist = ref<{ id: string; name: string } | null>(null);
+const selectedPlaylistIds = ref<Set<string>>(new Set());
+const lastSelectedPlaylistId = ref<string | null>(null);
+
+const showCreateModal = ref(false);
+const showDeleteModal = ref(false);
+const playlistsToDelete = ref<string[]>([]);
+const deleteModalContent = ref('');
+
+const playlistCoverCache = ref<Map<string, string>>(new Map());
+const playlistRealFirstSongMap = new Map<string, string>();
+let playlistCoverRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+const baseNavClasses = 'px-3 py-2 mx-2 rounded-md cursor-pointer flex items-center transition-all duration-300 text-sm font-medium active:scale-[0.97]';
+const activeNavClasses = 'bg-black/10 dark:bg-white/10 text-black dark:text-white font-semibold shadow-sm translate-x-1';
+const inactiveNavClasses = 'text-gray-600 dark:text-white/60 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white hover:translate-x-1';
 
 const handleHoverArtists = () => {
-  if (artistList.value && artistList.value.length > 0) {
-    const paths = artistList.value.slice(0, 30).map(a => a.firstSongPath).filter(Boolean);
-    preloadCovers(paths);
+  if (artistList.value.length > 0) {
+    preloadCovers(artistList.value.slice(0, 30).map(a => a.firstSongPath).filter(Boolean));
   }
 };
 
 const handleHoverAlbums = () => {
-  if (albumList.value && albumList.value.length > 0) {
-    const paths = albumList.value.slice(0, 30).map(a => a.firstSongPath).filter(Boolean);
-    preloadCovers(paths);
+  if (albumList.value.length > 0) {
+    preloadCovers(albumList.value.slice(0, 30).map(a => a.firstSongPath).filter(Boolean));
   }
 };
 
-// --- Custom Drag & Drop for Playlists ---
-let mouseDownInfo: { x: number, y: number, index: number, playlist: any } | null = null;
+let mouseDownInfo: { x: number; y: number; index: number; playlist: any } | null = null;
 
 const handleMouseDown = (e: MouseEvent, index: number, playlist: any) => {
-  // Only left click
   if (e.button !== 0) return;
   mouseDownInfo = { x: e.clientX, y: e.clientY, index, playlist };
 };
@@ -74,37 +86,31 @@ const handleGlobalMouseMove = (e: MouseEvent) => {
 };
 
 const handleGlobalMouseUp = () => {
-  if (dragSession.active && dragSession.type === 'playlist') {
-    // Drop logic
-    if (dragOverId.value && mouseDownInfo) {
-      const fromIndex = mouseDownInfo.index;
-      const targetIndex = playlists.value.findIndex(p => p.id === dragOverId.value);
-      
-      if (targetIndex !== -1) {
-        let toIndex = targetIndex;
-        if (dragPosition.value === 'bottom') {
-          toIndex++;
-        }
-        // Adjust for removal
-        if (fromIndex < toIndex) {
-          toIndex--;
-        }
-        
-        if (fromIndex !== toIndex) {
-          reorderPlaylists(fromIndex, toIndex);
-        }
+  if (dragSession.active && dragSession.type === 'playlist' && dragOverId.value && mouseDownInfo) {
+    const fromIndex = mouseDownInfo.index;
+    const targetIndex = playlists.value.findIndex(p => p.id === dragOverId.value);
+
+    if (targetIndex !== -1) {
+      let toIndex = targetIndex;
+      if (dragPosition.value === 'bottom') {
+        toIndex += 1;
+      }
+      if (fromIndex < toIndex) {
+        toIndex -= 1;
+      }
+      if (fromIndex !== toIndex) {
+        reorderPlaylists(fromIndex, toIndex);
       }
     }
   }
-  
-  // Reset
+
   mouseDownInfo = null;
   if (dragSession.type === 'playlist') {
-     dragSession.active = false;
-     dragSession.type = 'song';
-     dragSession.data = null;
-     dragOverId.value = null;
-     dragPosition.value = null;
+    dragSession.active = false;
+    dragSession.type = 'song';
+    dragSession.data = null;
+    dragOverId.value = null;
+    dragPosition.value = null;
   }
 };
 
@@ -113,51 +119,24 @@ const handleItemMouseMove = (e: MouseEvent, playlistId: string) => {
     const target = e.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
     const mid = rect.top + rect.height / 2;
-    
     dragOverId.value = playlistId;
     dragPosition.value = e.clientY < mid ? 'top' : 'bottom';
   }
 };
 
-
-
-onMounted(() => {
-  window.addEventListener('mousemove', handleGlobalMouseMove);
-  window.addEventListener('mouseup', handleGlobalMouseUp);
-});
-
-onUnmounted(() => {
-  window.removeEventListener('mousemove', handleGlobalMouseMove);
-  window.removeEventListener('mouseup', handleGlobalMouseUp);
-});
-// ---------------------------------
-
-// --- Context Menu & Selection State ---
-const showContextMenu = ref(false);
-const contextMenuX = ref(0);
-const contextMenuY = ref(0);
-const targetPlaylist = ref<{id: string, name: string} | null>(null);
-const selectedPlaylistIds = ref<Set<string>>(new Set());
-const lastSelectedPlaylistId = ref<string | null>(null);
-
-// --- Create Playlist Modal State ---
-const showCreateModal = ref(false);
 const handleCreatePlaylist = () => {
   showCreateModal.value = true;
 };
-const confirmCreatePlaylist = (name: string) => {
-  if (name) createPlaylist(name);
-};
-// ---------------------------------
 
-// --- Delete Modal State ---
-const showDeleteModal = ref(false);
-const playlistsToDelete = ref<string[]>([]);
-const deleteModalContent = ref("");
+const confirmCreatePlaylist = (name: string) => {
+  if (name) {
+    createPlaylist(name);
+  }
+};
 
 const handleDeletePlaylist = (id: string, name: string) => {
   playlistsToDelete.value = [id];
-  deleteModalContent.value = `确定要删除歌单 '${name}' 吗？此操作不可恢复。`;
+  deleteModalContent.value = `确定要删除歌单“${name}”吗？此操作不可恢复。`;
   showDeleteModal.value = true;
 };
 
@@ -173,15 +152,12 @@ const confirmDeletePlaylist = () => {
   playlistsToDelete.value = [];
   showDeleteModal.value = false;
 };
-// ------------------------
 
 const handlePlaylistClick = (e: MouseEvent, id: string) => {
   e.stopPropagation();
-  // 总是切换视图
   viewPlaylist(id);
   router.push('/');
 
-  // 1. Shift 连选
   if (e.shiftKey && lastSelectedPlaylistId.value) {
     const list = playlists.value;
     const lastIndex = list.findIndex(p => p.id === lastSelectedPlaylistId.value);
@@ -193,18 +169,14 @@ const handlePlaylistClick = (e: MouseEvent, id: string) => {
         selectedPlaylistIds.value.add(list[i].id);
       }
     }
-  } 
-  // 2. Ctrl/Cmd 加选
-  else if (e.ctrlKey || e.metaKey) {
+  } else if (e.ctrlKey || e.metaKey) {
     if (selectedPlaylistIds.value.has(id)) {
       selectedPlaylistIds.value.delete(id);
     } else {
       selectedPlaylistIds.value.add(id);
     }
     lastSelectedPlaylistId.value = id;
-  } 
-  // 3. 普通单选
-  else {
+  } else {
     selectedPlaylistIds.value.clear();
     selectedPlaylistIds.value.add(id);
     lastSelectedPlaylistId.value = id;
@@ -218,7 +190,7 @@ const handleBackgroundClick = () => {
   }
 };
 
-const handlePlaylistContextMenu = (e: MouseEvent, list: {id: string, name: string}) => {
+const handlePlaylistContextMenu = (e: MouseEvent, list: { id: string; name: string }) => {
   e.preventDefault();
   e.stopPropagation();
   targetPlaylist.value = list;
@@ -236,114 +208,109 @@ const handlePlaylistContextMenu = (e: MouseEvent, list: {id: string, name: strin
 };
 
 const handleMenuPlay = () => {
-  if (targetPlaylist.value) {
-    const songs = getSongsFromPlaylist(targetPlaylist.value.id);
-    if (songs.length > 0) {
-      clearQueue();
-      viewPlaylist(targetPlaylist.value.id);
-      router.push('/');
-      setTimeout(() => {
-         playSong(songs[0]);
-      }, 50);
-    }
-    showContextMenu.value = false;
+  if (!targetPlaylist.value) {
+    return;
   }
+
+  const songs = getSongsFromPlaylist(targetPlaylist.value.id);
+  if (songs.length > 0) {
+    clearQueue();
+    viewPlaylist(targetPlaylist.value.id);
+    router.push('/');
+    setTimeout(() => {
+      playSong(songs[0]);
+    }, 50);
+  }
+  showContextMenu.value = false;
 };
 
 const handleMenuAddToQueue = () => {
   if (selectedPlaylistIds.value.size > 1) {
     selectedPlaylistIds.value.forEach(id => {
-      const songs = getSongsFromPlaylist(id);
-      addSongsToQueue(songs);
+      addSongsToQueue(getSongsFromPlaylist(id));
     });
   } else if (targetPlaylist.value) {
-    const songs = getSongsFromPlaylist(targetPlaylist.value.id);
-    addSongsToQueue(songs);
+    addSongsToQueue(getSongsFromPlaylist(targetPlaylist.value.id));
   }
   showContextMenu.value = false;
 };
 
 const handleMenuDelete = () => {
   if (selectedPlaylistIds.value.size > 0) {
-    const count = selectedPlaylistIds.value.size;
-    
-    handleDeletePlaylistBatch(Array.from(selectedPlaylistIds.value), count);
+    handleDeletePlaylistBatch(Array.from(selectedPlaylistIds.value), selectedPlaylistIds.value.size);
   } else if (targetPlaylist.value) {
     handleDeletePlaylist(targetPlaylist.value.id, targetPlaylist.value.name);
   }
   showContextMenu.value = false;
 };
-// ------------------------
 
-// 缓存 Map
-// playlistCoverCache: 存储最终用于显示的图片 URL (asset://...)
-// playlistRealFirstSongMap: 存储每个歌单目前计算出的“第一首歌”的路径，用于比对变化
-const playlistCoverCache = ref<Map<string, string>>(new Map());
-const playlistRealFirstSongMap = new Map<string, string>();
-
-// 样式定义
-const baseNavClasses = "px-3 py-2 mx-2 rounded-md cursor-pointer flex items-center transition-all duration-300 text-sm font-medium active:scale-[0.97]";
-const activeNavClasses = "bg-black/10 dark:bg-white/10 text-black dark:text-white font-semibold shadow-sm translate-x-1"; 
-const inactiveNavClasses = "text-gray-600 dark:text-white/60 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white hover:translate-x-1";
-
-/**
- * 🟢 核心算法：计算所有歌单的封面
- * 逻辑：直接使用歌单 internal order 的第一首歌作为封面。
- * 这保证了歌单封面只受歌单自身排序影响，不受全局 songList 排序影响。
- */
-const calculatePlaylistCovers = async () => {
-  // 遍历所有歌单
-  for (const pl of playlists.value) {
-    if (pl.songPaths.length > 0) {
-      // 直接取歌单的第一首歌
-      const firstSongPath = pl.songPaths[0];
-      await updateCoverIfChanged(pl.id, firstSongPath);
-    } else {
-      // 歌单为空，清除封面
-      if (playlistCoverCache.value.has(pl.id)) {
-        playlistCoverCache.value.delete(pl.id);
-        playlistRealFirstSongMap.delete(pl.id);
-      }
-    }
-  }
-};
-
-// 🟢 加载封面图片 (仅当路径变化时触发)
 const updateCoverIfChanged = async (playlistId: string, firstSongPath: string) => {
-  // 如果这首歌已经是当前记录的封面歌曲，直接跳过 (防抖/省资源)
   if (playlistRealFirstSongMap.get(playlistId) === firstSongPath && playlistCoverCache.value.has(playlistId)) {
     return;
   }
 
-  // 更新记录
   playlistRealFirstSongMap.set(playlistId, firstSongPath);
-
   try {
-    // 调用后端生成/获取缩略图
-    const filePath = await invoke<string>('get_song_cover_thumbnail', { path: firstSongPath });
-    
-    if (filePath && filePath.length > 0) { 
-      const assetUrl = convertFileSrc(filePath);
-      playlistCoverCache.value.set(playlistId, assetUrl); 
+    const assetUrl = await loadCover(firstSongPath);
+    if (assetUrl) {
+      playlistCoverCache.value.set(playlistId, assetUrl);
     } else {
-      // 没封面
       playlistCoverCache.value.delete(playlistId);
     }
-  } catch (e) {
+  } catch {
     playlistCoverCache.value.delete(playlistId);
   }
 };
 
-// 🟢 深度监听：无论是全局列表重排，还是歌单增删改，都重新计算
-watch([songList, playlists], () => {
-  calculatePlaylistCovers();
-}, { deep: true, immediate: true });
+const calculatePlaylistCovers = async () => {
+  await Promise.all(playlists.value.map(async (pl) => {
+    if (pl.songPaths.length > 0) {
+      await updateCoverIfChanged(pl.id, pl.songPaths[0]);
+      return;
+    }
+
+    if (playlistCoverCache.value.has(pl.id)) {
+      playlistCoverCache.value.delete(pl.id);
+      playlistRealFirstSongMap.delete(pl.id);
+    }
+  }));
+};
+
+const schedulePlaylistCoverRefresh = () => {
+  if (playlistCoverRefreshTimer) {
+    clearTimeout(playlistCoverRefreshTimer);
+  }
+
+  playlistCoverRefreshTimer = setTimeout(() => {
+    void calculatePlaylistCovers();
+  }, 60);
+};
+
+watch(
+  () => playlists.value.map(pl => `${pl.id}:${pl.songPaths[0] ?? ''}:${pl.songPaths.length}`).join('|'),
+  () => {
+    schedulePlaylistCoverRefresh();
+  },
+  { immediate: true }
+);
+
+onMounted(() => {
+  window.addEventListener('mousemove', handleGlobalMouseMove);
+  window.addEventListener('mouseup', handleGlobalMouseUp);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', handleGlobalMouseMove);
+  window.removeEventListener('mouseup', handleGlobalMouseUp);
+  if (playlistCoverRefreshTimer) {
+    clearTimeout(playlistCoverRefreshTimer);
+  }
+});
 </script>
 
 <template>
   <aside class="w-48 bg-transparent flex flex-col border-r border-transparent h-full select-none overflow-hidden relative transition-colors duration-600">
     <div class="h-16 flex items-center px-6 shrink-0 mb-2 cursor-default relative" data-tauri-drag-region>
-      <!-- 添加了 -translate-y-1 (向上偏移4px) 来整体上移图标和文字 -->
       <div class="flex items-center pointer-events-none -translate-x-[4px] -translate-y-[4px]">
         <img src="/app_logo_black.png" alt="Logo" class="w-8 h-8 object-contain drop-shadow-sm opacity-80 dark:hidden" />
         <img src="/app_logo_white.png" alt="Logo" class="w-8 h-8 object-contain drop-shadow-sm opacity-80 hidden dark:block" />
@@ -354,8 +321,7 @@ watch([songList, playlists], () => {
     </div>
 
     <nav class="flex-1 overflow-y-auto custom-scrollbar px-2 pb-4" @click="handleBackgroundClick">
-      
-      <ul class="space-y-1 transition-all duration-200" :class="{'opacity-30 grayscale pointer-events-none': dragSession.active}">
+      <ul class="space-y-1 transition-all duration-200" :class="{ 'opacity-30 grayscale pointer-events-none': dragSession.active }">
         <router-link to="/" custom v-slot="{ navigate }" v-if="settings.sidebar.showLocalMusic">
           <li @click="() => { navigate(); switchViewToAll(); }" :class="[baseNavClasses, (currentViewMode === 'all' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
@@ -376,7 +342,7 @@ watch([songList, playlists], () => {
             <span>专辑</span>
           </li>
         </router-link>
-        
+
         <router-link to="/favorites" custom v-slot="{ navigate, isActive }" v-if="settings.sidebar.showFavorites">
           <li @click="navigate" :class="[baseNavClasses, isActive ? activeNavClasses : inactiveNavClasses]">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
@@ -407,46 +373,49 @@ watch([songList, playlists], () => {
       </ul>
 
       <div class="mt-6">
-          <div class="px-4 pr-3 py-2 flex items-center justify-between group">
-            <div class="flex items-center gap-1 cursor-pointer text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors" @click.stop="isPlaylistOpen = !isPlaylistOpen">
-              <svg xmlns="http://www.w3.org/2000/svg" :class="['h-3 w-3 transition-transform duration-200', isPlaylistOpen ? 'rotate-90' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-              <span class="text-xs font-bold tracking-wide">我的歌单</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-normal ml-0.5">{{ playlists.length }}</span>
-            </div>
-            <button @click.stop="handleCreatePlaylist" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded p-0.5 transition-colors" title="新建歌单"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg></button>
+        <div class="px-4 pr-3 py-2 flex items-center justify-between group">
+          <div class="flex items-center gap-1 cursor-pointer text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors" @click.stop="isPlaylistOpen = !isPlaylistOpen">
+            <svg xmlns="http://www.w3.org/2000/svg" :class="['h-3 w-3 transition-transform duration-200', isPlaylistOpen ? 'rotate-90' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+            <span class="text-xs font-bold tracking-wide">我的歌单</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400 font-normal ml-0.5">{{ playlists.length }}</span>
           </div>
-          
-          <Transition name="playlist-list">
-            <ul v-show="isPlaylistOpen" class="space-y-0.5 mt-1 overflow-hidden">
-              <TransitionGroup name="playlist-item">
-                <li 
-                  v-for="(list, index) in playlists" 
-                  :key="list.id"
-                  @mousedown="handleMouseDown($event, index, list)"
-                  @mousemove="handleItemMouseMove($event, list.id)"
-                  @click.stop="handlePlaylistClick($event, list.id)" 
-                  @contextmenu="handlePlaylistContextMenu($event, list)"
-                  :data-playlist-id="list.id"
-                  :data-playlist-name="list.name"
-                  class="playlist-drop-target px-3 py-2 mx-2 rounded-md cursor-pointer flex items-center transition-all duration-300 group relative border-t-2 border-transparent border-b-2 select-none active:scale-[0.98]"
-                  :class="[
-                    selectedPlaylistIds.has(list.id) ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white font-medium shadow-sm translate-x-1' : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-600 dark:text-gray-300 hover:translate-x-1',
-                    (dragSession.active && dragSession.type === 'playlist' && dragSession.data?.id === list.id) ? 'opacity-50 bg-gray-100 dark:bg-white/5' : '',
-                    (dragSession.active && dragSession.targetPlaylist?.id === list.id && dragSession.type === 'song') ? '!bg-red-500/10 !ring-2 !ring-[#EC4141] ring-inset' : '',
-                    (dragSession.type === 'playlist' && dragOverId === list.id && dragPosition === 'top') ? '!border-t-[#EC4141]' : '',
-                    (dragSession.type === 'playlist' && dragOverId === list.id && dragPosition === 'bottom') ? '!border-b-[#EC4141]' : ''
-                  ]"
-                >
-                  <div class="w-9 h-9 rounded bg-gray-200/50 border border-gray-100/50 shrink-0 overflow-hidden mr-3 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                    <img v-if="playlistCoverCache.get(list.id)" :src="playlistCoverCache.get(list.id)" class="w-full h-full object-cover" alt="Cover" />
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400 dark:text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
-                  </div>
-                  <div class="flex-1 min-w-0 flex flex-col justify-center"><span class="text-sm truncate leading-tight mb-0.5">{{ list.name }}</span><span class="text-[10px] text-gray-400 dark:text-white/40 leading-tight">{{ list.songPaths.length }} 首</span></div>
-                  <button @click.stop="handleDeletePlaylist(list.id, list.name)" class="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-gray-400 dark:text-white/60 hover:text-red-500 transition-all p-1" title="删除歌单"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
-                </li>
-              </TransitionGroup>
-            </ul>
-          </Transition>
+          <button @click.stop="handleCreatePlaylist" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded p-0.5 transition-colors" title="新建歌单"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg></button>
+        </div>
+
+        <Transition name="playlist-list">
+          <ul v-show="isPlaylistOpen" class="space-y-0.5 mt-1 overflow-hidden">
+            <TransitionGroup name="playlist-item">
+              <li
+                v-for="(list, index) in playlists"
+                :key="list.id"
+                @mousedown="handleMouseDown($event, index, list)"
+                @mousemove="handleItemMouseMove($event, list.id)"
+                @click.stop="handlePlaylistClick($event, list.id)"
+                @contextmenu="handlePlaylistContextMenu($event, list)"
+                :data-playlist-id="list.id"
+                :data-playlist-name="list.name"
+                class="playlist-drop-target px-3 py-2 mx-2 rounded-md cursor-pointer flex items-center transition-all duration-300 group relative border-t-2 border-transparent border-b-2 select-none active:scale-[0.98]"
+                :class="[
+                  selectedPlaylistIds.has(list.id) ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white font-medium shadow-sm translate-x-1' : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-600 dark:text-gray-300 hover:translate-x-1',
+                  (dragSession.active && dragSession.type === 'playlist' && dragSession.data?.id === list.id) ? 'opacity-50 bg-gray-100 dark:bg-white/5' : '',
+                  (dragSession.active && dragSession.targetPlaylist?.id === list.id && dragSession.type === 'song') ? '!bg-red-500/10 !ring-2 !ring-[#EC4141] ring-inset' : '',
+                  (dragSession.type === 'playlist' && dragOverId === list.id && dragPosition === 'top') ? '!border-t-[#EC4141]' : '',
+                  (dragSession.type === 'playlist' && dragOverId === list.id && dragPosition === 'bottom') ? '!border-b-[#EC4141]' : ''
+                ]"
+              >
+                <div class="w-9 h-9 rounded bg-gray-200/50 border border-gray-100/50 shrink-0 overflow-hidden mr-3 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                  <img v-if="playlistCoverCache.get(list.id)" :src="playlistCoverCache.get(list.id)" class="w-full h-full object-cover" alt="Cover" />
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400 dark:text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+                </div>
+                <div class="flex-1 min-w-0 flex flex-col justify-center">
+                  <span class="text-sm truncate leading-tight mb-0.5">{{ list.name }}</span>
+                  <span class="text-[10px] text-gray-400 dark:text-white/40 leading-tight">{{ list.songPaths.length }} 首</span>
+                </div>
+                <button @click.stop="handleDeletePlaylist(list.id, list.name)" class="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-gray-400 dark:text-white/60 hover:text-red-500 transition-all p-1" title="删除歌单"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+              </li>
+            </TransitionGroup>
+          </ul>
+        </Transition>
       </div>
     </nav>
 
@@ -471,7 +440,7 @@ watch([songList, playlists], () => {
       confirm-text="删除"
       @confirm="confirmDeletePlaylist"
     />
-    
+
     <ModernInputModal
       v-model:visible="showCreateModal"
       title="新建歌单"
@@ -497,7 +466,6 @@ watch([songList, playlists], () => {
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* 歌单列表入场动画 */
 .playlist-item-enter-active,
 .playlist-item-leave-active {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -508,7 +476,6 @@ watch([songList, playlists], () => {
   transform: translateX(-10px);
 }
 
-/* 列表容器展开折叠动画 */
 .playlist-list-enter-active,
 .playlist-list-leave-active {
   transition: all 0.3s ease-in-out;

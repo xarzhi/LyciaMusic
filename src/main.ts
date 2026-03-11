@@ -1,4 +1,5 @@
 import { createApp } from 'vue'
+import { createPinia } from 'pinia'
 import './style.css'
 import '@applemusic-like-lyrics/core/style.css'
 import App from './App.vue'
@@ -53,7 +54,9 @@ const showFatalError = (title: string, error: unknown) => {
 }
 
 const app = createApp(App)
+const pinia = createPinia()
 
+app.use(pinia)
 app.use(router)
 app.config.errorHandler = (error, _instance, info) => {
   showFatalError(`前端运行错误: ${info}`, error)

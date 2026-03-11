@@ -23,8 +23,6 @@ const {
   addSongsToPlaylist,
   settings,
   playQueue,
-  currentViewMode,
-  filterCondition,
   isMiniMode,
   showPlayerDetail,
   showMiniPlaylist,
@@ -288,7 +286,17 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
           <main class="flex-1 overflow-hidden relative min-h-0">
             <router-view v-slot="{ Component, route }">
               <transition name="page-fade" mode="out-in">
-                <component :is="Component" :key="route.path === '/' ? `/${currentViewMode}/${filterCondition}` : route.path" />
+                <component
+                  v-if="!route.meta.keepAlive"
+                  :is="Component"
+                  :key="route.path"
+                />
+                <KeepAlive v-else include="Home">
+                  <component
+                    :is="Component"
+                    :key="String(route.name ?? route.path)"
+                  />
+                </KeepAlive>
               </transition>
             </router-view>
           </main>

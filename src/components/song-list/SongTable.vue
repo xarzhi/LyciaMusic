@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, reactive, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { Song, usePlayer, dragSession } from '../../composables/player';
 import { currentSong, isPlaying } from '../../composables/playerState';
 import { useSettings } from '../../composables/settings';
-import { invoke } from '@tauri-apps/api/core';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { useRouter } from 'vue-router';
 import QualityBadge from '../common/QualityBadge.vue';
 import { INDEX_KEYS, getAlphabetIndexKey, type AlphabetIndexKey } from '../../utils/alphabetIndex';
+import { useCoverCache } from '../../composables/useCoverCache';
 
 const { settings } = useSettings();
 
@@ -42,8 +41,10 @@ const {
   expandFolderPath,
 } = usePlayer();
 const router = useRouter();
+const { coverCache, preloadCovers } = useCoverCache();
 
 const ROW_HEIGHT = 72;
+const OVERSCAN = 20;
 const containerRef = ref<HTMLElement | null>(null);
 const scrollTop = ref(0);
 const containerHeight = ref(600);
@@ -58,9 +59,8 @@ const virtualData = computed(() => {
   const total = props.songs.length;
   const start = Math.floor(scrollTop.value / ROW_HEIGHT);
   const visibleCount = Math.ceil(containerHeight.value / ROW_HEIGHT);
-  const buffer = 5;
-  const renderStart = Math.max(0, start - buffer);
-  const renderEnd = Math.min(total, start + visibleCount + buffer);
+  const renderStart = Math.max(0, start - OVERSCAN);
+  const renderEnd = Math.min(total, start + visibleCount + OVERSCAN);
 
   return {
     items: props.songs.slice(renderStart, renderEnd).map((song, index) => ({
@@ -391,54 +391,9 @@ const handleIndexPointerDown = (event: PointerEvent, key: AlphabetIndexKey) => {
   event.preventDefault();
 };
 
-const MAX_CACHE_SIZE = 200;
-const coverCache = reactive(new Map<string, string>());
-const loadingSet = new Set<string>();
-
-const updateCache = (key: string, value: string) => {
-  if (coverCache.has(key)) {
-    coverCache.delete(key);
-  } else if (coverCache.size >= MAX_CACHE_SIZE) {
-    const firstKey = coverCache.keys().next().value;
-    if (firstKey) {
-      coverCache.delete(firstKey);
-    }
-  }
-  coverCache.set(key, value);
-};
-
-const loadCoverDebounced = (() => {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  return (items: Song[]) => {
-    if (timer) {
-      clearTimeout(timer);
-    }
-    timer = setTimeout(() => {
-      items.forEach(async song => {
-        if (coverCache.has(song.path) || loadingSet.has(song.path)) {
-          return;
-        }
-        loadingSet.add(song.path);
-        try {
-          const filePath = await invoke<string>('get_song_cover_thumbnail', { path: song.path });
-          if (filePath) {
-            updateCache(song.path, convertFileSrc(filePath));
-          } else {
-            updateCache(song.path, '');
-          }
-        } catch {
-          updateCache(song.path, '');
-        } finally {
-          loadingSet.delete(song.path);
-        }
-      });
-    }, 20);
-  };
-})();
-
 watch(
   () => virtualData.value.items,
-  newItems => loadCoverDebounced(newItems),
+  newItems => preloadCovers(newItems.map(song => song.path)),
   { immediate: true },
 );
 
@@ -553,11 +508,10 @@ const getRowStyle = (songIndex: number, songPath: string) => {
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 relative">
+  <div class="flex-1 min-h-0 min-w-0 relative overflow-x-hidden">
     <div
       ref="containerRef"
-      class="h-full overflow-y-auto pl-2.5 pb-8 custom-scrollbar song-list-scroll-container"
-      :class="showAlphabetIndex ? 'pr-9' : 'pr-3'"
+      class="h-full overflow-y-auto overflow-x-hidden pl-2.5 pb-8 custom-scrollbar song-list-scroll-container"
       @scroll="onScroll"
     >
       <div class="w-full relative">
@@ -571,7 +525,7 @@ const getRowStyle = (songIndex: number, songPath: string) => {
           @dblclick="!isBatchMode && emit('play', song)"
           @contextmenu.prevent="emit('contextmenu', $event, song)"
           @dragstart.prevent
-          class="group border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 select-none cursor-default relative flex items-center px-2 gap-3"
+          class="group w-full min-w-0 border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 select-none cursor-default relative flex items-center px-2 gap-3"
           :class="{ 'bg-red-500/10 dark:bg-red-500/20': selectedPaths.has(song.path) }"
           :style="getRowStyle(song.virtualIndex, song.path)"
         >
@@ -615,7 +569,7 @@ const getRowStyle = (songIndex: number, songPath: string) => {
             </svg>
           </div>
 
-          <div class="w-[40%] shrink-0 min-w-0 flex flex-col justify-center gap-0.5">
+          <div class="flex-[0_1_40%] min-w-0 flex flex-col justify-center gap-0.5">
             <span class="text-[15px] text-gray-900 dark:text-gray-100 font-semibold truncate leading-snug">{{ song.title || song.name.replace(/\.[^/.]+$/, '') }}</span>
             <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-white/50 leading-snug">
               <QualityBadge
@@ -694,7 +648,7 @@ const getRowStyle = (songIndex: number, songPath: string) => {
       >
         <div
           ref="indexBarRef"
-          class="flex flex-col items-center gap-[1px] rounded-full bg-white/30 px-1 py-2 backdrop-blur-md shadow-[0_8px_24px_rgba(0,0,0,0.08)] dark:bg-black/15"
+          class="flex flex-col items-center gap-[1px] rounded-full bg-white px-1 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.08)] dark:bg-black"
         >
           <button
             v-for="key in INDEX_KEYS"
@@ -774,7 +728,7 @@ const getRowStyle = (songIndex: number, songPath: string) => {
   width: 1.8rem;
   height: 1.8rem;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.42);
+  background: rgb(255, 255, 255);
   color: rgba(31, 41, 55, 0.88);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
   backdrop-filter: blur(10px);
@@ -811,7 +765,7 @@ const getRowStyle = (songIndex: number, songPath: string) => {
 }
 
 :global(.dark) .index-locate-btn {
-  background: rgba(0, 0, 0, 0.26);
+  background: rgb(0, 0, 0);
   color: rgba(255, 255, 255, 0.86);
 }
 

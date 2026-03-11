@@ -1,5 +1,7 @@
 <template>
   <div class="flex flex-col h-full">
+    <transition name="home-view-fade" mode="out-in">
+      <div :key="viewTransitionKey" class="flex flex-1 flex-col min-h-0 min-w-0">
     <!-- 顶栏组件 -->
     <!-- 顶栏组件 -->
     <FoldersHeader
@@ -52,14 +54,14 @@
     />
     
     <!-- 主内容区 -->
-    <div class="flex-1 flex overflow-hidden relative">
+        <div class="flex-1 flex overflow-hidden relative min-w-0">
       <!-- 侧边栏 -->
       <MasterPanel v-if="localViewMode === 'folder'"
         :isManagementMode="isManagementMode"
       />
       
       <!-- 歌曲列表区域 (带有自滚动) -->
-      <section class="flex-1 flex flex-col overflow-y-auto custom-scrollbar relative">
+      <section class="flex-1 min-w-0 flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar relative">
         <ArtistDetailHeader
           v-if="localViewMode === 'artist'"
           v-model:isBatchMode="isBatchMode"
@@ -171,8 +173,10 @@
           @update:selectedPaths="selectedPaths = $event"
           @drag-start="handleTableDragStart"
         />
-      </section>
-    </div>
+          </section>
+        </div>
+      </div>
+    </transition>
     
     <!-- 弹窗组件 -->
     <DragGhost />
@@ -375,6 +379,7 @@ const isManagementMode = ref(false); // 🟢 Local Management Mode State
 const selectedPaths = ref<Set<string>>(new Set());
 const songTableRef = ref<any>(null);
 const artistActiveTab = ref<'songs' | 'albums' | 'details'>('songs');
+const viewTransitionKey = computed(() => `${localViewMode.value}:${localFilterCondition.value}:${artistActiveTab.value}`);
 
 
 // 初始化拖拽逻辑
@@ -885,3 +890,20 @@ watch(currentViewMode, (newMode) => {
 });
 
 </script>
+
+<style scoped>
+.home-view-fade-enter-active,
+.home-view-fade-leave-active {
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+
+.home-view-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.home-view-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+</style>

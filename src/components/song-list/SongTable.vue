@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { Song, usePlayer, dragSession } from '../../composables/player';
 import { currentSong, isPlaying } from '../../composables/playerState';
 import { useSettings } from '../../composables/settings';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import QualityBadge from '../common/QualityBadge.vue';
 import { INDEX_KEYS, getAlphabetIndexKey, type AlphabetIndexKey } from '../../utils/alphabetIndex';
 import { useCoverCache } from '../../composables/useCoverCache';
@@ -41,10 +41,13 @@ const {
   expandFolderPath,
 } = usePlayer();
 const router = useRouter();
+const route = useRoute();
 const { coverCache, preloadCovers } = useCoverCache();
 
 const ROW_HEIGHT = 72;
 const OVERSCAN = 20;
+const INDEX_PROXIMITY_PX = 72;
+const rootRef = ref<HTMLElement | null>(null);
 const containerRef = ref<HTMLElement | null>(null);
 const scrollTop = ref(0);
 const containerHeight = ref(600);
@@ -92,7 +95,10 @@ const indexLabelGetter = computed<((song: Song) => string) | null>(() => {
   return null;
 });
 
-const showAlphabetIndex = computed(() => !!indexLabelGetter.value && props.songs.length > 0);
+const showAlphabetIndex = computed(() => {
+  const isHomeRoute = route.path === '/';
+  return isHomeRoute && !!indexLabelGetter.value && props.songs.length > 0;
+});
 
 const firstSongIndexByKey = computed(() => {
   const keyMap = new Map<AlphabetIndexKey, number>();
@@ -131,10 +137,6 @@ const hoverIndexKey = ref<AlphabetIndexKey | null>(null);
 const isIndexBarVisible = ref(false);
 const INDEX_AUTO_HIDE_MS = 500;
 let hideIndexBarTimer: ReturnType<typeof setTimeout> | null = null;
-
-const visualIndexKey = computed(
-  () => dragIndexKey.value || hoverIndexKey.value || activeIndexKey.value,
-);
 
 const currentSongIndex = computed(() => {
   if (!currentSong?.value?.path) {
@@ -288,6 +290,23 @@ const handleIndexHotspotMove = () => {
 };
 
 const handleIndexHotspotLeave = () => {
+  scheduleHideIndexBar();
+};
+
+const handleRootMouseMove = (event: MouseEvent) => {
+  if (!showAlphabetIndex.value || !rootRef.value) {
+    return;
+  }
+
+  const rect = rootRef.value.getBoundingClientRect();
+  const distanceToRight = rect.right - event.clientX;
+
+  if (distanceToRight <= INDEX_PROXIMITY_PX) {
+    revealIndexBarTemporarily();
+  }
+};
+
+const handleRootMouseLeave = () => {
   scheduleHideIndexBar();
 };
 
@@ -508,7 +527,12 @@ const getRowStyle = (songIndex: number, songPath: string) => {
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 min-w-0 relative overflow-x-hidden">
+  <div
+    ref="rootRef"
+    class="flex-1 min-h-0 min-w-0 relative overflow-x-hidden"
+    @mousemove="handleRootMouseMove"
+    @mouseleave="handleRootMouseLeave"
+  >
     <div
       ref="containerRef"
       class="h-full overflow-y-auto overflow-x-hidden pl-2.5 pb-8 custom-scrollbar song-list-scroll-container"
@@ -650,15 +674,19 @@ const getRowStyle = (songIndex: number, songPath: string) => {
           ref="indexBarRef"
           class="flex flex-col items-center gap-[1px] rounded-full bg-white px-1 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.08)] dark:bg-black"
         >
-          <button
-            v-for="key in INDEX_KEYS"
-            :key="key"
-            type="button"
-            class="index-nav-item"
-            :class="{ 'index-nav-item-active': visualIndexKey === key }"
-            @mouseenter="hoverIndexKey = key; showIndexBar()"
-            @mouseleave="hoverIndexKey = null"
-            @pointerdown="handleIndexPointerDown($event, key)"
+        <button
+          v-for="key in INDEX_KEYS"
+          :key="key"
+          type="button"
+          class="index-nav-item"
+          :class="{
+            'index-nav-item-active': activeIndexKey === key,
+            'index-nav-item-hover': hoverIndexKey === key && activeIndexKey !== key && dragIndexKey !== key,
+            'index-nav-item-drag': dragIndexKey === key && activeIndexKey !== key,
+          }"
+          @mouseenter="hoverIndexKey = key; showIndexBar()"
+          @mouseleave="hoverIndexKey = null"
+          @pointerdown="handleIndexPointerDown($event, key)"
           >
             {{ key }}
           </button>
@@ -721,6 +749,17 @@ const getRowStyle = (songIndex: number, songPath: string) => {
   transform: scale(1.06);
 }
 
+.index-nav-item-hover {
+  background: rgba(15, 23, 42, 0.08);
+  color: rgb(17, 24, 39);
+}
+
+.index-nav-item-drag {
+  background: rgba(15, 23, 42, 0.12);
+  color: rgb(17, 24, 39);
+  transform: scale(1.04);
+}
+
 .index-locate-btn {
   display: inline-flex;
   align-items: center;
@@ -762,6 +801,16 @@ const getRowStyle = (songIndex: number, songPath: string) => {
 :global(.dark) .index-nav-item-active {
   background: rgba(236, 65, 65, 0.24);
   color: #fda4af;
+}
+
+:global(.dark) .index-nav-item-hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.96);
+}
+
+:global(.dark) .index-nav-item-drag {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.98);
 }
 
 :global(.dark) .index-locate-btn {

@@ -299,6 +299,15 @@ onMounted(async () => {
   });
 
   await consumePendingOpenPaths();
+  
+  // 🟢 在所有初次资源或状态加载完毕后，平滑显示主窗口
+  try {
+    const window = getCurrentWindow();
+    await window.show();
+    await window.setFocus();
+  } catch (error) {
+    console.error('Failed to show window on startup:', error);
+  }
 });
 
 onUnmounted(() => {

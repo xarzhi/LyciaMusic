@@ -12,10 +12,11 @@ use database::DbState;
 use music::{
     add_library_folder, add_sidebar_folder, batch_move_music_files, create_folder, delete_folder,
     delete_music_file, get_folder_first_song, get_library_folders, get_library_hierarchy,
-    get_sidebar_folders, get_sidebar_hierarchy, get_song_cover, get_song_cover_thumbnail,
-    get_song_lyrics, is_directory, move_file_to_folder, move_music_file, parse_audio_files,
-    remove_library_folder, remove_sidebar_folder, run_cache_cleanup, scan_folder_as_playlists,
-    scan_library, scan_music_folder, show_in_folder, ImageConcurrencyLimit,
+    get_library_songs_cached, get_sidebar_folders, get_sidebar_hierarchy, get_song_cover,
+    get_song_cover_thumbnail, get_song_lyrics, is_directory, move_file_to_folder,
+    move_music_file, parse_audio_files, remove_library_folder, remove_sidebar_folder,
+    run_cache_cleanup, scan_folder_as_playlists, scan_library, scan_music_folder,
+    show_in_folder, ImageConcurrencyLimit,
 };
 use player::{
     get_output_devices, get_playback_progress, init_player, pause_audio, play_audio, resume_audio,
@@ -219,6 +220,7 @@ pub fn run() {
             is_directory,
             add_library_folder,
             remove_library_folder,
+            get_library_songs_cached,
             scan_library,
             get_library_hierarchy,
             get_sidebar_folders,

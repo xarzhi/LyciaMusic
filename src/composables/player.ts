@@ -22,6 +22,12 @@ let playRequestId = 0;
 let latestSeekRequestId = 0;
 const shuffleHistory: string[] = [];
 const shuffleFuture: string[] = [];
+let hasBootstrappedLibrary = false;
+let libraryBootstrapPromise: Promise<void> | null = null;
+let libraryRefreshPromise: Promise<void> | null = null;
+let libraryRefreshIdleId: number | null = null;
+let libraryRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let playerInitDone = false;
 
 // 插值锚点
 
@@ -131,6 +137,17 @@ const dedupeSongs = (songs: State.Song[]) => {
   });
 };
 
+const cancelScheduledLibraryRefresh = () => {
+  if (libraryRefreshTimer) {
+    clearTimeout(libraryRefreshTimer);
+    libraryRefreshTimer = null;
+  }
+  if (libraryRefreshIdleId !== null && 'cancelIdleCallback' in window) {
+    window.cancelIdleCallback(libraryRefreshIdleId);
+    libraryRefreshIdleId = null;
+  }
+};
+
 
 
 export function usePlayer() {
@@ -165,19 +182,21 @@ export function usePlayer() {
     return State.librarySongs.value;
   });
 
-  let isInitialized = false;
   onMounted(async () => {
-    if (isInitialized) return;
-    isInitialized = true;
+    if (hasBootstrappedLibrary) return;
+    hasBootstrappedLibrary = true;
 
-    // Initialize Library (run in parallel to reduce startup wait)
-    fetchLibraryFolders();
-    scanLibrary();
+    if (!libraryBootstrapPromise) {
+      libraryBootstrapPromise = (async () => {
+        await Promise.all([
+          loadLibrarySongsFromCache(),
+          fetchLibraryFolders(),
+        ]);
+        scheduleLibraryRefresh();
+      })();
+    }
 
-    // startTimer(); // This function is not defined in the provided context, commenting out to avoid errors.
-
-    // Listen for window resize to update layout if needed
-    // ...
+    await libraryBootstrapPromise;
   });
 
   // --- Library Management ---
@@ -190,9 +209,36 @@ export function usePlayer() {
     }
   }
 
+  async function loadLibrarySongsFromCache() {
+    try {
+      const songs = await invoke<State.Song[]>('get_library_songs_cached');
+      State.librarySongs.value = songs;
+    } catch (e) {
+      console.error("Failed to load cached library songs:", e);
+    }
+  }
+
+  function scheduleLibraryRefresh() {
+    if (libraryRefreshPromise || libraryRefreshIdleId !== null || libraryRefreshTimer) {
+      return;
+    }
+
+    const runRefresh = () => {
+      libraryRefreshIdleId = null;
+      libraryRefreshTimer = null;
+      void scanLibrary();
+    };
+
+    if ('requestIdleCallback' in window) {
+      libraryRefreshIdleId = window.requestIdleCallback(runRefresh, { timeout: 400 });
+      return;
+    }
+
+    libraryRefreshTimer = setTimeout(runRefresh, 220);
+  }
+
   async function addLibraryFolderRecord(path: string) {
     await invoke('add_library_folder', { path });
-    await fetchLibraryFolders();
     await scanLibrary();
   }
 
@@ -204,7 +250,6 @@ export function usePlayer() {
 
   async function removeLibraryFolderRecord(path: string) {
     await invoke('remove_library_folder', { path });
-    await fetchLibraryFolders();
     await scanLibrary();
   }
 
@@ -607,16 +652,26 @@ export function usePlayer() {
   };
 
   async function scanLibrary() {
-    try {
-      const songs = await invoke<State.Song[]>('scan_library');
-      State.librarySongs.value = songs;
-      // Optional: Update folder counts? fetchLibraryFolders handles it if we call it again, 
-      // but scan_library returns songs. We might want to refresh folder counts too.
-      await fetchLibraryFolders();
-      // NOTE: We do NOT refresh folderTree here anymore. Sidebar is independent.
-    } catch (e) {
-      console.error("Library scan failed:", e);
+    if (libraryRefreshPromise) {
+      return libraryRefreshPromise;
     }
+
+    cancelScheduledLibraryRefresh();
+
+    libraryRefreshPromise = (async () => {
+      try {
+        const songs = await invoke<State.Song[]>('scan_library');
+        State.librarySongs.value = songs;
+        await fetchLibraryFolders();
+        // NOTE: We do NOT refresh folderTree here anymore. Sidebar is independent.
+      } catch (e) {
+        console.error("Library scan failed:", e);
+      } finally {
+        libraryRefreshPromise = null;
+      }
+    })();
+
+    return libraryRefreshPromise;
   }
 
   // --- Sidebar Folder Management (New) ---
@@ -1954,6 +2009,11 @@ export function usePlayer() {
   function openAddToPlaylistDialog(songPath: string) { State.playlistAddTargetSongs.value = [songPath]; State.showAddToPlaylistModal.value = true; }
 
   function init() {
+    if (playerInitDone) {
+      return;
+    }
+    playerInitDone = true;
+
     let persistTimer: ReturnType<typeof setTimeout> | null = null;
     let restoreTimer: ReturnType<typeof setTimeout> | null = null;
     let restoreIdleId: number | null = null;
@@ -2065,7 +2125,7 @@ export function usePlayer() {
     });
 
     onMounted(async () => {
-      // 🟢 性能优化：空闲时恢复持久化数据，避免与首屏渲染竞争
+      // 🟢 性能优化：同步恢复持久化数据，避免空状态渲染后再次闪烁
       const restoreState = async () => {
         const sVol = localStorage.getItem('player_volume'); if (sVol) { State.volume.value = parseInt(sVol); await invoke('set_volume', { volume: State.volume.value / 100.0 }); }
         const sFolders = localStorage.getItem('player_watched_folders'); if (sFolders) try { State.watchedFolders.value = JSON.parse(sFolders); } catch (e) { }
@@ -2179,17 +2239,7 @@ export function usePlayer() {
         }
       };
 
-      if ('requestIdleCallback' in window) {
-        restoreIdleId = window.requestIdleCallback(() => {
-          restoreIdleId = null;
-          restoreState();
-        }, { timeout: 150 });
-      } else {
-        restoreTimer = setTimeout(() => {
-          restoreTimer = null;
-          restoreState();
-        }, 80);
-      }
+      await restoreState();
 
       window.addEventListener('beforeunload', () => {
         flushPersistedState();

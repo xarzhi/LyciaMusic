@@ -50,6 +50,7 @@ const deleteModalContent = ref('');
 const playlistCoverCache = ref<Map<string, string>>(new Map());
 const playlistRealFirstSongMap = new Map<string, string>();
 let playlistCoverRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let playlistCoverRefreshIdleId: number | null = null;
 
 const baseNavClasses = 'px-3 py-2 mx-2 rounded-md cursor-pointer flex items-center transition-all duration-300 text-sm font-medium active:scale-[0.97]';
 const activeNavClasses = 'bg-black/10 dark:bg-white/10 text-black dark:text-white font-semibold shadow-sm translate-x-1';
@@ -280,10 +281,23 @@ const schedulePlaylistCoverRefresh = () => {
   if (playlistCoverRefreshTimer) {
     clearTimeout(playlistCoverRefreshTimer);
   }
+  if (playlistCoverRefreshIdleId !== null && 'cancelIdleCallback' in window) {
+    window.cancelIdleCallback(playlistCoverRefreshIdleId);
+    playlistCoverRefreshIdleId = null;
+  }
 
-  playlistCoverRefreshTimer = setTimeout(() => {
+  const runRefresh = () => {
+    playlistCoverRefreshIdleId = null;
+    playlistCoverRefreshTimer = null;
     void calculatePlaylistCovers();
-  }, 60);
+  };
+
+  if ('requestIdleCallback' in window) {
+    playlistCoverRefreshIdleId = window.requestIdleCallback(runRefresh, { timeout: 500 });
+    return;
+  }
+
+  playlistCoverRefreshTimer = setTimeout(runRefresh, 180);
 };
 
 watch(
@@ -304,6 +318,9 @@ onUnmounted(() => {
   window.removeEventListener('mouseup', handleGlobalMouseUp);
   if (playlistCoverRefreshTimer) {
     clearTimeout(playlistCoverRefreshTimer);
+  }
+  if (playlistCoverRefreshIdleId !== null && 'cancelIdleCallback' in window) {
+    window.cancelIdleCallback(playlistCoverRefreshIdleId);
   }
 });
 </script>

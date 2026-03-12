@@ -567,11 +567,11 @@ const getRowStyle = (songIndex: number, songPath: string) => {
               <span class="w-[3px] h-[10px] rounded-full bg-[#EC4141]/60"></span>
               <span class="w-[3px] h-[4px] rounded-full bg-[#EC4141]/60"></span>
             </div>
-            <div v-else class="flex items-center justify-center">
-              <span class="text-xs font-mono text-gray-400 dark:text-white/40 group-hover:hidden">
+            <div v-else class="relative flex items-center justify-center w-5 h-5">
+              <span class="absolute inset-0 flex items-center justify-center text-xs font-mono text-gray-400 dark:text-white/40 transition-opacity duration-150 group-hover:opacity-0">
                 {{ song.virtualIndex + 1 < 10 ? '0' + (song.virtualIndex + 1) : song.virtualIndex + 1 }}
               </span>
-              <div class="hidden group-hover:flex items-center justify-center transition-opacity duration-200">
+              <div class="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
                 <span v-if="showDragIcon" class="text-gray-500 dark:text-white/60 active:text-[#EC4141] cursor-grab">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16" />
@@ -721,6 +721,10 @@ const getRowStyle = (songIndex: number, songPath: string) => {
 </template>
 
 <style scoped>
+.song-list-scroll-container {
+  overflow-anchor: none;
+}
+
 .spectrum-bar {
   animation: spectrum 1s ease-in-out infinite;
 }

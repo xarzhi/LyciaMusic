@@ -87,6 +87,18 @@ interface AlbumListItem {
   firstSongPath: string;
 }
 
+type ExternalPathSource = 'drop' | 'open';
+
+interface PlaySongOptions {
+  updateShuffleHistory?: boolean;
+  clearShuffleFuture?: boolean;
+  preserveQueue?: boolean;
+}
+
+interface HandleExternalPathsOptions {
+  source?: ExternalPathSource;
+}
+
 const getSongArtistNames = (song: State.Song) => {
   if (Array.isArray(song.effective_artist_names) && song.effective_artist_names.length > 0) {
     return song.effective_artist_names;
@@ -109,6 +121,15 @@ const getSongArtistSearchText = (song: State.Song) =>
 
 const getSongTitleLabel = (song: State.Song) => song.title || song.name;
 const getSongFileNameLabel = (song: State.Song) => song.name;
+const dedupePaths = (paths: string[]) => Array.from(new Set(paths.map(path => path.trim()).filter(Boolean)));
+const dedupeSongs = (songs: State.Song[]) => {
+  const seen = new Set<string>();
+  return songs.filter(song => {
+    if (seen.has(song.path)) return false;
+    seen.add(song.path);
+    return true;
+  });
+};
 
 
 
@@ -212,6 +233,122 @@ export function usePlayer() {
         "success"
       );
     }
+  }
+
+  async function playExternalSongs(songs: State.Song[]) {
+    const queue = dedupeSongs(songs);
+    if (queue.length === 0) return;
+
+    State.playQueue.value = [...queue];
+    State.tempQueue.value = [];
+    shuffleHistory.length = 0;
+    shuffleFuture.length = 0;
+
+    await playSong(queue[0], { preserveQueue: true });
+  }
+
+  async function handleExternalPaths(
+    paths: string[],
+    options: HandleExternalPathsOptions = {}
+  ) {
+    const source = options.source ?? 'drop';
+    const uniquePaths = dedupePaths(paths);
+    if (uniquePaths.length === 0) return;
+
+    const pathKinds = await Promise.all(uniquePaths.map(async (path) => ({
+      path,
+      isDirectory: await invoke<boolean>('is_directory', { path }).catch(() => false)
+    })));
+
+    const directoryPaths = pathKinds.filter(item => item.isDirectory).map(item => item.path);
+    const filePaths = pathKinds.filter(item => !item.isDirectory).map(item => item.path);
+
+    const existingLibraryPaths = new Set(State.libraryFolders.value.map(folder => folder.path));
+    let importedFolderCount = 0;
+    let skippedFolderCount = 0;
+    for (const directoryPath of directoryPaths) {
+      if (existingLibraryPaths.has(directoryPath)) {
+        skippedFolderCount += 1;
+        continue;
+      }
+
+      try {
+        await addLibraryFolderLinked(directoryPath);
+        importedFolderCount += 1;
+      } catch (error) {
+        console.error('Failed to import external folder:', directoryPath, error);
+      }
+    }
+
+    const parsedSongs = filePaths.length > 0
+      ? await invoke<State.Song[]>('parse_audio_files', { paths: filePaths }).catch((error) => {
+        console.error('Failed to parse external audio files:', error);
+        return [];
+      })
+      : [];
+
+    const playableSongs = dedupeSongs(parsedSongs);
+    if (playableSongs.length > 0) {
+      await playExternalSongs(playableSongs);
+    }
+
+    const ignoredFileCount = Math.max(0, filePaths.length - playableSongs.length);
+
+    if (importedFolderCount > 0 && playableSongs.length > 0) {
+      useToast().showToast(
+        `已导入 ${importedFolderCount} 个文件夹，并开始播放 ${getSongTitleLabel(playableSongs[0])}`,
+        'success'
+      );
+      if (ignoredFileCount > 0) {
+        useToast().showToast(`已忽略 ${ignoredFileCount} 个不支持的文件`, 'info');
+      }
+      if (skippedFolderCount > 0) {
+        useToast().showToast(`${skippedFolderCount} 个文件夹已在音乐库中，已跳过`, 'info');
+      }
+      return;
+    }
+
+    if (importedFolderCount > 0) {
+      useToast().showToast(`已导入 ${importedFolderCount} 个文件夹`, 'success');
+      if (ignoredFileCount > 0) {
+        useToast().showToast(`已忽略 ${ignoredFileCount} 个不支持的文件`, 'info');
+      }
+      if (skippedFolderCount > 0) {
+        useToast().showToast(`${skippedFolderCount} 个文件夹已在音乐库中，已跳过`, 'info');
+      }
+      return;
+    }
+
+    if (playableSongs.length > 1) {
+      useToast().showToast(`已载入 ${playableSongs.length} 首歌曲并开始播放`, 'success');
+      if (ignoredFileCount > 0) {
+        useToast().showToast(`已忽略 ${ignoredFileCount} 个不支持的文件`, 'info');
+      }
+      if (skippedFolderCount > 0) {
+        useToast().showToast(`${skippedFolderCount} 个文件夹已在音乐库中，已跳过`, 'info');
+      }
+      return;
+    }
+
+    if (playableSongs.length === 1) {
+      useToast().showToast(`正在播放 ${getSongTitleLabel(playableSongs[0])}`, 'success');
+      if (skippedFolderCount > 0) {
+        useToast().showToast(`${skippedFolderCount} 个文件夹已在音乐库中，已跳过`, 'info');
+      }
+      return;
+    }
+
+    if (skippedFolderCount > 0) {
+      useToast().showToast(`${skippedFolderCount} 个文件夹已在音乐库中，未重复导入`, 'info');
+      return;
+    }
+
+    useToast().showToast(
+      source === 'open'
+        ? '未找到可播放的音频文件或可导入的文件夹'
+        : '拖入内容中没有可播放的音频文件或可导入的文件夹',
+      'error'
+    );
   }
 
   async function removeLibraryFolderLinked(
@@ -1566,13 +1703,14 @@ export function usePlayer() {
     return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
-  async function playSong(song: State.Song, options: { updateShuffleHistory?: boolean; clearShuffleFuture?: boolean } = {}) {
+  async function playSong(song: State.Song, options: PlaySongOptions = {}) {
     const requestId = ++playRequestId;
     // 🟢 切歌前：结算上一首
     flushPlaySession();
 
     const shouldUpdateShuffleHistory = options.updateShuffleHistory ?? true;
     const shouldClearShuffleFuture = options.clearShuffleFuture ?? true;
+    const preserveQueue = options.preserveQueue ?? false;
     const previousSong = State.currentSong.value;
 
     if (
@@ -1590,9 +1728,9 @@ export function usePlayer() {
     // 🟢 核心逻辑：播放时更新播放队列
     // 如果当前展示的列表包含这首歌，则把播放队列设置为当前展示列表
     // 这样保证了 "接着放下一首" 的逻辑是正确的
-    if (displaySongList.value.some(s => s.path === song.path)) {
+    if (!preserveQueue && displaySongList.value.some(s => s.path === song.path)) {
       State.playQueue.value = [...displaySongList.value];
-    } else {
+    } else if (!preserveQueue) {
       // 如果不在当前列表（比如来自搜索结果，或者历史记录），
       // 且队列里也没有这首歌，则把它加入队列（或者重置队列？）
       // 策略：如果队列里没有，就把它加进去；如果队列为空，就只放它
@@ -2116,6 +2254,7 @@ export function usePlayer() {
     addLibraryFolderLinked,
     removeLibraryFolder,
     removeLibraryFolderLinked,
+    handleExternalPaths,
     scanLibrary,
     // Existing
     playSong,

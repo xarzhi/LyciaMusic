@@ -143,8 +143,11 @@ impl DbState {
                 .ok();
         }
         if !columns.contains(&"effective_artist_names".to_string()) {
-            conn.execute("ALTER TABLE songs ADD COLUMN effective_artist_names TEXT", [])
-                .ok();
+            conn.execute(
+                "ALTER TABLE songs ADD COLUMN effective_artist_names TEXT",
+                [],
+            )
+            .ok();
         }
         if !columns.contains(&"album_artist".to_string()) {
             conn.execute("ALTER TABLE songs ADD COLUMN album_artist TEXT", [])

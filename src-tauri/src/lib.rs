@@ -10,32 +10,12 @@ mod window_theme;
 
 use database::DbState;
 use music::{
-    add_library_folder,
-    add_sidebar_folder,
-    batch_move_music_files,
-    create_folder,
-    delete_folder,
-    delete_music_file,
-    get_folder_first_song, // 🟢 New: Get first song for cover
-    get_library_folders,
-    get_library_hierarchy, // 引入新命令
-    // Sidebar Commands
-    get_sidebar_folders,
-    get_sidebar_hierarchy,
-    get_song_cover,
-    get_song_cover_thumbnail,
-    get_song_lyrics,
-    is_directory,        // Added this line
-    move_file_to_folder, // Added this line
-    move_music_file,
-    remove_library_folder,
-    remove_sidebar_folder,
-    run_cache_cleanup,
-    scan_folder_as_playlists,
-    scan_library,
-    scan_music_folder,
-    show_in_folder,
-    ImageConcurrencyLimit, // 引入新组件
+    add_library_folder, add_sidebar_folder, batch_move_music_files, create_folder, delete_folder,
+    delete_music_file, get_folder_first_song, get_library_folders, get_library_hierarchy,
+    get_sidebar_folders, get_sidebar_hierarchy, get_song_cover, get_song_cover_thumbnail,
+    get_song_lyrics, is_directory, move_file_to_folder, move_music_file, parse_audio_files,
+    remove_library_folder, remove_sidebar_folder, run_cache_cleanup, scan_folder_as_playlists,
+    scan_library, scan_music_folder, show_in_folder, ImageConcurrencyLimit,
 };
 use player::{
     get_output_devices, get_playback_progress, init_player, pause_audio, play_audio, resume_audio,
@@ -45,10 +25,15 @@ use statistics::{
     get_behavior_stats, get_format_distribution, get_library_stats, get_quality_distribution,
     record_play,
 };
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, Manager,
 };
 use tokio::sync::Semaphore;
 use toolbox::{apply_rename, open_external_program, preview_rename, refresh_folder_songs};
@@ -56,11 +41,83 @@ use window_boundary::set_mini_boundary_enabled;
 use window_material::get_window_material_capabilities;
 use window_theme::set_dark_mode_for_window;
 
+#[derive(Default)]
+struct PendingOpenPaths(Mutex<Vec<String>>);
+
+fn append_unique_paths(target: &mut Vec<String>, incoming: impl IntoIterator<Item = String>) {
+    let mut seen = target.iter().cloned().collect::<HashSet<_>>();
+
+    for path in incoming {
+        if seen.insert(path.clone()) {
+            target.push(path);
+        }
+    }
+}
+
+fn collect_existing_open_paths(
+    args: impl IntoIterator<Item = String>,
+    current_exe: Option<&Path>,
+) -> Vec<String> {
+    let mut paths = Vec::new();
+    let mut seen = HashSet::new();
+
+    for arg in args {
+        let trimmed = arg.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let normalized = music::utils::normalize_path(trimmed);
+        if normalized.is_empty() {
+            continue;
+        }
+
+        let candidate = PathBuf::from(&normalized);
+        if !candidate.exists() {
+            continue;
+        }
+
+        if current_exe.is_some_and(|exe| exe == candidate.as_path()) {
+            continue;
+        }
+
+        if seen.insert(normalized.clone()) {
+            paths.push(normalized);
+        }
+    }
+
+    paths
+}
+
+fn queue_open_paths(app: &tauri::AppHandle, paths: Vec<String>) {
+    if paths.is_empty() {
+        return;
+    }
+
+    if let Some(state) = app.try_state::<PendingOpenPaths>() {
+        if let Ok(mut pending_paths) = state.0.lock() {
+            append_unique_paths(&mut pending_paths, paths);
+        }
+    }
+}
+
+#[tauri::command]
+fn consume_pending_open_paths(
+    state: tauri::State<PendingOpenPaths>,
+) -> Result<Vec<String>, String> {
+    let mut pending_paths = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(std::mem::take(&mut *pending_paths))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            // 当第二个实例启动时，激活已有窗口
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            let current_exe = std::env::current_exe().ok();
+            let open_paths = collect_existing_open_paths(argv.into_iter(), current_exe.as_deref());
+            queue_open_paths(app, open_paths);
+            let _ = app.emit("app:open-paths", ());
+
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.set_focus();
@@ -69,26 +126,27 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            // 1. 初始化数据库状态
+            app.manage(PendingOpenPaths::default());
+
             let db_state = DbState::new(app.handle())?;
             app.manage(db_state);
 
-            // 2. 初始化播放器状态
             let player_state = init_player(app.handle());
             app.manage(player_state);
 
-            // 3. 🟢 初始化图片处理并发限制 (限制为同时 4 个)
-            // 这是一个全局信号量，所有图片生成请求都要先拿号
             app.manage(ImageConcurrencyLimit(Semaphore::new(4)));
-
-            // 4. 🟢 启动时执行一次缓存清理 (后台运行，不卡启动)
             run_cache_cleanup(app.handle());
 
-            // 6. 安装 mini 窗口边界约束 subclass（Windows）
+            let current_exe = std::env::current_exe().ok();
+            let initial_open_paths =
+                collect_existing_open_paths(std::env::args().skip(1), current_exe.as_deref());
+            queue_open_paths(app.handle(), initial_open_paths);
+
             #[cfg(target_os = "windows")]
             {
                 if let Some(window) = app.get_webview_window("main") {
                     use raw_window_handle::HasWindowHandle;
+
                     if let Ok(handle) = window.as_ref().window().window_handle() {
                         if let raw_window_handle::RawWindowHandle::Win32(win32) = handle.as_raw() {
                             window_boundary::install_boundary_subclass(win32.hwnd.get() as isize);
@@ -97,11 +155,10 @@ pub fn run() {
                 }
             }
 
-            // 5. System Tray Setup
             let handle = app.handle();
-            let show_i = MenuItem::with_id(handle, "show", "显示主界面", true, None::<&str>)?;
-            let quit_i = MenuItem::with_id(handle, "quit", "退出", true, None::<&str>)?;
-            let menu = Menu::with_items(handle, &[&show_i, &quit_i])?;
+            let show_item = MenuItem::with_id(handle, "show", "显示主界面", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(handle, "quit", "退出", true, None::<&str>)?;
+            let menu = Menu::with_items(handle, &[&show_item, &quit_item])?;
 
             let _tray = TrayIconBuilder::with_id("tray")
                 .icon(app.default_window_icon().unwrap().clone())
@@ -139,6 +196,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             scan_music_folder,
+            parse_audio_files,
             scan_folder_as_playlists,
             get_song_cover_thumbnail,
             get_song_cover,
@@ -163,7 +221,6 @@ pub fn run() {
             remove_library_folder,
             scan_library,
             get_library_hierarchy,
-            // Sidebar Commands
             get_sidebar_folders,
             add_sidebar_folder,
             remove_sidebar_folder,
@@ -172,18 +229,17 @@ pub fn run() {
             delete_folder,
             move_file_to_folder,
             get_folder_first_song,
-            // Statistics Commands
             get_library_stats,
             record_play,
             get_behavior_stats,
             get_quality_distribution,
             get_format_distribution,
-            // Toolbox Commands
             open_external_program,
             refresh_folder_songs,
             set_mini_boundary_enabled,
             get_window_material_capabilities,
-            set_dark_mode_for_window
+            set_dark_mode_for_window,
+            consume_pending_open_paths
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

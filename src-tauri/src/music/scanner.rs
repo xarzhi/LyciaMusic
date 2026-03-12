@@ -324,6 +324,42 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
     })
 }
 
+pub fn parse_audio_files_internal(paths: Vec<String>) -> Vec<Song> {
+    let mut songs = Vec::new();
+    let mut seen_paths = HashSet::new();
+
+    for raw_path in paths {
+        let normalized_path = normalize_path(&raw_path);
+        if normalized_path.is_empty() || !seen_paths.insert(normalized_path.clone()) {
+            continue;
+        }
+
+        let path = PathBuf::from(&normalized_path);
+        if !path.is_file() {
+            continue;
+        }
+
+        let extension = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_ascii_lowercase());
+
+        let Some(extension) = extension else {
+            continue;
+        };
+
+        if !is_supported_library_extension(&extension) {
+            continue;
+        }
+
+        if let Some(song) = parse_song_from_file(&path, &normalized_path, &extension) {
+            songs.push(song);
+        }
+    }
+
+    songs
+}
+
 fn normalize_container(file_type: FileType) -> &'static str {
     match file_type {
         FileType::Aac => "aac",
@@ -532,7 +568,10 @@ fn enrich_album_groups(songs: &mut [Song]) {
             parent_folder,
             normalize_album_key_part(&song.album, UNKNOWN_ALBUM)
         );
-        grouped_paths.entry(album_group_key).or_default().push(index);
+        grouped_paths
+            .entry(album_group_key)
+            .or_default()
+            .push(index);
     }
 
     for indexes in grouped_paths.into_values() {
@@ -584,7 +623,8 @@ fn load_db_snapshot_for_folder(
                 let added_at_i64 = row.get::<_, Option<i64>>(20)?;
                 let file_modified_at_i64 = row.get::<_, Option<i64>>(21)?;
                 let artist_names = deserialize_string_list(row.get::<_, Option<String>>(4)?);
-                let effective_artist_names = deserialize_string_list(row.get::<_, Option<String>>(5)?);
+                let effective_artist_names =
+                    deserialize_string_list(row.get::<_, Option<String>>(5)?);
 
                 let name = Path::new(&path)
                     .file_name()
@@ -721,22 +761,12 @@ fn collect_scan_diff(
 
     let to_add = to_add
         .into_iter()
-        .map(|song| {
-            song_by_path
-                .get(&song.path)
-                .cloned()
-                .unwrap_or(song)
-        })
+        .map(|song| song_by_path.get(&song.path).cloned().unwrap_or(song))
         .collect();
 
     let to_update = to_update
         .into_iter()
-        .map(|song| {
-            song_by_path
-                .get(&song.path)
-                .cloned()
-                .unwrap_or(song)
-        })
+        .map(|song| song_by_path.get(&song.path).cloned().unwrap_or(song))
         .collect();
 
     ScanDiff {
@@ -752,15 +782,16 @@ fn get_song_id_by_path(
     conn: &rusqlite::Transaction<'_>,
     path: &str,
 ) -> Result<Option<i64>, String> {
-    conn.query_row("SELECT id FROM songs WHERE path = ?1", params![path], |row| row.get(0))
-        .optional()
-        .map_err(|e| e.to_string())
+    conn.query_row(
+        "SELECT id FROM songs WHERE path = ?1",
+        params![path],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(|e| e.to_string())
 }
 
-fn ensure_artist_id(
-    conn: &rusqlite::Transaction<'_>,
-    artist_name: &str,
-) -> Result<i64, String> {
+fn ensure_artist_id(conn: &rusqlite::Transaction<'_>, artist_name: &str) -> Result<i64, String> {
     conn.execute(
         "INSERT INTO artists (name) VALUES (?1)
          ON CONFLICT(name) DO NOTHING",
@@ -1052,6 +1083,15 @@ pub async fn scan_music_folder(
     })
     .await
     .map_err(|e| e.to_string())??;
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn parse_audio_files(paths: Vec<String>) -> Result<Vec<Song>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || parse_audio_files_internal(paths))
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(result)
 }

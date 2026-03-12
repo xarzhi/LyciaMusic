@@ -408,7 +408,10 @@ fn push_unique_tag<'a>(tags: &mut Vec<&'a Tag>, candidate: Option<&'a Tag>) {
         return;
     };
 
-    if !tags.iter().any(|existing| std::ptr::eq(*existing, candidate)) {
+    if !tags
+        .iter()
+        .any(|existing| std::ptr::eq(*existing, candidate))
+    {
         tags.push(candidate);
     }
 }
@@ -448,7 +451,11 @@ fn read_album(tag: &Tag) -> Option<String> {
 fn read_album_artist(tag: &Tag) -> Option<String> {
     read_tag_text(
         tag,
-        &[ItemKey::AlbumArtist, ItemKey::TrackArtist, ItemKey::Performer],
+        &[
+            ItemKey::AlbumArtist,
+            ItemKey::TrackArtist,
+            ItemKey::Performer,
+        ],
         &["ALBUMARTIST", "ALBUM ARTIST", "TPE2", "IART"],
     )
 }

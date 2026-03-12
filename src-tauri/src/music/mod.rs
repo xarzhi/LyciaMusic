@@ -22,7 +22,9 @@ pub use library::{
     add_library_folder, get_library_folders, get_library_hierarchy, remove_library_folder,
     scan_library,
 };
-pub use scanner::{get_folder_first_song, scan_folder_as_playlists, scan_music_folder};
+pub use scanner::{
+    get_folder_first_song, parse_audio_files, scan_folder_as_playlists, scan_music_folder,
+};
 pub use sidebar::{
     add_sidebar_folder, get_sidebar_folders, get_sidebar_hierarchy, remove_sidebar_folder,
 };

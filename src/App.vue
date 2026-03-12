@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { watch, computed, defineAsyncComponent, nextTick } from 'vue';
+import { watch, computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
 import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
 import { invoke } from '@tauri-apps/api/core';
@@ -28,11 +29,32 @@ const {
   showMiniPlaylist,
   showPlaylist,
   closeMiniPlaylist,
-  showVolumePopover
+  showVolumePopover,
+  handleExternalPaths
 } = usePlayer();
 const { activeWindowMaterial, applyWindowMaterial, loadWindowMaterialCapabilities } = useWindowMaterial();
 
 init();
+
+const isExternalDragActive = ref(false);
+let externalPathTask: Promise<void> = Promise.resolve();
+
+const enqueueExternalPaths = (paths: string[], source: 'drop' | 'open') => {
+  externalPathTask = externalPathTask
+    .then(() => handleExternalPaths(paths, { source }))
+    .catch((error) => {
+      console.error('Failed to process external paths:', error);
+    });
+
+  return externalPathTask;
+};
+
+const consumePendingOpenPaths = async () => {
+  const paths = await invoke<string[]>('consume_pending_open_paths');
+  if (paths.length > 0) {
+    await enqueueExternalPaths(paths, 'open');
+  }
+};
 
 const isFooterVisible = computed(() => playQueue.value.length > 0);
 const hasWindowMaterial = computed(() => activeWindowMaterial.value !== 'none');
@@ -253,6 +275,39 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
   }
 });
 
+let unlistenDragDrop: (() => void) | null = null;
+let unlistenDragOver: (() => void) | null = null;
+let unlistenDragLeave: (() => void) | null = null;
+let unlistenOpenPaths: (() => void) | null = null;
+
+onMounted(async () => {
+  unlistenDragDrop = await listen<{ paths: string[] }>('tauri://drag-drop', async (event) => {
+    isExternalDragActive.value = false;
+    await enqueueExternalPaths(event.payload?.paths ?? [], 'drop');
+  });
+
+  unlistenDragOver = await listen('tauri://drag-over', () => {
+    isExternalDragActive.value = true;
+  });
+
+  unlistenDragLeave = await listen('tauri://drag-leave', () => {
+    isExternalDragActive.value = false;
+  });
+
+  unlistenOpenPaths = await listen('app:open-paths', async () => {
+    await consumePendingOpenPaths();
+  });
+
+  await consumePendingOpenPaths();
+});
+
+onUnmounted(() => {
+  unlistenDragDrop?.();
+  unlistenDragOver?.();
+  unlistenDragLeave?.();
+  unlistenOpenPaths?.();
+});
+
 
 </script>
 
@@ -264,6 +319,18 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
   >
     <transition name="window-restore">
       <GlobalBackground v-if="!isMiniMode" />
+    </transition>
+
+    <transition name="drop-overlay">
+      <div
+        v-if="isExternalDragActive && !isMiniMode"
+        class="absolute inset-0 z-[140] pointer-events-none flex items-center justify-center bg-black/15 backdrop-blur-sm"
+      >
+        <div class="rounded-[28px] border border-white/35 bg-white/75 px-8 py-6 text-center shadow-[0_24px_60px_rgba(0,0,0,0.2)] dark:border-white/10 dark:bg-black/65">
+          <div class="text-lg font-semibold text-gray-900 dark:text-white">松开即可导入或播放</div>
+          <div class="mt-2 text-sm text-gray-600 dark:text-white/70">音频文件将直接播放，文件夹将导入音乐库</div>
+        </div>
+      </div>
     </transition>
 
     <MiniPlayer v-if="isMiniMode" />
@@ -396,6 +463,16 @@ html.mini-mode-active,
 }
 
 .window-restore-leave-to {
+  opacity: 0;
+}
+
+.drop-overlay-enter-active,
+.drop-overlay-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.drop-overlay-enter-from,
+.drop-overlay-leave-to {
   opacity: 0;
 }
 </style>

@@ -105,6 +105,61 @@ interface HandleExternalPathsOptions {
   source?: ExternalPathSource;
 }
 
+interface RecentHistoryRecord {
+  songPath: string;
+  playedAt: number;
+}
+
+interface RecentHistoryImportRecord {
+  songPath: string;
+  playedAt: number;
+}
+
+const PLAYER_PLAYLIST_PATHS_KEY = 'player_playlist_paths';
+const PLAYER_QUEUE_PATHS_KEY = 'player_queue_paths';
+const PLAYER_LAST_SONG_PATH_KEY = 'player_last_song_path';
+const LEGACY_PLAYER_PLAYLIST_KEY = 'player_playlist';
+const LEGACY_PLAYER_QUEUE_KEY = 'player_queue';
+const LEGACY_PLAYER_HISTORY_KEY = 'player_history';
+const LEGACY_PLAYER_LAST_SONG_KEY = 'player_last_song';
+
+const parseStoredJson = <T>(raw: string | null): T | null => {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+};
+
+const readStoredStringArray = (key: string): string[] | null => {
+  const parsed = parseStoredJson<unknown>(localStorage.getItem(key));
+  if (!Array.isArray(parsed)) return null;
+  return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+};
+
+const readStoredSongArray = (key: string): State.Song[] => {
+  const parsed = parseStoredJson<unknown>(localStorage.getItem(key));
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((item): item is State.Song => !!item && typeof item === 'object' && typeof (item as State.Song).path === 'string');
+};
+
+const readStoredSong = (key: string): State.Song | null => {
+  const parsed = parseStoredJson<unknown>(localStorage.getItem(key));
+  if (!parsed || typeof parsed !== 'object') return null;
+  return typeof (parsed as State.Song).path === 'string' ? parsed as State.Song : null;
+};
+
+const readStoredHistory = (key: string): State.HistoryItem[] => {
+  const parsed = parseStoredJson<unknown>(localStorage.getItem(key));
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((item): item is State.HistoryItem => {
+    if (!item || typeof item !== 'object') return false;
+    const historyItem = item as State.HistoryItem;
+    return !!historyItem.song && typeof historyItem.song.path === 'string' && typeof historyItem.playedAt === 'number';
+  });
+};
+
 const getSongArtistNames = (song: State.Song) => {
   if (Array.isArray(song.effective_artist_names) && song.effective_artist_names.length > 0) {
     return song.effective_artist_names;
@@ -135,6 +190,58 @@ const dedupeSongs = (songs: State.Song[]) => {
     seen.add(song.path);
     return true;
   });
+};
+
+const createSongLookup = (fallbackSongs: State.Song[] = []) => {
+  const lookup = new Map<string, State.Song>();
+
+  for (const song of fallbackSongs) {
+    if (song?.path && !lookup.has(song.path)) {
+      lookup.set(song.path, song);
+    }
+  }
+
+  for (const song of State.librarySongs.value) {
+    if (song?.path) {
+      lookup.set(song.path, song);
+    }
+  }
+
+  return lookup;
+};
+
+const resolveSongsFromPaths = (paths: string[], fallbackSongs: State.Song[] = []) => {
+  const lookup = createSongLookup(fallbackSongs);
+  return paths
+    .map(path => lookup.get(path))
+    .filter((song): song is State.Song => !!song);
+};
+
+const refreshStateSongReferences = (fallbackSongs: State.Song[] = []) => {
+  const lookup = createSongLookup([
+    ...fallbackSongs,
+    ...State.songList.value,
+    ...State.playQueue.value,
+    ...State.recentSongs.value.map(item => item.song),
+    ...(State.currentSong.value ? [State.currentSong.value] : []),
+  ]);
+
+  State.songList.value = State.songList.value
+    .map(song => lookup.get(song.path) ?? song)
+    .filter((song): song is State.Song => !!song);
+  State.playQueue.value = State.playQueue.value
+    .map(song => lookup.get(song.path) ?? song)
+    .filter((song): song is State.Song => !!song);
+  State.recentSongs.value = State.recentSongs.value
+    .map(item => {
+      const song = lookup.get(item.song.path) ?? item.song;
+      return song ? { ...item, song } : null;
+    })
+    .filter((item): item is State.HistoryItem => !!item);
+
+  if (State.currentSong.value?.path) {
+    State.currentSong.value = lookup.get(State.currentSong.value.path) ?? State.currentSong.value;
+  }
 };
 
 const cancelScheduledLibraryRefresh = () => {
@@ -213,6 +320,7 @@ export function usePlayer() {
     try {
       const songs = await invoke<State.Song[]>('get_library_songs_cached');
       State.librarySongs.value = songs;
+      refreshStateSongReferences(songs);
     } catch (e) {
       console.error("Failed to load cached library songs:", e);
     }
@@ -662,6 +770,7 @@ export function usePlayer() {
       try {
         const songs = await invoke<State.Song[]>('scan_library');
         State.librarySongs.value = songs;
+        refreshStateSongReferences(songs);
         await fetchLibraryFolders();
         // NOTE: We do NOT refresh folderTree here anymore. Sidebar is independent.
       } catch (e) {
@@ -1578,9 +1687,43 @@ export function usePlayer() {
 
   function toggleFavorite(s: State.Song) { if (isFavorite(s)) State.favoritePaths.value = State.favoritePaths.value.filter(p => p !== s.path); else State.favoritePaths.value.push(s.path); }
 
-  function addToHistory(song: State.Song) { State.recentSongs.value = State.recentSongs.value.filter(item => item.song.path !== song.path); State.recentSongs.value.unshift({ song, playedAt: Date.now() }); if (State.recentSongs.value.length > 1000) State.recentSongs.value = State.recentSongs.value.slice(0, 1000); }
+  async function addToHistory(song: State.Song) {
+    State.recentSongs.value = State.recentSongs.value.filter(item => item.song.path !== song.path);
+    State.recentSongs.value.unshift({ song, playedAt: Date.now() });
+    if (State.recentSongs.value.length > 1000) {
+      State.recentSongs.value = State.recentSongs.value.slice(0, 1000);
+    }
+    localStorage.removeItem(LEGACY_PLAYER_HISTORY_KEY);
 
-  function clearHistory() { State.recentSongs.value = []; }
+    invoke('add_to_history', { songPath: song.path }).catch(e => {
+      console.warn('add_to_history failed:', e);
+    });
+  }
+
+  async function removeFromHistory(songPaths: string[]) {
+    if (songPaths.length === 0) return;
+
+    const pathSet = new Set(songPaths);
+    State.recentSongs.value = State.recentSongs.value.filter(item => !pathSet.has(item.song.path));
+    localStorage.removeItem(LEGACY_PLAYER_HISTORY_KEY);
+
+    try {
+      await invoke('remove_from_recent_history', { songPaths });
+    } catch (e) {
+      console.warn('remove_from_recent_history failed:', e);
+    }
+  }
+
+  async function clearHistory() {
+    State.recentSongs.value = [];
+    localStorage.removeItem(LEGACY_PLAYER_HISTORY_KEY);
+
+    try {
+      await invoke('clear_recent_history');
+    } catch (e) {
+      console.warn('clear_recent_history failed:', e);
+    }
+  }
 
   function clearLocalMusic() { State.songList.value = []; State.watchedFolders.value = []; }
 
@@ -1652,9 +1795,27 @@ export function usePlayer() {
   function closeMiniPlaylist() { State.showMiniPlaylist.value = false; }
   async function handleScan() { addFolder(); }
   function playNext(song: State.Song) { State.tempQueue.value.unshift(song); }
-  function removeSongFromList(song: State.Song) { if (State.currentViewMode.value === 'all') { State.songList.value = State.songList.value.filter(s => s.path !== song.path); } else if (State.currentViewMode.value === 'favorites') { State.favoritePaths.value = State.favoritePaths.value.filter(p => p !== song.path); } else if (State.currentViewMode.value === 'recent') { State.recentSongs.value = State.recentSongs.value.filter(i => i.song.path !== song.path); } }
+  async function removeSongFromList(song: State.Song) {
+    if (State.currentViewMode.value === 'all') {
+      State.songList.value = State.songList.value.filter(s => s.path !== song.path);
+    } else if (State.currentViewMode.value === 'favorites') {
+      State.favoritePaths.value = State.favoritePaths.value.filter(p => p !== song.path);
+    } else if (State.currentViewMode.value === 'recent') {
+      await removeFromHistory([song.path]);
+    }
+  }
   async function openInFinder(path: string) { await invoke('show_in_folder', { path }); }
-  async function deleteFromDisk(song: State.Song) { try { await invoke('delete_music_file', { path: song.path }); State.songList.value = State.songList.value.filter(s => s.path !== song.path); State.favoritePaths.value = State.favoritePaths.value.filter(p => p !== song.path); State.recentSongs.value = State.recentSongs.value.filter(i => i.song.path !== song.path); State.playlists.value.forEach(pl => { pl.songPaths = pl.songPaths.filter(p => p !== song.path); }); } catch (e) { useToast().showToast("删除失败: " + e, "error"); } }
+  async function deleteFromDisk(song: State.Song) {
+    try {
+      await invoke('delete_music_file', { path: song.path });
+      State.songList.value = State.songList.value.filter(s => s.path !== song.path);
+      State.favoritePaths.value = State.favoritePaths.value.filter(p => p !== song.path);
+      await removeFromHistory([song.path]);
+      State.playlists.value.forEach(pl => { pl.songPaths = pl.songPaths.filter(p => p !== song.path); });
+    } catch (e) {
+      useToast().showToast("删除失败: " + e, "error");
+    }
+  }
 
   function stopTimer() {
     if (progressFrameId !== null) { cancelAnimationFrame(progressFrameId); progressFrameId = null; }
@@ -2024,17 +2185,18 @@ export function usePlayer() {
         persistTimer = null;
       }
 
-      localStorage.setItem('player_playlist', JSON.stringify(State.songList.value));
+      localStorage.setItem(PLAYER_PLAYLIST_PATHS_KEY, JSON.stringify(State.songList.value.map(song => song.path)));
       localStorage.setItem('player_watched_folders', JSON.stringify(State.watchedFolders.value));
       localStorage.setItem('player_favorites', JSON.stringify(State.favoritePaths.value));
       localStorage.setItem('player_custom_playlists', JSON.stringify(State.playlists.value));
       localStorage.setItem('player_settings', JSON.stringify(State.settings.value));
-      localStorage.setItem('player_history', JSON.stringify(State.recentSongs.value));
-      localStorage.setItem('player_queue', JSON.stringify(State.playQueue.value));
+      localStorage.setItem(PLAYER_QUEUE_PATHS_KEY, JSON.stringify(State.playQueue.value.map(song => song.path)));
       localStorage.setItem('player_artist_custom_order', JSON.stringify(State.artistCustomOrder.value));
       localStorage.setItem('player_album_custom_order', JSON.stringify(State.albumCustomOrder.value));
       localStorage.setItem('player_folder_custom_order', JSON.stringify(State.folderCustomOrder.value));
       localStorage.setItem('player_local_custom_order', JSON.stringify(State.localCustomOrder.value));
+      localStorage.removeItem(LEGACY_PLAYER_PLAYLIST_KEY);
+      localStorage.removeItem(LEGACY_PLAYER_QUEUE_KEY);
     };
 
     const schedulePersistedState = () => {
@@ -2071,13 +2233,12 @@ export function usePlayer() {
     watch(State.playMode, (v) => localStorage.setItem('player_mode', v.toString()));
     watch(
       [
-        State.songList,
+        () => State.songList.value.map(song => song.path),
         State.watchedFolders,
         State.favoritePaths,
         State.playlists,
         State.settings,
-        State.recentSongs,
-        State.playQueue,
+        () => State.playQueue.value.map(song => song.path),
         State.artistCustomOrder,
         State.albumCustomOrder,
         State.folderCustomOrder,
@@ -2097,12 +2258,14 @@ export function usePlayer() {
     watch(State.playlistSortMode, (v) => localStorage.setItem('player_playlist_sort_mode', v));
 
     watch(State.currentSong, (newSong) => {
-      if (newSong) {
-        localStorage.setItem('player_last_song', JSON.stringify(newSong));
+      if (newSong?.path) {
+        localStorage.setItem(PLAYER_LAST_SONG_PATH_KEY, newSong.path);
+        localStorage.removeItem(LEGACY_PLAYER_LAST_SONG_KEY);
       } else {
-        localStorage.removeItem('player_last_song');
+        localStorage.removeItem(PLAYER_LAST_SONG_PATH_KEY);
+        localStorage.removeItem(LEGACY_PLAYER_LAST_SONG_KEY);
       }
-    }, { deep: true });
+    });
 
     watch(State.currentCover, async (newCover) => {
       if (!newCover) return;
@@ -2124,12 +2287,96 @@ export function usePlayer() {
       }
     });
 
+    const restoreRecentHistory = async () => {
+      const legacyHistory = readStoredHistory(LEGACY_PLAYER_HISTORY_KEY);
+      const legacyHistorySongs = legacyHistory.map(item => item.song);
+
+      try {
+        const records = await invoke<RecentHistoryRecord[]>('get_recent_history', { limit: 1000 });
+        if (records.length > 0) {
+          const lookup = createSongLookup(legacyHistorySongs);
+          State.recentSongs.value = records
+            .map(record => {
+              const song = lookup.get(record.songPath);
+              return song ? { song, playedAt: record.playedAt } : null;
+            })
+            .filter((item): item is State.HistoryItem => !!item);
+
+          if (State.recentSongs.value.length > 0) {
+            localStorage.removeItem(LEGACY_PLAYER_HISTORY_KEY);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('get_recent_history failed:', e);
+      }
+
+      if (legacyHistory.length === 0) {
+        State.recentSongs.value = [];
+        return;
+      }
+
+      const lookup = createSongLookup(legacyHistorySongs);
+      State.recentSongs.value = legacyHistory.map(item => ({
+        song: lookup.get(item.song.path) ?? item.song,
+        playedAt: item.playedAt,
+      }));
+
+      const importedEntries: RecentHistoryImportRecord[] = legacyHistory.map(item => ({
+        songPath: item.song.path,
+        playedAt: Math.floor(item.playedAt / 1000),
+      }));
+
+      try {
+        await invoke('import_recent_history', { entries: importedEntries });
+        localStorage.removeItem(LEGACY_PLAYER_HISTORY_KEY);
+      } catch (e) {
+        console.warn('import_recent_history failed:', e);
+      }
+    };
+
+    const restorePathBackedState = async () => {
+      const legacySongList = readStoredSongArray(LEGACY_PLAYER_PLAYLIST_KEY);
+      const legacyQueue = readStoredSongArray(LEGACY_PLAYER_QUEUE_KEY);
+      const legacyLastSong = readStoredSong(LEGACY_PLAYER_LAST_SONG_KEY);
+      const fallbackSongs = [
+        ...legacySongList,
+        ...legacyQueue,
+        ...(legacyLastSong ? [legacyLastSong] : []),
+      ];
+
+      if (State.librarySongs.value.length === 0) {
+        await loadLibrarySongsFromCache();
+      }
+
+      const storedSongListPaths = readStoredStringArray(PLAYER_PLAYLIST_PATHS_KEY)
+        ?? legacySongList.map(song => song.path);
+      const storedQueuePaths = readStoredStringArray(PLAYER_QUEUE_PATHS_KEY)
+        ?? legacyQueue.map(song => song.path);
+      const storedLastSongPath = localStorage.getItem(PLAYER_LAST_SONG_PATH_KEY)
+        ?? legacyLastSong?.path
+        ?? null;
+
+      State.songList.value = resolveSongsFromPaths(storedSongListPaths, fallbackSongs);
+      State.playQueue.value = resolveSongsFromPaths(storedQueuePaths, fallbackSongs);
+
+      if (storedLastSongPath) {
+        State.currentSong.value = createSongLookup(fallbackSongs).get(storedLastSongPath) ?? legacyLastSong;
+      }
+
+      if (State.currentSong.value?.path) {
+        invoke<string>('get_song_cover', { path: State.currentSong.value.path })
+          .then(cover => State.currentCover.value = cover)
+          .catch(() => { });
+        State.isSongLoaded.value = false;
+      }
+    };
+
     onMounted(async () => {
       // 🟢 性能优化：同步恢复持久化数据，避免空状态渲染后再次闪烁
       const restoreState = async () => {
         const sVol = localStorage.getItem('player_volume'); if (sVol) { State.volume.value = parseInt(sVol); await invoke('set_volume', { volume: State.volume.value / 100.0 }); }
         const sFolders = localStorage.getItem('player_watched_folders'); if (sFolders) try { State.watchedFolders.value = JSON.parse(sFolders); } catch (e) { }
-        const sList = localStorage.getItem('player_playlist'); if (sList) try { State.songList.value = JSON.parse(sList); } catch (e) { }
         const sFavs = localStorage.getItem('player_favorites'); if (sFavs) try { State.favoritePaths.value = JSON.parse(sFavs); } catch (e) { }
         const sPlaylists = localStorage.getItem('player_custom_playlists'); if (sPlaylists) try { State.playlists.value = JSON.parse(sPlaylists); } catch (e) { }
 
@@ -2216,22 +2463,12 @@ export function usePlayer() {
           }
         }
 
-        const sHistory = localStorage.getItem('player_history'); if (sHistory) try { State.recentSongs.value = JSON.parse(sHistory); } catch (e) { }
 
         // 🟢 读取 playQueue
-        const sQueue = localStorage.getItem('player_queue'); if (sQueue) try { State.playQueue.value = JSON.parse(sQueue); } catch (e) { }
 
-        const lastSong = localStorage.getItem('player_last_song');
-        if (lastSong) {
-          try {
-            const parsedSong = JSON.parse(lastSong);
-            State.currentSong.value = parsedSong;
-            if (parsedSong.path) {
-              invoke<string>('get_song_cover', { path: parsedSong.path }).then(cover => State.currentCover.value = cover).catch(() => { });
-            }
-            State.isSongLoaded.value = false;
-          } catch (e) { }
-        }
+        await restorePathBackedState();
+        await restoreRecentHistory();
+        refreshStateSongReferences();
 
         const lastTime = localStorage.getItem('player_last_time');
         if (lastTime) {
@@ -2311,7 +2548,7 @@ export function usePlayer() {
     pauseSong,
     togglePlay, nextSong, prevSong, handleSeek, handleVolume, toggleMute, handleScan, toggleMode, togglePlaylist, toggleMiniPlaylist, closeMiniPlaylist,
     addFolder, addLibraryFolderPath, switchViewToAll, switchViewToFolder, switchToFolderView, switchToRecent, switchToFavorites, switchToStatistics, switchLocalTab, switchFavTab,
-    removeFolder, addToHistory, clearHistory, clearLocalMusic, clearFavorites, addSongsToPlaylist, isFavorite, toggleFavorite,
+    removeFolder, addToHistory, removeFromHistory, clearHistory, clearLocalMusic, clearFavorites, addSongsToPlaylist, isFavorite, toggleFavorite,
     viewArtist, viewAlbum, viewGenre, viewYear, setSearch, createPlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist, viewPlaylist,
     moveFile, generateOrganizedPath, playNext, removeSongFromList, openInFinder, deleteFromDisk,
     stepSeek, toggleAlwaysOnTop, togglePlayerDetail, seekTo, openAddToPlaylistDialog, playAt,

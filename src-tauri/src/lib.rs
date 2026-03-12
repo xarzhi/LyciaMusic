@@ -23,8 +23,9 @@ use player::{
     seek_audio, set_output_device, set_volume,
 };
 use statistics::{
-    get_behavior_stats, get_format_distribution, get_library_stats, get_quality_distribution,
-    record_play,
+    add_to_history, clear_recent_history, get_behavior_stats, get_format_distribution,
+    get_library_stats, get_quality_distribution, get_recent_history, import_recent_history,
+    record_play, remove_from_recent_history,
 };
 use std::{
     collections::HashSet,
@@ -232,7 +233,12 @@ pub fn run() {
             move_file_to_folder,
             get_folder_first_song,
             get_library_stats,
+            add_to_history,
             record_play,
+            get_recent_history,
+            import_recent_history,
+            remove_from_recent_history,
+            clear_recent_history,
             get_behavior_stats,
             get_quality_distribution,
             get_format_distribution,

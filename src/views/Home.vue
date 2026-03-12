@@ -306,7 +306,7 @@ const {
   folderTree,
   activeRootPath,
   currentFolderFilter,
-  recentSongs,
+  removeFromHistory,
   playlists,
   filterCondition,
   librarySongs,
@@ -672,7 +672,7 @@ const executeBatchPhysicalDelete = async () => {
   if (deletedPaths.size > 0) {
     songList.value = songList.value.filter(song => !deletedPaths.has(song.path));
     favoritePaths.value = favoritePaths.value.filter(path => !deletedPaths.has(path));
-    recentSongs.value = recentSongs.value.filter(item => !deletedPaths.has(item.song.path));
+    await removeFromHistory(Array.from(deletedPaths));
     playlists.value.forEach(playlist => {
       playlist.songPaths = playlist.songPaths.filter(path => !deletedPaths.has(path));
     });

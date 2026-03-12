@@ -1,6 +1,6 @@
 [package]
 name = "lycia_music"
-version = "1.0.0"
+version = "1.2.4"
 description = "A beautiful local music player powered by Tauri."
 authors = ["lyc"]
 edition = "2021"

@@ -7,7 +7,13 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "version": "node scripts/sync-version.js",
+    "release:patch": "npm version patch --no-git-tag-version --force",
+    "release:minor": "npm version minor --no-git-tag-version --force",
+    "release:major": "npm version major --no-git-tag-version --force",
+    "release:set": "npm version",
+    "version:check": "node scripts/check-version.js"
   },
   "dependencies": {
     "@applemusic-like-lyrics/core": "^0.2.0",

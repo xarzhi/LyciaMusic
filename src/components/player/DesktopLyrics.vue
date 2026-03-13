@@ -67,7 +67,6 @@ const keepSettingsOpen = () => {
 
 const toggleTop = () => {
   lyricsSettings.isAlwaysOnTop = !lyricsSettings.isAlwaysOnTop;
-  toggleAlwaysOnTop(lyricsSettings.isAlwaysOnTop);
 };
 
 const toggleLock = () => { lyricsSettings.isLocked = !lyricsSettings.isLocked; };

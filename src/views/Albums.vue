@@ -1,30 +1,31 @@
 <script setup lang="ts">
 import { usePlayer, dragSession } from '../composables/player';
 import { useRouter } from 'vue-router';
-import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 
-const { albumList, viewAlbum, albumSortMode, updateAlbumOrder } = usePlayer();
+const { filteredAlbumList, viewAlbum, albumSortMode, updateAlbumOrder, searchQuery } = usePlayer();
 const router = useRouter();
+const isSearchActive = computed(() => searchQuery.value.trim().length > 0);
 
 import { useCoverCache } from '../composables/useCoverCache';
 
 // 封面图片加载状态管理
 const { coverCache, loadingSet, preloadCovers } = useCoverCache();
 
-watch(() => albumList.value, (newList) => {
+watch(() => filteredAlbumList.value, (newList) => {
   const paths = newList.map((a: any) => a.firstSongPath).filter(Boolean);
   preloadCovers(paths);
 }, { immediate: true });
 
 const showSortMenu = ref(false);
-const dragOverName = ref<string | null>(null);
+const dragOverKey = ref<string | null>(null);
 
-const handleAlbumClick = (albumName: string) => {
-  viewAlbum(albumName);
+const handleAlbumClick = (albumKey: string) => {
+  viewAlbum(albumKey);
   router.push('/');
 };
 
-const handleSortChange = (mode: 'count' | 'name' | 'custom') => {
+const handleSortChange = (mode: 'count' | 'name' | 'artist' | 'custom') => {
   albumSortMode.value = mode;
   showSortMenu.value = false;
 };
@@ -33,6 +34,7 @@ const handleSortChange = (mode: 'count' | 'name' | 'custom') => {
 let mouseDownInfo: { x: number, y: number, index: number, album: any } | null = null;
 
 const handleMouseDown = (e: MouseEvent, index: number, album: any) => {
+  if (isSearchActive.value) return;
   if (e.button !== 0) return;
   mouseDownInfo = { x: e.clientX, y: e.clientY, index, album };
 };
@@ -43,23 +45,23 @@ const handleGlobalMouseMove = (e: MouseEvent) => {
     if (dist > 5) {
       dragSession.active = true;
       dragSession.type = 'album';
-      dragSession.data = { index: mouseDownInfo.index, name: mouseDownInfo.album.name };
+      dragSession.data = { index: mouseDownInfo.index, key: mouseDownInfo.album.key };
     }
   }
 };
 
 const handleGlobalMouseUp = () => {
   if (dragSession.active && dragSession.type === 'album') {
-    if (dragOverName.value && mouseDownInfo) {
+    if (dragOverKey.value && mouseDownInfo) {
       const fromIndex = mouseDownInfo.index;
-      const toIndex = albumList.value.findIndex(a => a.name === dragOverName.value);
+      const toIndex = filteredAlbumList.value.findIndex(a => a.key === dragOverKey.value);
       
       if (toIndex !== -1 && fromIndex !== toIndex) {
-        const list = [...albumList.value];
+        const list = [...filteredAlbumList.value];
         const [removed] = list.splice(fromIndex, 1);
         list.splice(toIndex, 0, removed);
         
-        const newOrder = list.map(a => a.name);
+        const newOrder = list.map(a => a.key);
         updateAlbumOrder(newOrder);
       }
     }
@@ -71,13 +73,13 @@ const handleGlobalMouseUp = () => {
      dragSession.active = false;
      dragSession.type = 'song';
      dragSession.data = null;
-     dragOverName.value = null;
+     dragOverKey.value = null;
   }
 };
 
-const handleItemMouseMove = (_e: MouseEvent, albumName: string) => {
+const handleItemMouseMove = (_e: MouseEvent, albumKey: string) => {
   if (dragSession.active && dragSession.type === 'album') {
-    dragOverName.value = albumName;
+    dragOverKey.value = albumKey;
   }
 };
 
@@ -113,6 +115,10 @@ onUnmounted(() => {
         
         <div v-if="showSortMenu" class="absolute right-0 top-full mt-2 w-48 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-xl shadow-xl border border-gray-100 dark:border-white/10 overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-right">
           <div class="py-1">
+            <button @click="handleSortChange('artist')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/10 flex items-center justify-between" :class="albumSortMode === 'artist' ? 'text-[#EC4141] font-medium' : 'text-gray-700 dark:text-gray-200'">
+              <span>按专辑艺人排序</span>
+              <svg v-if="albumSortMode === 'artist'" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+            </button>
             <button @click="handleSortChange('name')" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/10 flex items-center justify-between" :class="albumSortMode === 'name' ? 'text-[#EC4141] font-medium' : 'text-gray-700 dark:text-gray-200'">
               <span>按名称排序 (A-Z)</span>
               <svg v-if="albumSortMode === 'name'" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
@@ -135,15 +141,15 @@ onUnmounted(() => {
       <!-- 增加响应式 breakpoint 控制每行显示个数，由 2 列扩增至 7 列 -->
       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-x-6 gap-y-10">
         <div 
-          v-for="(album, index) in albumList" 
-          :key="album.name"
+          v-for="(album, index) in filteredAlbumList" 
+          :key="album.key"
           @mousedown="handleMouseDown($event, index, album)"
-          @mousemove="handleItemMouseMove($event, album.name)"
-          @click="handleAlbumClick(album.name)"
+          @mousemove="handleItemMouseMove($event, album.key)"
+          @click="handleAlbumClick(album.key)"
           class="group cursor-pointer rounded-xl p-2 md:p-3 transition-all duration-300 flex flex-col relative select-none hover:bg-white/40 dark:hover:bg-white/5"
           :class="[
-            (dragSession.active && dragSession.type === 'album' && dragSession.data?.name === album.name) ? 'opacity-50' : '',
-            {'ring-2 ring-[#EC4141] bg-red-50 dark:bg-red-900/20': dragSession.active && dragSession.type === 'album' && dragOverName === album.name && dragSession.data?.name !== album.name}
+            (dragSession.active && dragSession.type === 'album' && dragSession.data?.key === album.key) ? 'opacity-50' : '',
+            {'ring-2 ring-[#EC4141] bg-red-50 dark:bg-red-900/20': dragSession.active && dragSession.type === 'album' && dragOverKey === album.key && dragSession.data?.key !== album.key}
           ]"
         >
           <!-- 专辑盒子 (Wrapper) 含有 CD 和封面 -->

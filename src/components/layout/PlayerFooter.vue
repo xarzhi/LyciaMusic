@@ -3,21 +3,21 @@ import { usePlayer } from '../../composables/player';
 import { useLyrics } from '../../composables/lyrics';
 import DesktopLyrics from "../player/DesktopLyrics.vue";
 import FooterContextMenu from "../overlays/FooterContextMenu.vue";
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 
 const { 
-  currentSong, // 注意：我们这里不解构 currentCover，因为我们要自己获取
-  isPlaying, volume, currentTime, playMode, showPlaylist,
+  currentSong,
+  isPlaying, volume, currentTime, playMode, showPlaylist, showPlayerDetail,
   togglePlay, nextSong, prevSong, handleVolume, toggleMute, toggleMode, togglePlaylist,
   isFavorite, toggleFavorite,
-  togglePlayerDetail, seekTo,
-  settings
+  togglePlayerDetail, seekTo, formatDuration
 } = usePlayer();
 
+const handleOpenDetail = () => {
+  togglePlayerDetail();
+};
+
 const { showDesktopLyrics } = useLyrics();
-const localCoverUrl = ref(''); // 本地封面 URL (Asset 协议)
 
 // --- Context Menu State ---
 const showContextMenu = ref(false);
@@ -34,34 +34,7 @@ const handleContextMenu = (e: MouseEvent) => {
 
 const toggleLyrics = () => { showDesktopLyrics.value = !showDesktopLyrics.value; };
 
-// 🎵 动态模糊计算
-const footerBlurStyle = computed(() => {
-  if (settings.value.theme.dynamicBgType !== 'none') return 'blur(20px) saturate(180%)';
-  if (settings.value.theme.mode === 'custom') {
-    const b = settings.value.theme.customBackground.blur;
-    return b <= 0 ? 'none' : `blur(${b}px) saturate(180%)`;
-  }
-  return 'blur(20px) saturate(180%)';
-});
-
-// 🎵 监听歌曲变化，自动获取缩略图 (高性能)
-watch(currentSong, async (newSong) => {
-  if (newSong && newSong.path) {
-    try {
-      // 获取小图 (Thumbnail)
-      const path = await invoke<string>('get_song_cover_thumbnail', { path: newSong.path });
-      if (path) {
-        localCoverUrl.value = convertFileSrc(path);
-      } else {
-        localCoverUrl.value = '';
-      }
-    } catch (e) {
-      localCoverUrl.value = '';
-    }
-  } else {
-    localCoverUrl.value = '';
-  }
-}, { immediate: true });
+// 不再使用单独的模糊样式 -> 全透明
 
 // --- 进度条拖拽逻辑 ---
 const isDraggingProgress = ref(false);
@@ -69,29 +42,53 @@ const progressBarRef = ref<HTMLElement | null>(null);
 const dragTime = ref(0); 
 
 const displayProgress = computed(() => {
-  if (!currentSong.value) return 0;
+  if (!currentSong.value || currentSong.value.duration <= 0) return 0;
   const time = isDraggingProgress.value ? dragTime.value : currentTime.value;
-  return (time / currentSong.value.duration) * 100;
+  return Math.max(0, Math.min(100, (time / currentSong.value.duration) * 100));
 });
 
+const progressFillClass = computed(() => (
+  showPlayerDetail.value
+    ? 'bg-zinc-300/30'
+    : 'bg-zinc-300/30'
+));
+
+const progressTrackClass = computed(() => (
+  showPlayerDetail.value
+    ? 'bg-transparent'
+    : 'bg-transparent'
+));
+
+const progressThumbClass = computed(() => (
+  showPlayerDetail.value
+    ? 'border-white/45 bg-white'
+    : 'border-white/55 bg-white'
+));
+
 const startProgressDrag = (e: MouseEvent) => { 
+  if (!currentSong.value || currentSong.value.duration <= 0) return;
   isDraggingProgress.value = true; 
   updateProgressFromEvent(e); 
 };
 
 const stopProgressDrag = async () => { 
   if (isDraggingProgress.value) { 
-    await seekTo(dragTime.value); 
+    const targetTime = dragTime.value;
     isDraggingProgress.value = false; 
+    await seekTo(targetTime); 
   } 
 };
 
 const updateProgressFromEvent = (e: MouseEvent) => {
-  if (!progressBarRef.value || !currentSong.value) return;
+  if (!progressBarRef.value || !currentSong.value || currentSong.value.duration <= 0) return;
   const rect = progressBarRef.value.getBoundingClientRect();
   const offsetX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
   dragTime.value = (offsetX / rect.width) * currentSong.value.duration;
 };
+
+// 计算总时长与当前时间
+const currentTimeStr = computed(() => formatDuration(isDraggingProgress.value ? dragTime.value : currentTime.value));
+const totalTimeStr = computed(() => currentSong.value ? formatDuration(currentSong.value.duration) : '0:00');
 
 // --- 音量拖拽逻辑 ---
 const isDraggingVolume = ref(false);
@@ -126,30 +123,65 @@ let volumeTimer: any = null;
 const handleVolumeEnter = () => {
   if (volumeTimer) clearTimeout(volumeTimer);
   showVolumeSlider.value = true;
+  handleFooterMouseEnter(); // Also stop idle timer
 };
 
 const handleVolumeLeave = () => {
   volumeTimer = setTimeout(() => {
     if (!isDraggingVolume.value) {
       showVolumeSlider.value = false;
+      // If we left the volume slider, check if we should start footer idle timer
+      startIdleTimer();
     }
   }, 300);
+};
+
+// --- Idle State for Auto-Hide ---
+const isIdle = ref(false);
+let idleTimer: any = null;
+
+const startIdleTimer = () => {
+  if (idleTimer) clearTimeout(idleTimer);
+  // Do not hide if context menu, dragging, or volume slider is active
+  if (showContextMenu.value || isDraggingProgress.value || isDraggingVolume.value || showVolumeSlider.value) return;
+  
+  idleTimer = setTimeout(() => {
+    isIdle.value = true;
+  }, 2000);
+};
+
+const handleFooterMouseEnter = () => {
+  isIdle.value = false;
+  if (idleTimer) clearTimeout(idleTimer);
+};
+
+const handleFooterMouseMove = () => {
+  if (isIdle.value) isIdle.value = false;
+  if (idleTimer) clearTimeout(idleTimer);
+};
+
+const handleFooterMouseLeave = () => {
+  startIdleTimer();
 };
 
 onMounted(() => { 
   window.addEventListener('mousemove', onGlobalMouseMove); 
   window.addEventListener('mouseup', onGlobalMouseUp); 
+  startIdleTimer(); // Start initial idle timer
 });
 onUnmounted(() => { 
   window.removeEventListener('mousemove', onGlobalMouseMove); 
   window.removeEventListener('mouseup', onGlobalMouseUp); 
+  if (idleTimer) clearTimeout(idleTimer);
 });
 </script>
 
 <template>
   <footer 
-    class="h-20 bg-transparent flex items-center justify-between px-4 z-50 relative select-none transition-colors duration-500"
-    :style="{ backdropFilter: footerBlurStyle }"
+    class="h-20 flex items-center justify-between px-4 z-[60] relative select-none bg-transparent"
+    @mouseenter="handleFooterMouseEnter"
+    @mousemove="handleFooterMouseMove"
+    @mouseleave="handleFooterMouseLeave"
   >
     
     <div 
@@ -157,94 +189,129 @@ onUnmounted(() => {
       class="absolute top-[-10px] left-0 w-full h-[22px] cursor-pointer group/progress z-50"
       @mousedown="startProgressDrag"
     >
-       <!-- 透明悬停扩展区域（上下各约 10px） -->
-       <div class="absolute inset-0 bg-transparent w-full h-full"></div>
-       
-       <!-- 实际进度条轨道（保持在 footer 顶部边缘） -->
-       <div class="absolute top-[9px] left-0 w-full h-[3px] group-hover/progress:h-[5px] transition-all duration-200" style="filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));">
-         <div 
-           class="absolute left-0 top-0 h-full bg-black/5 dark:bg-white/10 group-hover/progress:bg-black/15 dark:group-hover/progress:bg-white/20 transition-all duration-200 ease-linear relative rounded-r-full"
-           :style="{ width: displayProgress + '%' }"
-         >
-            <div class="absolute right-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-[0_2px_4px_rgba(0,0,0,0.1)] border border-white/20 opacity-0 group-hover/progress:opacity-100 transition-opacity transform scale-0 group-hover/progress:scale-100"></div>
-         </div>
-       </div>
+      <div class="absolute inset-y-0 left-0 right-0 flex items-center">
+        <div
+          class="relative w-full rounded-full transition-[height] duration-200"
+          :class="isDraggingProgress ? 'h-[5px]' : 'h-[2px] group-hover/progress:h-[5px]'"
+        >
+          <div class="absolute inset-0 rounded-full transition-colors duration-200" :class="progressTrackClass"></div>
+          <div
+            class="absolute inset-y-0 left-0 rounded-full transition-colors duration-200"
+            :class="progressFillClass"
+            :style="{ width: displayProgress + '%' }"
+          >
+            <div
+              class="absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 translate-x-1/2 rounded-full transition-all duration-150"
+              :class="[progressThumbClass, isDraggingProgress ? 'opacity-100 scale-100' : 'opacity-0 scale-75 group-hover/progress:opacity-100 group-hover/progress:scale-100']"
+            ></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="flex items-center w-1/3 min-w-[200px]" @contextmenu="handleContextMenu">
       <div 
-        @click="togglePlayerDetail"
-        class="group relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 border border-black/5 dark:border-white/5 cursor-pointer transition-transform active:scale-95 shadow-sm"
-        title="展开详情页"
+        ref="footerCoverRef"
+        data-footer-cover
+        @click="handleOpenDetail"
+        class="group relative w-12 h-12 rounded-lg flex-shrink-0 cursor-pointer active:scale-95 z-10"
       >
-        <span v-if="!currentSong" class="w-full h-full flex items-center justify-center bg-gray-100/50 dark:bg-white/5 text-[10px] text-gray-500 dark:text-white/60">CD</span>
-        
-        <img v-else-if="localCoverUrl" :src="localCoverUrl" class="w-full h-full object-cover group-hover:blur-[1px] transition-all" />
-        
-        <div v-else class="w-full h-full bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center text-white text-[8px]">DISK</div>
-        
-        <div class="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white/90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-          </svg>
-        </div>
       </div>
 
-      <div class="ml-3 overflow-hidden flex-1" style="text-shadow: 0 1px 2px rgba(0,0,0,0.8);">
-        <div class="flex items-center">
-          <div class="text-sm font-medium text-gray-800 dark:text-white truncate shadow-sm cursor-default">
-            {{ currentSong ? (currentSong.title || currentSong.name.replace(/\.[^/.]+$/, "")) : '听我想听的音乐' }}
+      <div 
+        class="ml-3 overflow-hidden flex-1 relative h-10 transition-transform duration-500" 
+        :class="showPlayerDetail ? '-translate-x-[60px]' : 'translate-x-[0px]'"
+      >
+        <!-- State A: Default View (Title & Artist) -->
+        <div 
+          class="absolute inset-0 flex flex-col justify-center transition-all duration-500"
+          :class="showPlayerDetail ? 'opacity-0 translate-y-4 pointer-events-none' : 'opacity-100 translate-y-0 text-gray-800 dark:text-white'"
+        >
+          <div class="flex items-center">
+            <div class="text-sm font-bold tracking-wide truncate pr-2 cursor-default">
+              {{ currentSong ? (currentSong.title || currentSong.name.replace(/\.[^/.]+$/, "")) : '听我想听的音乐' }}
+            </div>
+            <button 
+               v-if="currentSong" 
+               @click="toggleFavorite(currentSong)"
+               class="focus:outline-none transition-transform active:scale-95"
+               :title="isFavorite(currentSong) ? '取消收藏' : '添加到收藏'"
+            >
+              <svg v-if="isFavorite(currentSong)" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-[#EC4141]" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd" />
+              </svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" 
+                class="h-4 w-4 text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white transition-colors" 
+                fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+            </button>
           </div>
-          
-          <button 
-             v-if="currentSong" 
-             @click="toggleFavorite(currentSong)"
-             class="ml-2 focus:outline-none transition-transform active:scale-95"
-             :title="isFavorite(currentSong) ? '取消收藏' : '添加到收藏'"
-          >
-            <svg v-if="isFavorite(currentSong)" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-[#EC4141]" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd" />
-            </svg>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-            </svg>
-          </button>
+          <div class="text-[11px] font-medium mt-0.5 cursor-default truncate text-gray-500 dark:text-gray-400">
+            {{ currentSong ? currentSong.artist : 'My Music' }}
+          </div>
         </div>
-        <div class="text-xs text-gray-500 dark:text-white/60 truncate mt-0.5 cursor-default">
-          {{ currentSong ? currentSong.artist : 'My Music' }}
+
+        <!-- State B: Player Detail View (Progress) -->
+        <div 
+          class="absolute inset-0 flex flex-col justify-center transition-all duration-500"
+          :class="showPlayerDetail ? 'opacity-100 translate-y-0 text-white/90' : 'opacity-0 -translate-y-4 pointer-events-none'"
+        >
+          <div class="text-[12px] font-semibold tabular-nums cursor-default tracking-wide">
+            {{ currentTimeStr }} <span class="opacity-50 mx-1">/</span> {{ totalTimeStr }}
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="flex items-center justify-center flex-1 gap-6" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));">
-      <button @click="toggleMode" class="text-gray-500 dark:text-white/60 hover:text-[#EC4141] dark:hover:text-[#EC4141] transition-colors" :title="['列表循环', '单曲循环', '随机播放'][playMode]">
+    <div 
+      class="flex items-center justify-center flex-1 gap-6 transition-opacity duration-700"
+      :class="{ 'opacity-0 pointer-events-none': isIdle }"
+    >
+      <button @click="toggleMode" class="transition-colors" 
+        :class="showPlayerDetail ? 'text-white/60 hover:text-white' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white'"
+        :title="['列表循环', '单曲循环', '随机播放'][playMode]">
         <svg v-if="playMode === 0" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
         <svg v-else-if="playMode === 1" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /><text x="12" y="16" font-family="sans-serif" font-size="10" font-weight="bold" text-anchor="middle" fill="currentColor" stroke="none">1</text></svg>
         <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg>
       </button>
 
-      <button @click="prevSong" class="text-gray-700 dark:text-white/80 hover:text-[#EC4141] transition-colors hover:scale-110 transform duration-200">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z" /></svg>
+      <button @click="prevSong" 
+        class="transition-colors hover:scale-110 transform duration-200"
+        :class="showPlayerDetail ? 'text-white/80 hover:text-white' : 'text-gray-700 dark:text-white/80 hover:text-black dark:hover:text-white'"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z" /></svg>
       </button>
 
-      <button @click="togglePlay" class="w-12 h-12 bg-transparent text-gray-800 dark:text-white hover:text-[#EC4141] dark:hover:text-[#EC4141] flex items-center justify-center transition-all hover:scale-110 active:scale-95">
-        <svg v-if="isPlaying" xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-        <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 fill-current ml-1" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+      <button @click="togglePlay" 
+        class="flex items-center justify-center transition-all active:scale-95 shrink-0 w-11 h-11 rounded-full border"
+        :class="showPlayerDetail 
+          ? 'text-white bg-white/10 hover:bg-white/20 border-white/5' 
+          : 'text-gray-800 dark:text-white bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 border-black/5 dark:border-white/5'"
+      >
+        <svg v-if="isPlaying" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+        <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 ml-1 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
       </button>
 
-      <button @click="nextSong" class="text-gray-700 dark:text-white/80 hover:text-[#EC4141] transition-colors hover:scale-110 transform duration-200">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></svg>
+      <button @click="nextSong" 
+        class="transition-colors hover:scale-110 transform duration-200"
+        :class="showPlayerDetail ? 'text-white/80 hover:text-white' : 'text-gray-700 dark:text-white/80 hover:text-black dark:hover:text-white'"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></svg>
       </button>
 
       <button 
         @click="toggleLyrics"
-        :class="['text-sm font-bold transition-colors', showDesktopLyrics ? 'text-[#EC4141]' : 'text-gray-400 dark:text-white/60 hover:text-gray-600 dark:hover:text-white']"
+        :class="['text-sm font-bold transition-colors', showDesktopLyrics ? 'text-[#EC4141]' : (showPlayerDetail ? 'text-white/60 hover:text-white' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white')]"
       >
         词
       </button>
     </div>
 
-    <div class="flex items-center justify-end w-1/3 min-w-[150px] space-x-5 pr-2" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));"> 
+    <div 
+      class="flex items-center justify-end w-1/3 min-w-[150px] space-x-5 pr-2 transition-opacity duration-700"
+      :class="{ 'opacity-0 pointer-events-none': isIdle }"
+    > 
       <div 
         class="relative flex items-center justify-center h-full z-[70]"
         @mouseenter="handleVolumeEnter"
@@ -258,21 +325,33 @@ onUnmounted(() => {
           <!-- 透明桥接层：防止鼠标从图标移动到滑块时断触 -->
           <div class="absolute top-full left-0 w-full h-4"></div>
           
-          <div class="w-9 h-32 bg-white/90 dark:bg-black/90 backdrop-blur-md shadow-2xl rounded-2xl border border-gray-100 dark:border-white/5 flex flex-col items-center justify-between py-3">
-            <div class="text-[10px] text-gray-500 dark:text-white/60 font-bold select-none">{{ volume }}%</div>
-            <div ref="volumeBarRef" class="relative flex-1 w-1.5 bg-gray-200 dark:bg-white/20 rounded-full cursor-pointer my-1" @mousedown="startDrag">
+          <div class="w-9 h-32 backdrop-blur-md shadow-2xl rounded-2xl border flex flex-col items-center justify-between py-3 transition-colors"
+            :class="showPlayerDetail ? 'bg-black/90 border-white/5' : 'bg-white/90 dark:bg-black/90 border-gray-100 dark:border-white/5'"
+          >
+            <div class="text-[10px] font-bold select-none transition-colors"
+              :class="showPlayerDetail ? 'text-white/60' : 'text-gray-500 dark:text-white/60'"
+            >{{ volume }}%</div>
+            <div ref="volumeBarRef" class="relative flex-1 w-1.5 rounded-full cursor-pointer my-1 transition-colors" 
+                 :class="showPlayerDetail ? 'bg-white/20' : 'bg-gray-200 dark:bg-white/20'"
+                 @mousedown="startDrag">
                <div class="absolute bottom-0 w-full bg-[#EC4141] rounded-full" :style="{ height: volume + '%' }"></div>
                <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-sm cursor-grab active:cursor-grabbing" :style="{ bottom: `calc(${volume}% - 7px)` }"></div>
             </div>
           </div>
         </div>
-        <button @click="toggleMute" class="text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white p-2 rounded-full hover:bg-gray-100/50 dark:hover:bg-white/5 transition-colors"> 
-          <svg v-if="volume === 0" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+        <button @click="toggleMute" 
+          class="p-2 rounded-full transition-colors"
+          :class="showPlayerDetail ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'"
+        > 
+          <svg v-if="volume === 0" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5z" /><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5z" /></svg>
         </button>
       </div>
-      <button @click="togglePlaylist" class="text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white relative" :class="showPlaylist ? 'text-[#EC4141]' : ''">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+      <button @click="togglePlaylist" 
+        class="relative transition-colors" 
+        :class="showPlaylist ? 'text-[#EC4141]' : (showPlayerDetail ? 'text-white/60 hover:text-white' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white')"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
       </button>
     </div>
 
@@ -297,5 +376,3 @@ onUnmounted(() => {
       </footer>
 
     </template>
-
-    

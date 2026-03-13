@@ -5,6 +5,7 @@ pub mod files;
 pub mod library;
 pub mod scanner;
 pub mod sidebar;
+pub mod tags;
 pub mod types;
 pub mod utils;
 
@@ -14,14 +15,16 @@ pub use types::*;
 // Re-export commands for lib.rs registration
 pub use covers::{get_song_cover, get_song_cover_thumbnail, run_cache_cleanup};
 pub use files::{
-    batch_move_music_files, delete_folder, delete_music_file, get_song_lyrics, is_directory,
-    move_file_to_folder, move_music_file, show_in_folder,
+    batch_move_music_files, create_folder, delete_folder, delete_music_file, get_song_lyrics,
+    is_directory, move_file_to_folder, move_music_file, show_in_folder,
 };
 pub use library::{
-    add_library_folder, get_library_folders, get_library_hierarchy, remove_library_folder,
-    scan_library,
+    add_library_folder, get_library_folders, get_library_hierarchy, get_library_songs_cached,
+    remove_library_folder, scan_library,
 };
-pub use scanner::{get_folder_first_song, scan_folder_as_playlists, scan_music_folder};
+pub use scanner::{
+    get_folder_first_song, parse_audio_files, scan_folder_as_playlists, scan_music_folder,
+};
 pub use sidebar::{
     add_sidebar_folder, get_sidebar_folders, get_sidebar_hierarchy, remove_sidebar_folder,
 };

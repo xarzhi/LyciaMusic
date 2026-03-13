@@ -1,5 +1,5 @@
 use crate::database::DbState;
-use crate::music::utils::normalize_path;
+use crate::music::utils::{format_distribution_bucket, is_lossless_audio, normalize_path};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
@@ -18,12 +18,6 @@ fn is_invalid_name(name: &str) -> bool {
         || normalized == "unknown"
         || normalized == "unknown album"
         || normalized == "unknown artist"
-}
-
-/// 判断是否为无损格式
-fn is_lossless_format(format: &str) -> bool {
-    let f = format.to_lowercase();
-    f == "flac" || f == "wav" || f == "alac" || f == "ape" || f == "dsd"
 }
 
 /// 判断是否为 Hi-Res (24bit + >=48kHz)
@@ -62,9 +56,11 @@ pub struct QualityDistribution {
 pub struct FormatDistribution {
     pub flac: i64,
     pub mp3: i64,
-    pub ape: i64,
+    pub alac: i64,
     pub wav: i64,
+    pub aiff: i64,
     pub aac: i64,
+    pub ogg: i64,
     pub other: i64,
 }
 
@@ -74,28 +70,37 @@ pub fn get_format_distribution(db: State<DbState>) -> Result<FormatDistribution,
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     let mut stmt = conn
-        .prepare("SELECT format FROM songs")
+        .prepare("SELECT format, container, codec FROM songs")
         .map_err(|e| e.to_string())?;
 
     let rows = stmt
-        .query_map([], |row| Ok(row.get::<_, String>(0).unwrap_or_default()))
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0).unwrap_or_default(),
+                row.get::<_, Option<String>>(1).ok().flatten(),
+                row.get::<_, Option<String>>(2).ok().flatten(),
+            ))
+        })
         .map_err(|e| e.to_string())?;
 
     let mut flac = 0i64;
     let mut mp3 = 0i64;
-    let mut ape = 0i64;
+    let mut alac = 0i64;
     let mut wav = 0i64;
+    let mut aiff = 0i64;
     let mut aac = 0i64;
+    let mut ogg = 0i64;
     let mut other = 0i64;
 
     for row in rows.flatten() {
-        let format = row.to_lowercase();
-        match format.as_str() {
+        match format_distribution_bucket(row.1.as_deref(), row.2.as_deref(), &row.0) {
             "flac" => flac += 1,
             "mp3" => mp3 += 1,
-            "ape" => ape += 1,
+            "alac" => alac += 1,
             "wav" => wav += 1,
-            "aac" | "m4a" => aac += 1,
+            "aiff" => aiff += 1,
+            "aac" => aac += 1,
+            "ogg" => ogg += 1,
             _ => other += 1,
         }
     }
@@ -103,9 +108,11 @@ pub fn get_format_distribution(db: State<DbState>) -> Result<FormatDistribution,
     Ok(FormatDistribution {
         flac,
         mp3,
-        ape,
+        alac,
         wav,
+        aiff,
         aac,
+        ogg,
         other,
     })
 }
@@ -116,16 +123,17 @@ pub fn get_quality_distribution(db: State<DbState>) -> Result<QualityDistributio
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     let mut stmt = conn
-        .prepare("SELECT format, bit_depth, sample_rate, bitrate FROM songs")
+        .prepare("SELECT format, codec, bit_depth, sample_rate, bitrate FROM songs")
         .map_err(|e| e.to_string())?;
 
     let rows = stmt
         .query_map([], |row| {
             Ok((
                 row.get::<_, String>(0).unwrap_or_default(),
-                row.get::<_, Option<i64>>(1).ok().flatten(),
-                row.get::<_, i64>(2).unwrap_or(0),
+                row.get::<_, Option<String>>(1).ok().flatten(),
+                row.get::<_, Option<i64>>(2).ok().flatten(),
                 row.get::<_, i64>(3).unwrap_or(0),
+                row.get::<_, i64>(4).unwrap_or(0),
             ))
         })
         .map_err(|e| e.to_string())?;
@@ -136,8 +144,8 @@ pub fn get_quality_distribution(db: State<DbState>) -> Result<QualityDistributio
     let mut other = 0i64;
 
     for row in rows.flatten() {
-        let (format, bit_depth, sample_rate, bitrate) = row;
-        let is_lossless = is_lossless_format(&format);
+        let (format, codec, bit_depth, sample_rate, bitrate) = row;
+        let is_lossless = is_lossless_audio(codec.as_deref(), &format);
         let is_hr = is_hires(bit_depth, sample_rate);
 
         if is_lossless && is_hr {
@@ -204,14 +212,15 @@ pub fn get_library_stats(db: State<DbState>) -> Result<LibraryStats, String> {
     // 无损数量 + Hi-Res 数量
     let (lossless_count, hires_count): (i64, i64) = {
         let mut stmt = conn
-            .prepare("SELECT format, bit_depth, sample_rate FROM songs")
+            .prepare("SELECT format, codec, bit_depth, sample_rate FROM songs")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0).unwrap_or_default(),
-                    row.get::<_, Option<i64>>(1).ok().flatten(),
-                    row.get::<_, i64>(2).unwrap_or(0),
+                    row.get::<_, Option<String>>(1).ok().flatten(),
+                    row.get::<_, Option<i64>>(2).ok().flatten(),
+                    row.get::<_, i64>(3).unwrap_or(0),
                 ))
             })
             .map_err(|e| e.to_string())?;
@@ -219,11 +228,11 @@ pub fn get_library_stats(db: State<DbState>) -> Result<LibraryStats, String> {
         let mut lossless = 0i64;
         let mut hires = 0i64;
         for row in rows.flatten() {
-            if is_lossless_format(&row.0) {
+            if is_lossless_audio(row.1.as_deref(), &row.0) {
                 lossless += 1;
-            }
-            if is_hires(row.1, row.2) {
-                hires += 1;
+                if is_hires(row.2, row.3) {
+                    hires += 1;
+                }
             }
         }
         (lossless, hires)
@@ -285,6 +294,161 @@ impl TimeRange {
             TimeRange::ThisYear => Some(now - 365 * 24 * 60 * 60),
         }
     }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentHistoryEntry {
+    pub song_path: String,
+    pub played_at: i64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentHistoryImportEntry {
+    pub song_path: String,
+    pub played_at: i64,
+}
+
+fn lookup_song_id(conn: &rusqlite::Connection, normalized_path: &str) -> Option<i64> {
+    conn.query_row(
+        "SELECT id FROM songs WHERE path = ?1",
+        [normalized_path],
+        |row| row.get(0),
+    )
+    .ok()
+}
+
+fn insert_history_event(
+    conn: &rusqlite::Connection,
+    normalized_path: &str,
+    played_at: i64,
+    played_seconds: i64,
+    event: &str,
+) -> Result<(), String> {
+    let song_id = match lookup_song_id(conn, normalized_path) {
+        Some(id) => id,
+        None => return Ok(()),
+    };
+
+    conn.execute(
+        "INSERT INTO play_history (song_path, song_id, played_at, played_seconds, event) VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![normalized_path, song_id, played_at, played_seconds, event],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn add_to_history(db: State<DbState>, song_path: String) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let normalized_path = normalize_path(&song_path);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    insert_history_event(&conn, &normalized_path, now, 0, "recent")
+}
+
+#[tauri::command]
+pub fn import_recent_history(
+    db: State<DbState>,
+    entries: Vec<RecentHistoryImportEntry>,
+) -> Result<(), String> {
+    if entries.is_empty() {
+        return Ok(());
+    }
+
+    let mut deduped = std::collections::HashMap::<String, i64>::new();
+    for entry in entries {
+        let normalized_path = normalize_path(&entry.song_path);
+        if normalized_path.is_empty() {
+            continue;
+        }
+
+        let existing = deduped.entry(normalized_path).or_insert(entry.played_at);
+        if entry.played_at > *existing {
+            *existing = entry.played_at;
+        }
+    }
+
+    let mut conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    for (song_path, played_at) in deduped {
+        insert_history_event(&tx, &song_path, played_at, 0, "recent")?;
+    }
+
+    tx.commit().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_recent_history(
+    db: State<DbState>,
+    limit: Option<usize>,
+) -> Result<Vec<RecentHistoryEntry>, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let max_rows = limit.unwrap_or(1000).clamp(1, 5000) as i64;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.path, MAX(ph.played_at) AS played_at
+             FROM play_history ph
+             INNER JOIN songs s ON ph.song_id = s.id
+             WHERE ph.event = 'recent'
+             GROUP BY ph.song_id
+             ORDER BY played_at DESC
+             LIMIT ?1",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([max_rows], |row| {
+            Ok(RecentHistoryEntry {
+                song_path: row.get(0)?,
+                played_at: row.get::<_, i64>(1)? * 1000,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    Ok(rows.filter_map(|row| row.ok()).collect())
+}
+
+#[tauri::command]
+pub fn remove_from_recent_history(
+    db: State<DbState>,
+    song_paths: Vec<String>,
+) -> Result<(), String> {
+    if song_paths.is_empty() {
+        return Ok(());
+    }
+
+    let mut conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let mut stmt = tx
+        .prepare("DELETE FROM play_history WHERE event = 'recent' AND song_path = ?1")
+        .map_err(|e| e.to_string())?;
+
+    for song_path in song_paths {
+        let normalized_path = normalize_path(&song_path);
+        if normalized_path.is_empty() {
+            continue;
+        }
+        stmt.execute([normalized_path]).map_err(|e| e.to_string())?;
+    }
+
+    drop(stmt);
+    tx.commit().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn clear_recent_history(db: State<DbState>) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM play_history WHERE event = 'recent'", [])
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// 记录一次播放事件（通过 song_path 查找 song_id）
@@ -375,7 +539,7 @@ pub fn get_behavior_stats(
 
     // 指标 A1: 播放次数
     let sql_plays = format!(
-        "SELECT COUNT(*) {} WHERE ph.song_id IS NOT NULL {}",
+        "SELECT COUNT(*) {} WHERE ph.event = 'play' AND ph.song_id IS NOT NULL {}",
         base_join, time_condition
     );
     let total_plays: i64 = conn
@@ -384,7 +548,7 @@ pub fn get_behavior_stats(
 
     // 指标 A2: 播放总时长
     let sql_duration = format!(
-        "SELECT COALESCE(SUM(ph.played_seconds), 0) {} WHERE ph.song_id IS NOT NULL {}",
+        "SELECT COALESCE(SUM(ph.played_seconds), 0) {} WHERE ph.event = 'play' AND ph.song_id IS NOT NULL {}",
         base_join, time_condition
     );
     let total_duration: i64 = conn
@@ -395,7 +559,7 @@ pub fn get_behavior_stats(
     let sql_top_plays = format!(
         "SELECT s.path, COUNT(*) as cnt 
          {} 
-         WHERE ph.song_id IS NOT NULL {} 
+         WHERE ph.event = 'play' AND ph.song_id IS NOT NULL {} 
          GROUP BY ph.song_id 
          ORDER BY cnt DESC 
          LIMIT 5",
@@ -423,7 +587,7 @@ pub fn get_behavior_stats(
     let sql_top_duration = format!(
         "SELECT s.path, COALESCE(SUM(ph.played_seconds), 0) as duration 
          {} 
-         WHERE ph.song_id IS NOT NULL {} 
+         WHERE ph.event = 'play' AND ph.song_id IS NOT NULL {} 
          GROUP BY ph.song_id 
          ORDER BY duration DESC 
          LIMIT 5",
@@ -452,7 +616,7 @@ pub fn get_behavior_stats(
         "SELECT CAST(strftime('%H', ph.played_at, 'unixepoch', 'localtime') AS INTEGER) as hour, 
                 COUNT(*) as cnt 
          {} 
-         WHERE ph.song_id IS NOT NULL {} 
+         WHERE ph.event = 'play' AND ph.song_id IS NOT NULL {} 
          GROUP BY hour",
         base_join, time_condition
     );
@@ -473,7 +637,7 @@ pub fn get_behavior_stats(
     let sql_top_artists = format!(
         "SELECT TRIM(s.artist) as artist, COUNT(*) as cnt 
          {} 
-         WHERE ph.song_id IS NOT NULL {} 
+         WHERE ph.event = 'play' AND ph.song_id IS NOT NULL {} 
            AND s.artist IS NOT NULL 
            AND TRIM(s.artist) != '' 
            AND LOWER(TRIM(s.artist)) NOT IN ('未知', '未知歌手', 'unknown', 'unknown artist') 
@@ -502,7 +666,7 @@ pub fn get_behavior_stats(
     let sql_top_albums = format!(
         "SELECT TRIM(s.album) as album, COUNT(*) as cnt 
          {} 
-         WHERE ph.song_id IS NOT NULL {} 
+         WHERE ph.event = 'play' AND ph.song_id IS NOT NULL {} 
            AND s.album IS NOT NULL 
            AND TRIM(s.album) != '' 
            AND LOWER(TRIM(s.album)) NOT IN ('未知', '未知专辑', 'unknown', 'unknown album') 
@@ -546,7 +710,7 @@ pub fn get_behavior_stats(
                     COALESCE(SUM(ph.played_seconds), 0) as duration 
              FROM play_history ph 
              INNER JOIN songs s ON ph.song_id = s.id 
-             WHERE ph.played_at >= {} AND ph.song_id IS NOT NULL 
+             WHERE ph.played_at >= {} AND ph.event = 'play' AND ph.song_id IS NOT NULL 
              GROUP BY day_offset",
             start_time, day_seconds, start_time
         );

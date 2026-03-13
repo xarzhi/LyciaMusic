@@ -4,7 +4,13 @@ export interface Song {
   title?: string;
   path: string;
   artist: string;
+  artist_names: string[];
+  effective_artist_names: string[];
   album: string;
+  album_artist: string;
+  album_key: string;
+  is_various_artists_album: boolean;
+  collapse_artist_credits: boolean;
   duration: number;
   genre?: string;
   year?: string;
@@ -14,6 +20,8 @@ export interface Song {
   sample_rate?: number;
   bit_depth?: number;
   format?: string;
+  container?: string;
+  codec?: string;
   file_size?: number;
   added_at?: number;
   file_modified_at?: number;
@@ -34,6 +42,7 @@ export interface Playlist {
 export interface ThemeSettings {
   mode: 'light' | 'dark' | 'custom';
   dynamicBgType: 'none' | 'flow' | 'blur';
+  windowMaterial: 'none' | 'mica' | 'acrylic';
   customBgPath: string; // Legacy field, keeping for compatibility if needed, but we'll use customBackground
   opacity: number;      // Legacy field
   blur: number;         // Legacy field

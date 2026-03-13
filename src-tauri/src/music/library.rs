@@ -2,12 +2,102 @@
 
 use super::scanner::{scan_folder_recursive, scan_single_directory_internal};
 use super::types::{FolderNode, LibraryFolder, Song};
-use super::utils::{descendant_like_patterns, normalize_path};
+use super::utils::normalize_path;
 use crate::database::DbState;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use tauri::{AppHandle, State};
+
+fn clamp_i64_to_u32(v: i64) -> u32 {
+    if v <= 0 {
+        0
+    } else if v > u32::MAX as i64 {
+        u32::MAX
+    } else {
+        v as u32
+    }
+}
+
+fn i64_to_u64_opt(v: Option<i64>) -> Option<u64> {
+    v.filter(|x| *x >= 0).map(|x| x as u64)
+}
+
+fn i64_to_u8_opt(v: Option<i64>) -> Option<u8> {
+    v.filter(|x| *x >= 0 && *x <= u8::MAX as i64)
+        .map(|x| x as u8)
+}
+
+fn deserialize_string_list(raw: Option<String>) -> Vec<String> {
+    raw.and_then(|value| serde_json::from_str::<Vec<String>>(&value).ok())
+        .unwrap_or_default()
+}
+
+fn is_descendant_path(song_path: &str, folder_path: &str) -> bool {
+    song_path == folder_path
+        || song_path.starts_with(&format!("{folder_path}\\"))
+        || song_path.starts_with(&format!("{folder_path}/"))
+}
+
+fn load_cached_songs(conn: &rusqlite::Connection) -> Result<Vec<Song>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, path, title, artist, artist_names, effective_artist_names, album, album_artist, album_key, is_various_artists_album, collapse_artist_credits, duration, cover_path, bitrate, sample_rate, bit_depth, format, container, codec, file_size, added_at, file_modified_at
+             FROM songs",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            let path: String = row.get(1)?;
+            let duration = clamp_i64_to_u32(row.get::<_, Option<i64>>(11)?.unwrap_or(0));
+            let bitrate = clamp_i64_to_u32(row.get::<_, Option<i64>>(13)?.unwrap_or(0));
+            let sample_rate = clamp_i64_to_u32(row.get::<_, Option<i64>>(14)?.unwrap_or(0));
+            let bit_depth = i64_to_u8_opt(row.get::<_, Option<i64>>(15)?);
+            let file_size_i64 = row.get::<_, Option<i64>>(19)?.unwrap_or(0).max(0);
+            let added_at_i64 = row.get::<_, Option<i64>>(20)?;
+            let file_modified_at_i64 = row.get::<_, Option<i64>>(21)?;
+            let artist_names = deserialize_string_list(row.get::<_, Option<String>>(4)?);
+            let effective_artist_names =
+                deserialize_string_list(row.get::<_, Option<String>>(5)?);
+
+            let name = std::path::Path::new(&path)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.clone());
+
+            Ok(Song {
+                id: row.get(0)?,
+                name,
+                path,
+                title: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                artist: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                artist_names,
+                effective_artist_names,
+                album: row.get::<_, Option<String>>(6)?.unwrap_or_default(),
+                album_artist: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
+                album_key: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
+                is_various_artists_album: row.get::<_, Option<i64>>(9)?.unwrap_or(0) != 0,
+                collapse_artist_credits: row.get::<_, Option<i64>>(10)?.unwrap_or(0) != 0,
+                duration,
+                cover: row.get::<_, Option<String>>(12)?,
+                bitrate,
+                sample_rate,
+                bit_depth,
+                format: row.get::<_, Option<String>>(16)?.unwrap_or_default(),
+                container: row.get::<_, Option<String>>(17)?,
+                codec: row.get::<_, Option<String>>(18)?,
+                file_size: file_size_i64 as u64,
+                added_at: i64_to_u64_opt(added_at_i64),
+                file_modified_at: i64_to_u64_opt(file_modified_at_i64),
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut songs: Vec<Song> = rows.filter_map(|row| row.ok()).collect();
+    songs.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(songs)
+}
 
 #[tauri::command]
 pub async fn get_library_folders(
@@ -27,24 +117,25 @@ pub async fn get_library_folders(
             .filter_map(|r| r.ok())
             .collect();
 
-        let mut folders = Vec::new();
+        let mut song_stmt = conn
+            .prepare("SELECT path FROM songs")
+            .map_err(|e| e.to_string())?;
+        let song_paths: Vec<String> = song_stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut folders = Vec::with_capacity(paths.len());
         for folder_path in paths {
-            let (pattern_forward, pattern_back) = descendant_like_patterns(&folder_path);
-            let count: i64 = conn
-                .query_row(
-                    "SELECT COUNT(*)
-                     FROM songs
-                     WHERE path = ?1
-                        OR path LIKE ?2 ESCAPE '^'
-                        OR path LIKE ?3 ESCAPE '^'",
-                    rusqlite::params![&folder_path, pattern_forward, pattern_back],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
+            let count = song_paths
+                .iter()
+                .filter(|song_path| is_descendant_path(song_path, &folder_path))
+                .count();
 
             folders.push(LibraryFolder {
                 path: folder_path,
-                song_count: count as usize,
+                song_count: count,
             });
         }
         Ok::<Vec<LibraryFolder>, String>(folders)
@@ -100,6 +191,22 @@ pub async fn remove_library_folder(
     .map_err(|e| e.to_string())??;
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn get_library_songs_cached(
+    db_state: State<'_, DbState>,
+) -> Result<Vec<Song>, String> {
+    let db_conn = db_state.conn.clone();
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let conn = db_conn.lock().map_err(|e| e.to_string())?;
+        load_cached_songs(&conn)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    Ok(result)
 }
 
 #[tauri::command]

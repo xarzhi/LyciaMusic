@@ -1,223 +1,414 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { useLyrics } from '../../composables/lyrics';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import type { LyricLine as AmlLyricLine, LyricLineMouseEvent } from '@applemusic-like-lyrics/core';
+import {
+  DEFAULT_PLAYER_FONT_SCALE,
+  DEFAULT_PLAYER_LINE_GAP,
+  MAX_PLAYER_FONT_SCALE,
+  MAX_PLAYER_LINE_GAP,
+  MIN_PLAYER_FONT_SCALE,
+  MIN_PLAYER_LINE_GAP,
+  useLyrics,
+} from '../../composables/lyrics';
 import { usePlayer } from '../../composables/player';
+import { AUDIO_DELAY } from '../../composables/playerState';
+import AmlLyricPlayer from './AmlLyricPlayer.vue';
 
-const { parsedLyrics, currentLyricIndex } = useLyrics();
-const { playAt } = usePlayer();
+const { parsedLyrics, lyricsSettings, lyricsStatus } = useLyrics();
+const { seekTo, currentTime } = usePlayer();
 
-const containerRef = ref<HTMLElement | null>(null);
-const isUserScrolling = ref(false);
-let scrollTimeout: any = null;
+const FONT_SCALE_STEP = 0.05;
+const LINE_GAP_STEP = 0.05;
 
-// 歌词滚动配置
-const CENTER_OFFSET_PERCENT = 0.35; // 偏上一点，更有高级感
-const RESUME_SCROLL_DELAY = 5000; // 手动滚动后恢复自动滚动的延迟
+const fontPanelRef = ref<HTMLElement | null>(null);
+const isFontPanelOpen = ref(false);
 
-// 每一行歌词的引用
-const lineRefs = ref<HTMLElement[]>([]);
+function toMs(seconds: number): number {
+  return Math.max(0, Math.round(seconds * 1000));
+}
 
-// 精确滚动到当前行
-const scrollToActiveLine = (immediate = false) => {
-  // 如果用户正在手动滚动，则跳过自动滚动
-  if (isUserScrolling.value || !containerRef.value || currentLyricIndex.value === -1) return;
+const amllLines = computed<AmlLyricLine[]>(() => {
+  const lines = parsedLyrics.value;
 
-  const container = containerRef.value;
-  const activeLine = lineRefs.value[currentLyricIndex.value];
-  
-  if (!activeLine) return;
+  return lines.map((line, lineIndex) => {
+    const startTime = toMs(line.time);
+    const parsedEndTime = toMs(line.endTime || line.time);
+    const nextStartTime = toMs(lines[lineIndex + 1]?.time ?? line.time + 3);
+    const endTime = Math.max(
+      startTime + 40,
+      parsedEndTime > startTime ? parsedEndTime : nextStartTime,
+    );
 
-  const containerHeight = container.clientHeight;
-  const lineTop = activeLine.offsetTop;
-  const lineHeight = activeLine.clientHeight;
-  
-  const targetScrollTop = lineTop - (containerHeight * CENTER_OFFSET_PERCENT) + (lineHeight / 2);
+    const sourceWords = line.words ?? [];
+    const convertedWords = sourceWords.map((word, wordIndex) => {
+      const wordStart = toMs(word.start);
+      const nextWordStart = sourceWords[wordIndex + 1]?.start;
+      const rawWordEnd = nextWordStart !== undefined
+        ? toMs(nextWordStart)
+        : toMs(word.end > word.start ? word.end : endTime / 1000);
+      const wordEnd = Math.max(wordStart + 20, Math.min(endTime, rawWordEnd));
 
-  container.scrollTo({
-    top: targetScrollTop,
-    behavior: immediate ? 'auto' : 'smooth'
+      return {
+        word: word.text,
+        startTime: wordStart,
+        endTime: wordEnd,
+        romanWord: word.romaji || '',
+        obscene: false,
+      };
+    }).filter((word) => word.word.trim().length > 0);
+
+    const words = convertedWords.length > 0
+      ? convertedWords
+      : [{
+          word: line.text || ' ',
+          startTime,
+          endTime,
+          romanWord: '',
+          obscene: false,
+        }];
+
+    return {
+      words,
+      translatedLyric: lyricsSettings.showTranslation ? (line.translation || '') : '',
+      romanLyric: lyricsSettings.showRomaji ? (line.romaji || '') : '',
+      startTime,
+      endTime,
+      isBG: false,
+      isDuet: false,
+    };
   });
-};
-
-// 监听当前歌词索引变化，触发滚动
-watch(currentLyricIndex, (newIndex) => {
-  if (newIndex !== -1) {
-    nextTick(() => scrollToActiveLine());
-  }
 });
 
-// 监听歌词数据变化
-watch(parsedLyrics, () => {
-  lineRefs.value = [];
-  nextTick(() => scrollToActiveLine(true));
-}, { deep: true });
+const amllCurrentTime = computed(() => {
+  return Math.max(0, Math.floor((currentTime.value - AUDIO_DELAY.value) * 1000));
+});
 
-// 处理手动滚动标识
-const startUserInteraction = () => {
-  isUserScrolling.value = true;
-  if (scrollTimeout) clearTimeout(scrollTimeout);
-  
-  scrollTimeout = setTimeout(() => {
-    isUserScrolling.value = false;
-    scrollToActiveLine();
-  }, RESUME_SCROLL_DELAY);
-};
+const emptyStateText = computed(() => {
+  if (lyricsStatus.value === 'loading') return 'Loading lyrics...';
+  if (lyricsStatus.value === 'error') return 'Lyrics unavailable';
+  return 'No synchronized lyrics';
+});
 
-const resumeSync = () => {
-  isUserScrolling.value = false;
-  if (scrollTimeout) clearTimeout(scrollTimeout);
-  scrollToActiveLine();
-};
+const fontScalePercent = computed(() => `${Math.round(lyricsSettings.playerFontScale * 100)}%`);
+const lineGapPercent = computed(() => `${Math.round(lyricsSettings.playerLineGap * 100)}%`);
+
+const fontScaleProgress = computed(() => {
+  return ((lyricsSettings.playerFontScale - MIN_PLAYER_FONT_SCALE) / (MAX_PLAYER_FONT_SCALE - MIN_PLAYER_FONT_SCALE)) * 100;
+});
+
+const lineGapProgress = computed(() => {
+  return ((lyricsSettings.playerLineGap - MIN_PLAYER_LINE_GAP) / (MAX_PLAYER_LINE_GAP - MIN_PLAYER_LINE_GAP)) * 100;
+});
+
+const lyricsPlayerStyle = computed(() => ({
+  '--lyrics-font-scale': lyricsSettings.playerFontScale.toString(),
+}));
+
+function clampFontScale(value: number) {
+  return Math.min(MAX_PLAYER_FONT_SCALE, Math.max(MIN_PLAYER_FONT_SCALE, value));
+}
+
+function clampLineGap(value: number) {
+  return Math.min(MAX_PLAYER_LINE_GAP, Math.max(MIN_PLAYER_LINE_GAP, value));
+}
+
+function setPlayerFontScale(value: number) {
+  lyricsSettings.playerFontScale = Number(clampFontScale(value).toFixed(2));
+}
+
+function setPlayerLineGap(value: number) {
+  lyricsSettings.playerLineGap = Number(clampLineGap(value).toFixed(2));
+}
+
+function adjustPlayerFontScale(delta: number) {
+  setPlayerFontScale(lyricsSettings.playerFontScale + delta);
+}
+
+function resetPlayerFontScale() {
+  setPlayerFontScale(DEFAULT_PLAYER_FONT_SCALE);
+}
+
+function resetPlayerLineGap() {
+  setPlayerLineGap(DEFAULT_PLAYER_LINE_GAP);
+}
+
+function handleFontScaleInput(event: Event) {
+  const target = event.target as HTMLInputElement | null;
+  if (!target) return;
+
+  setPlayerFontScale(Number(target.value));
+}
+
+function handleLineGapInput(event: Event) {
+  const target = event.target as HTMLInputElement | null;
+  if (!target) return;
+
+  setPlayerLineGap(Number(target.value));
+}
+
+function toggleFontPanel() {
+  isFontPanelOpen.value = !isFontPanelOpen.value;
+}
+
+function handleClickOutside(event: MouseEvent) {
+  const target = event.target as Node | null;
+  if (!target) return;
+  if (fontPanelRef.value?.contains(target)) return;
+  isFontPanelOpen.value = false;
+}
+
+async function handleLineClick(event: LyricLineMouseEvent) {
+  const targetSeconds = event.line.getLine().startTime / 1000;
+  await seekTo(targetSeconds);
+}
 
 onMounted(() => {
-  const container = containerRef.value;
-  if (container) {
-    container.addEventListener('wheel', startUserInteraction, { passive: true });
-    container.addEventListener('touchstart', startUserInteraction, { passive: true });
-    setTimeout(() => scrollToActiveLine(true), 100);
-  }
+  window.addEventListener('mousedown', handleClickOutside);
 });
 
 onUnmounted(() => {
-  const container = containerRef.value;
-  if (container) {
-    container.removeEventListener('wheel', startUserInteraction);
-    container.removeEventListener('touchstart', startUserInteraction);
-  }
-  if (scrollTimeout) clearTimeout(scrollTimeout);
+  window.removeEventListener('mousedown', handleClickOutside);
 });
-
-// 计算动态样式
-const getLineStyle = (index: number) => {
-  if (currentLyricIndex.value === -1) return { opacity: 0.4 };
-  const distance = Math.abs(index - currentLyricIndex.value);
-  
-  if (index === currentLyricIndex.value) {
-    return {
-      opacity: 1,
-      transform: 'scale(1.1)',
-      fontWeight: 'bold',
-      filter: 'blur(0px)',
-    };
-  }
-  
-  // 衰减
-  const opacity = Math.max(0.15, 0.4 - distance * 0.05);
-  const blur = Math.min(2, distance * 0.4);
-  
-  return {
-    opacity,
-    filter: `blur(${blur}px)`,
-  };
-};
 </script>
 
 <template>
-  <div class="relative w-full h-full group/lyrics">
-    <div 
-      ref="containerRef"
-      class="lyrics-view-container custom-scrollbar mask-gradient h-full overflow-y-auto"
+  <div class="group/lyrics-view relative h-full min-h-0 w-full min-w-0">
+    <div
+      v-if="amllLines.length > 0"
+      ref="fontPanelRef"
+      class="pointer-events-none absolute right-4 top-4 z-20 flex flex-col items-end gap-2"
     >
-      <div class="lyrics-content py-[40vh]">
-        <div 
-          v-for="(line, index) in parsedLyrics" 
-          :key="index"
-          :ref="el => { if (el) lineRefs[index] = el as HTMLElement }"
-          class="lyric-line group"
-          :class="{ active: index === currentLyricIndex }"
-          :style="getLineStyle(index)"
-          @click="playAt(line.time)"
-        >
-          <div class="main-text">{{ line.text }}</div>
-          <div v-if="line.translation" class="translation-text">{{ line.translation }}</div>
-          <div v-if="line.romaji" class="romaji-text">{{ line.romaji }}</div>
-        </div>
+      <button
+        type="button"
+        class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-2 text-white/80 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-black/35 hover:text-white"
+        :class="isFontPanelOpen ? 'pointer-events-auto translate-y-0 opacity-100' : 'pointer-events-none translate-y-1 opacity-0 group-hover/lyrics-view:pointer-events-auto group-hover/lyrics-view:translate-y-0 group-hover/lyrics-view:opacity-100'"
+        @click.stop="toggleFontPanel"
+      >
+        <span class="text-[11px] font-semibold tracking-[0.24em] text-white/70">Aa</span>
+        <span class="text-[11px] font-medium tabular-nums text-white/55">{{ fontScalePercent }}</span>
+      </button>
 
-        <div v-if="parsedLyrics.length === 0" class="no-lyrics flex items-center justify-center h-full text-white/20 text-2xl">
-          暂无歌词
+      <transition name="font-panel">
+        <div
+          v-if="isFontPanelOpen"
+          class="pointer-events-auto w-[286px] rounded-3xl border border-white/10 bg-black/30 p-4 text-white shadow-[0_28px_70px_rgba(0,0,0,0.36)] backdrop-blur-2xl"
+          @click.stop
+          @mousedown.stop
+        >
+          <div class="mb-3">
+            <div class="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/30">Lyrics</div>
+            <div class="mt-1.5 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-[13px] font-medium text-white/85">字体大小</span>
+                <button
+                  v-if="lyricsSettings.playerFontScale !== DEFAULT_PLAYER_FONT_SCALE"
+                  type="button"
+                  class="flex h-5 w-5 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white"
+                  @click="resetPlayerFontScale"
+                  title="重置"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </button>
+              </div>
+              <span class="text-xs font-medium tabular-nums text-white/60">{{ fontScalePercent }}</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              class="flex h-8 w-8 items-center justify-center rounded-full text-xs font-light text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+              :disabled="lyricsSettings.playerFontScale <= MIN_PLAYER_FONT_SCALE"
+              @click="adjustPlayerFontScale(-FONT_SCALE_STEP)"
+            >
+              A-
+            </button>
+
+            <input
+              class="font-size-slider h-1 flex-1 cursor-pointer appearance-none rounded-full"
+              :style="{ background: `linear-gradient(to right, rgba(255,255,255,0.85) ${fontScaleProgress}%, rgba(255,255,255,0.12) ${fontScaleProgress}%)` }"
+              type="range"
+              :min="MIN_PLAYER_FONT_SCALE"
+              :max="MAX_PLAYER_FONT_SCALE"
+              :step="FONT_SCALE_STEP"
+              :value="lyricsSettings.playerFontScale"
+              @input="handleFontScaleInput"
+            />
+
+            <button
+              type="button"
+              class="flex h-8 w-8 items-center justify-center rounded-full text-xs font-light text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+              :disabled="lyricsSettings.playerFontScale >= MAX_PLAYER_FONT_SCALE"
+              @click="adjustPlayerFontScale(FONT_SCALE_STEP)"
+            >
+              A+
+            </button>
+          </div>
+
+          <div class="mt-6 mb-3">
+            <div class="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/30">Spacing</div>
+            <div class="mt-1.5 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-[13px] font-medium text-white/85">歌词间距</span>
+                <button
+                  v-if="lyricsSettings.playerLineGap !== DEFAULT_PLAYER_LINE_GAP"
+                  type="button"
+                  class="flex h-5 w-5 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white"
+                  @click="resetPlayerLineGap"
+                  title="重置"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </button>
+              </div>
+              <span class="text-xs font-medium tabular-nums text-white/60">{{ lineGapPercent }}</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              class="flex h-8 w-8 items-center justify-center rounded-full text-base font-light text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+              :disabled="lyricsSettings.playerLineGap <= MIN_PLAYER_LINE_GAP"
+              @click="setPlayerLineGap(lyricsSettings.playerLineGap - LINE_GAP_STEP)"
+            >
+              -
+            </button>
+
+            <input
+              class="font-size-slider h-1 flex-1 cursor-pointer appearance-none rounded-full"
+              :style="{ background: `linear-gradient(to right, rgba(255,255,255,0.85) ${lineGapProgress}%, rgba(255,255,255,0.12) ${lineGapProgress}%)` }"
+              type="range"
+              :min="MIN_PLAYER_LINE_GAP"
+              :max="MAX_PLAYER_LINE_GAP"
+              :step="LINE_GAP_STEP"
+              :value="lyricsSettings.playerLineGap"
+              @input="handleLineGapInput"
+            />
+
+            <button
+              type="button"
+              class="flex h-8 w-8 items-center justify-center rounded-full text-base font-light text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+              :disabled="lyricsSettings.playerLineGap >= MAX_PLAYER_LINE_GAP"
+              @click="setPlayerLineGap(lyricsSettings.playerLineGap + LINE_GAP_STEP)"
+            >
+              +
+            </button>
+          </div>
         </div>
-      </div>
+      </transition>
     </div>
 
-    <!-- 恢复同步按钮 -->
-    <transition name="fade">
-      <button 
-        v-if="isUserScrolling"
-        @click="resumeSync"
-        class="absolute bottom-8 right-0 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white/80 px-4 py-2 rounded-full text-sm font-medium transition flex items-center gap-2 border border-white/10 shadow-xl"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
-        恢复同步
-      </button>
-    </transition>
+    <div
+      v-if="amllLines.length > 0"
+      class="lyrics-mask-shell h-full min-h-0 w-full min-w-0"
+      :style="lyricsPlayerStyle"
+    >
+      <AmlLyricPlayer
+        class="amll-host h-full min-h-0 w-full min-w-0"
+        :lyric-lines="amllLines"
+        :current-time="amllCurrentTime"
+        align-anchor="center"
+        :align-position="0.42"
+        :enable-spring="true"
+        :enable-blur="true"
+        :enable-scale="true"
+        :hide-passed-lines="false"
+        :word-fade-width="0.5"
+        :line-gap="lyricsSettings.playerLineGap"
+        @line-click="handleLineClick"
+      />
+    </div>
+
+    <div
+      v-else
+      class="no-lyrics flex h-full items-center justify-center text-2xl font-medium text-white/30"
+    >
+      {{ emptyStateText }}
+    </div>
   </div>
 </template>
 
 <style scoped>
-.lyrics-view-container {
-  scrollbar-width: none;
-  scroll-behavior: smooth; 
-}
-
-.lyrics-view-container::-webkit-scrollbar {
-  display: none;
-}
-
-.lyric-line {
-  cursor: pointer;
-  transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  transform-origin: left center;
-  text-align: left;
-  width: 100%;
-  padding: 1.5rem 48px 1.5rem 2rem; 
-  user-select: none;
-  overflow-wrap: break-word;
-  word-wrap: break-word;
-  white-space: normal;
-}
-
-.main-text {
-  font-size: 2.8rem;
-  line-height: 1.2;
-  color: white;
-  transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
-.translation-text {
-  font-size: 1.5rem;
-  margin-top: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.romaji-text {
-  font-size: 1.1rem;
-  margin-top: 0.4rem;
-  color: rgba(255, 255, 255, 0.3);
-}
-
-.mask-gradient {
+.lyrics-mask-shell {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  --lyrics-edge-fade: 16%;
+  --lyrics-edge-softness: 7%;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.24) var(--lyrics-edge-softness),
+    black var(--lyrics-edge-fade),
+    black calc(100% - var(--lyrics-edge-fade)),
+    rgba(0, 0, 0, 0.24) calc(100% - var(--lyrics-edge-softness)),
+    transparent 100%
+  );
   mask-image: linear-gradient(
     to bottom,
     transparent 0%,
-    black 15%,
-    black 85%,
+    rgba(0, 0, 0, 0.24) var(--lyrics-edge-softness),
+    black var(--lyrics-edge-fade),
+    black calc(100% - var(--lyrics-edge-fade)),
+    rgba(0, 0, 0, 0.24) calc(100% - var(--lyrics-edge-softness)),
     transparent 100%
   );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
 }
 
-.active .main-text {
-  color: #fff;
-  text-shadow: 0 0 30px rgba(255,255,255,0.2);
+.amll-host {
+  min-width: 0;
+  min-height: 0;
 }
 
-.lyric-line:not(.active):hover .main-text {
-  color: rgba(255, 255, 255, 0.8);
+.amll-host :deep(.amll-lyric-player) {
+  --amll-lp-color: rgba(255, 255, 255, 0.95);
+  --amll-lp-bg-color: transparent;
+  --amll-lp-font-size: calc(max(max(5vh, 2.5vw), 12px) * var(--lyrics-font-scale, 1));
 }
 
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
+@media screen and (max-width: 768px) {
+  .amll-host :deep(.amll-lyric-player) {
+    --amll-lp-font-size: calc(max(8vw, 12px) * var(--lyrics-font-scale, 1));
+  }
 }
-.fade-enter-from, .fade-leave-to {
+
+.font-panel-enter-active,
+.font-panel-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.font-panel-enter-from,
+.font-panel-leave-to {
   opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+
+.font-size-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.font-size-slider::-moz-range-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.font-size-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: transparent;
 }
 </style>

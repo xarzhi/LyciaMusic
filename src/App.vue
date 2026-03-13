@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { watch, computed, defineAsyncComponent } from 'vue';
+import { watch, computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
 import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
 import { invoke } from '@tauri-apps/api/core';
 import { usePlayer } from './composables/player';
+import { useWindowMaterial } from './composables/windowMaterial';
 import Sidebar from './components/layout/Sidebar.vue';
 import TitleBar from './components/layout/TitleBar.vue';
 import PlayerFooter from './components/layout/PlayerFooter.vue';
@@ -22,46 +24,87 @@ const {
   addSongsToPlaylist,
   settings,
   playQueue,
-  currentViewMode,
-  filterCondition,
   isMiniMode,
+  showPlayerDetail,
   showMiniPlaylist,
   showPlaylist,
   closeMiniPlaylist,
-  showVolumePopover
+  showVolumePopover,
+  handleExternalPaths
 } = usePlayer();
+const { activeWindowMaterial, applyWindowMaterial, loadWindowMaterialCapabilities } = useWindowMaterial();
 
 init();
 
-const isFooterVisible = computed(() => playQueue.value.length > 0);
+const isExternalDragActive = ref(false);
+let externalPathTask: Promise<void> = Promise.resolve();
 
-const applyTheme = () => {
+const enqueueExternalPaths = (paths: string[], source: 'drop' | 'open') => {
+  externalPathTask = externalPathTask
+    .then(() => handleExternalPaths(paths, { source }))
+    .catch((error) => {
+      console.error('Failed to process external paths:', error);
+    });
+
+  return externalPathTask;
+};
+
+const consumePendingOpenPaths = async () => {
+  const paths = await invoke<string[]>('consume_pending_open_paths');
+  if (paths.length > 0) {
+    await enqueueExternalPaths(paths, 'open');
+  }
+};
+
+const isFooterVisible = computed(() => playQueue.value.length > 0);
+const hasWindowMaterial = computed(() => activeWindowMaterial.value !== 'none');
+const isMicaWindowMaterial = computed(() => activeWindowMaterial.value === 'mica');
+
+const applyTheme = async () => {
   const theme = settings.value.theme;
   const isDarkSystem = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  let isDarkMode = false;
 
   if (theme.mode === 'custom') {
     const style = theme.customBackground.foregroundStyle || 'auto';
     if (style === 'light') {
-      document.documentElement.classList.add('dark');
+      isDarkMode = true;
     } else if (style === 'dark') {
-      document.documentElement.classList.remove('dark');
+      isDarkMode = false;
     } else if (isDarkSystem) {
-      document.documentElement.classList.add('dark');
+      isDarkMode = true;
     } else {
-      document.documentElement.classList.remove('dark');
+      isDarkMode = false;
     }
   } else if (theme.mode === 'dark') {
+    isDarkMode = true;
+  } else {
+    isDarkMode = false;
+  }
+
+  if (isDarkMode) {
     document.documentElement.classList.add('dark');
+    try { await getCurrentWindow().setTheme('dark'); } catch (e) { console.warn('Failed to set window theme:', e); }
   } else {
     document.documentElement.classList.remove('dark');
+    try { await getCurrentWindow().setTheme('light'); } catch (e) { console.warn('Failed to set window theme:', e); }
   }
 };
 
-watch(settings, () => {
-  applyTheme();
-}, { deep: true });
+const syncWindowMaterial = async () => {
+  await nextTick();
+  await applyWindowMaterial(
+    settings.value.theme.windowMaterial,
+    document.documentElement.classList.contains('dark'),
+  );
+};
 
-applyTheme();
+void loadWindowMaterialCapabilities();
+
+watch(settings, async () => {
+  applyTheme();
+  await syncWindowMaterial();
+}, { deep: true, immediate: true });
 
 const handleGlobalAdd = (playlistId: string) => {
   addSongsToPlaylist(playlistId, playlistAddTargetSongs.value);
@@ -69,14 +112,32 @@ const handleGlobalAdd = (playlistId: string) => {
 };
 
 const mainBlurStyle = computed(() => {
+  if (showPlayerDetail.value) {
+    return 'none';
+  }
+
   const { dynamicBgType, mode, customBackground } = settings.value.theme;
 
+  if (isMicaWindowMaterial.value) {
+    if (dynamicBgType === 'flow') {
+      return 'none';
+    }
+
+    if (dynamicBgType === 'blur') {
+      return 'blur(6px)';
+    }
+
+    if (mode === 'custom') {
+      return customBackground.blur <= 0 ? 'none' : `blur(${Math.min(customBackground.blur, 8)}px)`;
+    }
+  }
+
   if (dynamicBgType === 'flow' || dynamicBgType === 'blur') {
-    return 'blur(40px)';
+    return hasWindowMaterial.value ? 'blur(20px)' : 'blur(40px)';
   }
 
   if (mode === 'custom') {
-    const b = customBackground.blur;
+    const b = hasWindowMaterial.value ? Math.min(customBackground.blur, 16) : customBackground.blur;
     return b <= 0 ? 'none' : `blur(${b}px)`;
   }
 
@@ -205,6 +266,7 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
       if (wasMaximized) await appWindow.maximize();
       
       await appWindow.show();
+      await syncWindowMaterial();
     }
   } catch (error: any) {
     console.error('Mini Mode Resize Error:', error);
@@ -213,17 +275,71 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
   }
 });
 
+let unlistenDragDrop: (() => void) | null = null;
+let unlistenDragOver: (() => void) | null = null;
+let unlistenDragLeave: (() => void) | null = null;
+let unlistenOpenPaths: (() => void) | null = null;
+
+onMounted(async () => {
+  unlistenDragDrop = await listen<{ paths: string[] }>('tauri://drag-drop', async (event) => {
+    isExternalDragActive.value = false;
+    await enqueueExternalPaths(event.payload?.paths ?? [], 'drop');
+  });
+
+  unlistenDragOver = await listen('tauri://drag-over', () => {
+    isExternalDragActive.value = true;
+  });
+
+  unlistenDragLeave = await listen('tauri://drag-leave', () => {
+    isExternalDragActive.value = false;
+  });
+
+  unlistenOpenPaths = await listen('app:open-paths', async () => {
+    await consumePendingOpenPaths();
+  });
+
+  await consumePendingOpenPaths();
+  
+  // 🟢 在所有初次资源或状态加载完毕后，平滑显示主窗口
+  try {
+    const window = getCurrentWindow();
+    await window.show();
+    await window.setFocus();
+  } catch (error) {
+    console.error('Failed to show window on startup:', error);
+  }
+});
+
+onUnmounted(() => {
+  unlistenDragDrop?.();
+  unlistenDragOver?.();
+  unlistenDragLeave?.();
+  unlistenOpenPaths?.();
+});
+
 
 </script>
 
 <template>
   <div
     class="flex flex-col h-screen w-full text-gray-800 dark:text-gray-200 relative overflow-hidden font-sans"
-    :class="{ 'bg-transparent': isMiniMode }"
+    :class="{ 'bg-transparent border-0': isMiniMode }"
     :style="{ backgroundColor: isMiniMode ? 'transparent' : '' }"
   >
     <transition name="window-restore">
       <GlobalBackground v-if="!isMiniMode" />
+    </transition>
+
+    <transition name="drop-overlay">
+      <div
+        v-if="isExternalDragActive && !isMiniMode"
+        class="absolute inset-0 z-[140] pointer-events-none flex items-center justify-center bg-black/15 backdrop-blur-sm"
+      >
+        <div class="rounded-[28px] border border-white/35 bg-white/75 px-8 py-6 text-center shadow-[0_24px_60px_rgba(0,0,0,0.2)] dark:border-white/10 dark:bg-black/65">
+          <div class="text-lg font-semibold text-gray-900 dark:text-white">松开即可导入或播放</div>
+          <div class="mt-2 text-sm text-gray-600 dark:text-white/70">音频文件将直接播放，文件夹将导入音乐库</div>
+        </div>
+      </div>
     </transition>
 
     <MiniPlayer v-if="isMiniMode" />
@@ -231,11 +347,14 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
     <transition name="window-restore">
       <div
         v-if="!isMiniMode"
-        class="flex-1 flex flex-col overflow-hidden relative z-10 transition-colors duration-500"
-        :class="[settings.theme.mode === 'custom' ? 'bg-transparent' : 'bg-white/30 dark:bg-black/60']"
+        class="flex-1 flex overflow-hidden relative z-10 transition-colors duration-500"
+        :class="[
+          settings.theme.mode === 'custom' || hasWindowMaterial
+            ? 'bg-transparent'
+            : 'bg-white/30 dark:bg-black/60'
+        ]"
         :style="{ backdropFilter: mainBlurStyle }"
       >
-      <div class="flex flex-1 overflow-hidden">
         <Sidebar />
 
         <div class="flex-1 flex flex-col min-w-0">
@@ -243,20 +362,33 @@ watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQ
           <main class="flex-1 overflow-hidden relative min-h-0">
             <router-view v-slot="{ Component, route }">
               <transition name="page-fade" mode="out-in">
-                <component :is="Component" :key="route.path === '/' ? `/${currentViewMode}/${filterCondition}` : route.path" />
+                <component
+                  v-if="!route.meta.keepAlive"
+                  :is="Component"
+                  :key="route.path"
+                />
+                <KeepAlive v-else include="Home">
+                  <component
+                    :is="Component"
+                    :key="String(route.name ?? route.path)"
+                  />
+                </KeepAlive>
               </transition>
             </router-view>
           </main>
         </div>
       </div>
-
-      <transition name="footer-slide">
-        <PlayerFooter v-if="isFooterVisible" />
-      </transition>
-    </div>
     </transition>
 
-    <PlayerDetail v-if="!isMiniMode" />
+    <div v-if="!isMiniMode && isFooterVisible" class="relative z-[60]">
+      <!-- Player Detail (垫底滑动层) -->
+      <PlayerDetail />
+      
+      <!-- Player Footer (悬浮覆盖层) -->
+      <transition name="footer-slide">
+        <PlayerFooter />
+      </transition>
+    </div>
 
     <PlayQueueSidebar v-if="!isMiniMode" />
 
@@ -278,7 +410,17 @@ html.mini-mode-active,
 #app.mini-mode-active {
   background-color: transparent !important;
   background: transparent !important;
+  border-width: 0 !important;
+  outline: none !important;
+  border-style: none !important;
+  box-shadow: none !important;
 }
+
+.mini-mode-active * {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 
 .page-fade-enter-active,
 .page-fade-leave-active {
@@ -330,6 +472,16 @@ html.mini-mode-active,
 }
 
 .window-restore-leave-to {
+  opacity: 0;
+}
+
+.drop-overlay-enter-active,
+.drop-overlay-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.drop-overlay-enter-from,
+.drop-overlay-leave-to {
   opacity: 0;
 }
 </style>

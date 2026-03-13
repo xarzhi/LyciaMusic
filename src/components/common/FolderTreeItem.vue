@@ -118,15 +118,17 @@ const handleContextMenu = (e: MouseEvent) => {
 const coverUrl = ref('');
 
 const loadCover = async () => {
-   if (props.node.cover_song_path) {
-       try {
-           const filePath = await invoke<string>('get_song_cover_thumbnail', { path: props.node.cover_song_path });
-           if (filePath) {
-               coverUrl.value = convertFileSrc(filePath);
-           }
-       } catch (e) {
-           // console.error("Cover load failed", e);
-       }
+   if (!props.node.cover_song_path) {
+       coverUrl.value = '';
+       return;
+   }
+
+   try {
+       const filePath = await invoke<string>('get_song_cover_thumbnail', { path: props.node.cover_song_path });
+       coverUrl.value = filePath ? convertFileSrc(filePath) : '';
+   } catch (e) {
+       coverUrl.value = '';
+       // console.error("Cover load failed", e);
    }
 };
 

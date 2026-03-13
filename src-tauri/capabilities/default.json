@@ -27,6 +27,8 @@
     "core:window:allow-set-max-size",
     "core:window:allow-set-position",
     "core:window:allow-set-shadow",
+    "core:window:allow-set-background-color",
+    "core:window:allow-set-effects",
     "opener:default",
     "dialog:default"
   ]

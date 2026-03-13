@@ -1,87 +1,238 @@
 <script setup lang="ts">
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useLyrics } from '../../composables/lyrics';
 import { usePlayer } from '../../composables/player';
-import { getCurrentWindow } from '@tauri-apps/api/window'; 
+import { useSharedTransition } from '../../composables/useSharedTransition';
 import LyricsView from './LyricsView.vue';
-import QueueList from './QueueList.vue';
 import PlayerDetailBackground from './PlayerDetailBackground.vue';
 import PlayerDetailLeft from './PlayerDetailLeft.vue';
+import QueueList from './QueueList.vue';
 
-const { 
-  showPlayerDetail, togglePlayerDetail, showQueue
+const {
+  showPlayerDetail,
+  showQueue,
+  currentSong,
 } = usePlayer();
 
-// --- 窗口控制 ---
+const { parsedLyrics } = useLyrics();
+const { staggerPhase } = useSharedTransition();
+
+const TOP_CHROME_HIDE_DELAY = 2500;
+
+const isTopChromeVisible = ref(false);
+let topChromeHideTimer: ReturnType<typeof setTimeout> | null = null;
+
 const appWindow = getCurrentWindow();
+
 const minimize = () => appWindow.minimize();
-const toggleMaximize = async () => { const isMax = await appWindow.isMaximized(); isMax ? appWindow.unmaximize() : appWindow.maximize(); };
+const toggleMaximize = async () => {
+  const isMaximized = await appWindow.isMaximized();
+  if (isMaximized) {
+    await appWindow.unmaximize();
+    return;
+  }
+  await appWindow.maximize();
+};
 const closeApp = () => appWindow.close();
+
+const clearTopChromeHideTimer = () => {
+  if (topChromeHideTimer) {
+    clearTimeout(topChromeHideTimer);
+    topChromeHideTimer = null;
+  }
+};
+
+const scheduleTopChromeHide = () => {
+  clearTopChromeHideTimer();
+  topChromeHideTimer = setTimeout(() => {
+    isTopChromeVisible.value = false;
+    topChromeHideTimer = null;
+  }, TOP_CHROME_HIDE_DELAY);
+};
+
+const showTopChrome = () => {
+  clearTopChromeHideTimer();
+  isTopChromeVisible.value = true;
+};
+
+const handleTopChromeLeave = () => {
+  scheduleTopChromeHide();
+};
+
+watch(showPlayerDetail, (visible) => {
+  clearTopChromeHideTimer();
+
+  if (visible) {
+    isTopChromeVisible.value = true;
+    scheduleTopChromeHide();
+    return;
+  }
+
+  isTopChromeVisible.value = false;
+});
+
+onBeforeUnmount(() => {
+  clearTopChromeHideTimer();
+});
+
+const staggerStyle = (phase: number, translateDir: 'Y' | 'X' = 'Y', distance = 20) => {
+  const visible = showPlayerDetail.value || staggerPhase.value >= phase;
+  const translate = translateDir === 'Y' ? `translateY(${distance}px)` : `translateX(${distance}px)`;
+
+  return {
+    opacity: visible ? 1 : 0,
+    transform: visible ? 'translate(0, 0)' : translate,
+    transition: `opacity 400ms cubic-bezier(0.22,1,0.36,1) ${showPlayerDetail.value ? phase * 100 : 0}ms, transform 400ms cubic-bezier(0.22,1,0.36,1) ${showPlayerDetail.value ? phase * 100 : 0}ms`,
+  };
+};
+
+const handleClose = () => {
+  showPlayerDetail.value = false;
+};
+
+const metaInfo = computed(() => {
+  if (!currentSong.value) return [];
+
+  const song = currentSong.value;
+
+  return [
+    { label: '歌手', value: song.artist },
+    { label: '专辑', value: song.album },
+    { label: '音质', value: song.bitrate ? `${song.sample_rate}Hz / ${song.bitrate}kbps` : 'Standard' },
+    song.genre ? { label: '流派', value: song.genre } : null,
+    song.year ? { label: '年份', value: song.year } : null,
+  ].filter((item): item is { label: string; value: string } => Boolean(item?.value));
+});
 </script>
 
 <template>
-  <transition name="expand-up">
-    <div v-if="showPlayerDetail" class="fixed inset-0 z-[100] bg-[#0a0a0a] flex flex-col overflow-hidden font-sans select-none text-white">
-      
-      <!-- 沉浸式背景层 -->
-      <PlayerDetailBackground />
+  <div
+    class="fixed inset-x-0 bottom-0 z-[50] flex h-[100vh] flex-col overflow-visible font-sans select-none text-white"
+    :class="showPlayerDetail ? 'pointer-events-auto' : 'pointer-events-none'"
+  >
+    <div class="relative flex h-[100vh] w-full flex-col pt-[calc(100vh-100%)]">
+      <div
+        class="absolute inset-0 transition-all duration-600 ease-[cubic-bezier(0.22,1,0.36,1)]"
+        :style="{
+          opacity: showPlayerDetail ? 1 : 0,
+          transform: showPlayerDetail ? 'translateY(0)' : 'translateY(100%)',
+        }"
+      >
+        <PlayerDetailBackground :bgOpacity="1" />
+        <div class="absolute inset-0 z-[-1] bg-[#0a0a0a]"></div>
+      </div>
 
-      <!-- 顶栏：窗口控制 & 收起按钮 -->
-      <div class="relative z-[60] h-16 flex items-center justify-between px-6">
-        <div class="absolute inset-0" data-tauri-drag-region></div>
+      <div
+        class="relative z-[60] h-24"
+        :style="staggerStyle(1, 'Y', -10)"
+        @mouseenter="showTopChrome"
+        @mousemove="showTopChrome"
+        @mouseleave="handleTopChromeLeave"
+      >
+        <div
+          class="absolute inset-x-0 top-0 h-24"
+          :class="showPlayerDetail ? 'pointer-events-auto' : 'pointer-events-none'"
+        ></div>
 
-        <div class="flex items-center relative z-10">
-          <button @click="togglePlayerDetail" class="p-2 hover:bg-white/10 rounded-lg transition text-white/60 hover:text-white" title="收起详情页">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
-          </button>
-        </div>
+        <div
+          class="relative flex h-14 items-center justify-between px-6 transition-all duration-500 ease-out"
+          :class="[
+            isTopChromeVisible ? 'translate-y-0 opacity-100' : '-translate-y-3 opacity-0',
+            showPlayerDetail ? 'pointer-events-auto' : 'pointer-events-none',
+          ]"
+        >
+          <div class="absolute inset-0" data-tauri-drag-region></div>
 
-        <div class="flex items-center gap-2 relative z-10">
-          <button @click="minimize" class="p-2 hover:bg-white/10 rounded-lg transition text-white/60 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14" /></svg></button>
-          <button @click="toggleMaximize" class="p-2 hover:bg-white/10 rounded-lg transition text-white/60 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /></svg></button>
-          <button @click="closeApp" class="p-2 hover:bg-red-500 rounded-lg transition text-white/60 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12" /></svg></button>
+          <div class="relative z-10 flex w-1/4 items-center">
+            <button
+              title="收起详情页"
+              class="rounded-lg p-2 text-white/50 transition hover:bg-white/10 hover:text-white"
+              @click="handleClose"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="pointer-events-none flex-1 truncate px-4 text-center text-sm font-medium text-white/80 drop-shadow-md">
+            {{ currentSong?.title || currentSong?.name }}
+            <span v-if="currentSong?.artist" class="mx-1 opacity-60">-</span>
+            <span class="opacity-60">{{ currentSong?.artist }}</span>
+          </div>
+
+          <div class="relative z-10 flex w-1/4 items-center justify-end gap-2">
+            <button class="rounded-lg p-2 text-white/50 transition hover:bg-white/10 hover:text-white" @click="minimize">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14" />
+              </svg>
+            </button>
+            <button class="rounded-lg p-2 text-white/50 transition hover:bg-white/10 hover:text-white" @click="toggleMaximize">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              </svg>
+            </button>
+            <button class="rounded-lg p-2 text-white/50 transition hover:bg-red-500 hover:text-white" @click="closeApp">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- 主内容区域：双栏布局 (45:55) -->
-      <div class="relative z-50 flex-1 flex min-h-0 overflow-hidden">
-        <!-- 左侧：静态信息区 (45%) -->
-        <div class="w-[45%] h-full flex items-center justify-center pl-16 pr-8">
-          <PlayerDetailLeft />
-        </div>
+      <PlayerDetailLeft :isExpanded="showPlayerDetail" />
 
-        <!-- 右侧：歌词滚动区 (55%) -->
-        <div class="w-[55%] h-full flex flex-col pr-16 pl-8 py-12">
+      <div class="relative z-50 flex min-h-0 flex-1 pl-8 pr-0 pb-10">
+        <div class="pointer-events-none h-full w-[45%] min-w-[300px]"></div>
+
+        <div
+          class="flex h-full min-h-0 flex-1 flex-col justify-center pt-2 pb-3 pl-2 pr-0"
+          :style="staggerStyle(2, 'X', 20)"
+        >
           <transition name="fade-scale" mode="out-in">
-            <QueueList v-if="showQueue" />
-            <LyricsView v-else />
+            <QueueList
+              v-if="showQueue"
+              class="h-full rounded-2xl border border-white/5 bg-black/10 p-4 shadow-xl backdrop-blur-sm"
+            />
+
+            <LyricsView v-else-if="parsedLyrics.length > 0" class="h-full" />
+
+            <div
+              v-else
+              class="flex h-full flex-col items-center justify-center opacity-80"
+              style="text-shadow: 0 2px 10px rgba(0,0,0,0.4);"
+            >
+              <div
+                v-for="(info, index) in metaInfo"
+                :key="index"
+                class="mb-4 flex items-center text-xl font-medium tracking-wider sm:text-2xl"
+              >
+                <span class="mr-4 text-white/40">{{ info.label }}</span>
+                <span class="text-white drop-shadow-md">{{ info.value }}</span>
+              </div>
+            </div>
           </transition>
         </div>
       </div>
-
     </div>
-  </transition>
+  </div>
 </template>
 
 <style scoped>
-.expand-up-enter-active,
-.expand-up-leave-active {
-  transition: all 0.5s cubic-bezier(0.3, 0, 0.2, 1);
-  will-change: transform, opacity;
-}
-
-.expand-up-enter-from,
-.expand-up-leave-to {
-  transform: translateY(100%);
-  opacity: 0;
-}
-
 .fade-scale-enter-active,
 .fade-scale-leave-active {
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .fade-scale-enter-from,
 .fade-scale-leave-to {
   opacity: 0;
-  transform: scale(0.95);
+  transform: scale(0.97) translateY(10px);
+}
+
+.text-shadow-sm {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 </style>

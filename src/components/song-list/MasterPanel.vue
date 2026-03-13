@@ -6,6 +6,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'; // 🟢 1. 引入转换�
 import FolderTreeItem from '../common/FolderTreeItem.vue'; // 🟢 Import
 import FolderContextMenu from '../overlays/FolderContextMenu.vue';
 import ModernModal from '../common/ModernModal.vue'; 
+import ModernInputModal from '../common/ModernInputModal.vue';
 import { useToast } from '../../composables/toast';
 
 import { FolderNode } from '../../composables/playerState';
@@ -273,8 +274,44 @@ const openFolder = () => { if (targetFolder.value) { openInFinder(targetFolder.v
 
 // 🟢 批量删除逻辑
 const showDeleteConfirm = ref(false);
+const showCreateFolderModal = ref(false);
 const showPhysicalDeleteConfirm = ref(false); // 🟢 Physical Delete State
 const foldersToDelete = ref<string[]>([]);
+const createFolderParentPath = ref('');
+
+const normalizePath = (path: string | null) => (path || '').replace(/\\/g, '/').replace(/\/+$/, '');
+const getParentFolderPath = (path: string) => path.replace(/[\\/][^\\/]+$/, '');
+const getRelativeDepth = (rootPath: string, folderPath: string) => {
+  const normalizedRoot = normalizePath(rootPath);
+  const normalizedFolder = normalizePath(folderPath);
+
+  if (!normalizedRoot || normalizedFolder === normalizedRoot) {
+    return 0;
+  }
+
+  if (!normalizedFolder.startsWith(`${normalizedRoot}/`)) {
+    return 0;
+  }
+
+  return normalizedFolder
+    .slice(normalizedRoot.length + 1)
+    .split('/')
+    .filter(Boolean)
+    .length;
+};
+
+const expandTreeToPath = (nodes: FolderNode[], targetPath: string): boolean => {
+  for (const node of nodes) {
+    if (node.path === targetPath) {
+      return true;
+    }
+    if (node.children.length > 0 && expandTreeToPath(node.children, targetPath)) {
+      node.is_expanded = true;
+      return true;
+    }
+  }
+  return false;
+};
 const folderToPhysicalDelete = ref<string | null>(null); // 🟢 Target for physical deletion
 
 const removeFolderItem = () => {
@@ -286,6 +323,46 @@ const removeFolderItem = () => {
     showDeleteConfirm.value = true;
   }
   showMenu.value = false;
+};
+
+const handleCreateFolder = () => {
+  if (!props.isManagementMode || !targetFolder.value) {
+    return;
+  }
+
+  const rootPath = activeRootPath.value || targetFolder.value.path;
+  if (rootPath && getRelativeDepth(rootPath, targetFolder.value.path) + 1 > 3) {
+    useToast().showToast('当前文件夹视图最多支持 3 层嵌套，请不要继续向更深层级新建。', 'info');
+    showMenu.value = false;
+    return;
+  }
+
+  createFolderParentPath.value = targetFolder.value.path;
+  showCreateFolderModal.value = true;
+  showMenu.value = false;
+};
+
+const executeCreateFolder = async (folderName: string) => {
+  if (!createFolderParentPath.value) {
+    return;
+  }
+
+  try {
+    const newFolderPath = await invoke<string>('create_folder', {
+      parentPath: createFolderParentPath.value,
+      folderName,
+    });
+
+    await fetchFolderTree();
+    expandTreeToPath(folderTree.value, newFolderPath);
+    currentFolderFilter.value = newFolderPath;
+    useToast().showToast(`已创建文件夹：${folderName}`, 'success');
+  } catch (e) {
+    useToast().showToast('新建文件夹失败: ' + e, 'error');
+  } finally {
+    showCreateFolderModal.value = false;
+    createFolderParentPath.value = '';
+  }
 };
 
 // 🟢 Physical Delete Handlers
@@ -300,9 +377,28 @@ const handlePhysicalDelete = () => {
 const executePhysicalDelete = async () => {
     if (folderToPhysicalDelete.value) {
         try {
-            await deleteFolder(folderToPhysicalDelete.value);
+            const deletedPath = folderToPhysicalDelete.value;
+            const rootPath = activeRootPath.value || '';
+            const shouldResetSelection =
+              normalizePath(currentFolderFilter.value) === normalizePath(deletedPath) ||
+              normalizePath(currentFolderFilter.value).startsWith(`${normalizePath(deletedPath)}/`);
+            const fallbackPath = shouldResetSelection
+              ? (() => {
+                  const parentPath = getParentFolderPath(deletedPath);
+                  const normalizedRoot = normalizePath(rootPath);
+                  const normalizedParent = normalizePath(parentPath);
+                  return normalizedRoot && normalizedParent.startsWith(normalizedRoot)
+                    ? parentPath
+                    : rootPath;
+                })()
+              : currentFolderFilter.value;
+            await deleteFolder(deletedPath);
             useToast().showToast("文件夹已永久删除", "success");
-            await refreshFolder(activeRootPath.value || '');
+            await fetchFolderTree();
+            if (fallbackPath) {
+              expandTreeToPath(folderTree.value, fallbackPath);
+              currentFolderFilter.value = fallbackPath;
+            }
         } catch(e) {
             useToast().showToast("删除失败: " + e, "error");
         }
@@ -508,6 +604,7 @@ const stopResize = () => {
       @open-folder="openFolder" 
       @refresh="handleRefreshFolder" 
       @remove="removeFolderItem" 
+      @new-folder="handleCreateFolder"
       @delete-disk="handlePhysicalDelete"
       :isManagementMode="isManagementMode"
     />
@@ -545,6 +642,15 @@ const stopResize = () => {
       :content="`文件夹 '${pendingFolderToPlaylist?.name}' 尚未添加到音乐库，无法直接创建歌单。要先将其添加到音乐库吗？`" 
       confirm-text="添加到库并创建"
       @confirm="executeAddToLibraryAndCreate" 
+    />
+
+    <ModernInputModal
+      :visible="showCreateFolderModal"
+      title="新建文件夹"
+      placeholder="输入文件夹名称"
+      confirm-text="创建"
+      @cancel="showCreateFolderModal = false"
+      @confirm="executeCreateFolder"
     />
 
   </aside>

@@ -31,6 +31,9 @@ export const isMiniMode = ref(false);
 export const showVolumePopover = ref(false);
 export const AUDIO_DELAY = ref(0.45);
 
+// --- 共享元素转场 ---
+export const footerCoverEl = ref<HTMLElement | null>(null);
+
 // --- 自定义拖拽状态 ---
 export const dragSession = reactive({
   active: false,
@@ -70,7 +73,7 @@ export const recentSongs = ref<HistoryItem[]>([]);
 
 // --- 排序状态 ---
 export const artistSortMode = ref<'count' | 'name' | 'custom'>('count');
-export const albumSortMode = ref<'count' | 'name' | 'custom'>('count');
+export const albumSortMode = ref<'count' | 'name' | 'artist' | 'custom'>('artist');
 export const artistCustomOrder = ref<string[]>([]);
 export const albumCustomOrder = ref<string[]>([]);
 
@@ -94,6 +97,7 @@ export const settings = ref<AppSettings>({
   theme: {
     mode: 'light',
     dynamicBgType: 'flow',
+    windowMaterial: 'none',
     customBgPath: '',
     opacity: 0.8,
     blur: 20,

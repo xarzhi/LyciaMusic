@@ -7,6 +7,8 @@ const props = withDefaults(defineProps<{
   sampleRate: number;
   bitDepth?: number;
   format: string;
+  codec?: string;
+  container?: string;
   variant?: 'simple' | 'detailed';
 }>(), {
   variant: 'simple'
@@ -19,8 +21,9 @@ const tooltipStyle = ref({});
 
 // 1. 判断音质等级 (HR / SQ / HQ)
 const badgeType = computed(() => {
-  const losslessFormats = ['flac', 'wav', 'alac', 'ape'];
-  const isLossless = losslessFormats.includes(props.format.toLowerCase());
+  const losslessFormats = ['aif', 'aiff', 'flac', 'wav', 'alac', 'ape', 'pcm'];
+  const audioType = (props.codec || props.format).toLowerCase();
+  const isLossless = losslessFormats.includes(audioType);
   
   // HR: 无损格式 且 (位深 > 16bit 或 采样率 > 44.1kHz) - 只要有一项超越 CD 即视为高解析
   if (isLossless && ((props.bitDepth && props.bitDepth > 16) || props.sampleRate > 44100)) {
@@ -33,9 +36,8 @@ const badgeType = computed(() => {
   // HQ: 有损格式的极致音质
   // - MP3: >= 320kbps
   // - AAC/OGG/Opus 等现代高效编码: >= 256kbps (256k ≈ MP3 320k)
-  const fmt = props.format.toLowerCase();
-  const efficientCodecs = ['aac', 'm4a', 'ogg', 'opus', 'wma'];
-  const hqThreshold = efficientCodecs.includes(fmt) ? 256 : 320;
+  const efficientCodecs = ['aac', 'm4a', 'm4b', 'mp4', 'oga', 'ogg', 'opus', 'vorbis', 'wma'];
+  const hqThreshold = efficientCodecs.includes(audioType) ? 256 : 320;
   if (props.bitrate >= hqThreshold) {
     return 'HQ';
   }
@@ -78,7 +80,8 @@ const badgeColorClass = computed(() => {
 
 // 4. 生成分级提示内容 (Tiered Tooltip Content)
 const tooltipContent = computed(() => {
-  const fmt = props.format?.toUpperCase() || '';
+  const fmt = (props.codec || props.format || '').toUpperCase();
+  const container = props.container?.toUpperCase() || '';
   const kbps = props.bitrate || 0;
   
   // 统一模板: {bitDepth}-bit · {sampleRate} kHz · {codec} · {bitrate} kbps
@@ -86,9 +89,10 @@ const tooltipContent = computed(() => {
   if (props.bitDepth) sub += `${props.bitDepth}-bit · `;
   if (props.sampleRate) sub += `${props.sampleRate / 1000} kHz · `;
   sub += fmt;
+  if (container && container !== fmt) sub += ` / ${container}`;
   if (kbps > 0) sub += ` · ${kbps} kbps`;
 
-  const losslessFormats = ['FLAC', 'WAV', 'ALAC', 'APE'];
+  const losslessFormats = ['AIF', 'AIFF', 'FLAC', 'WAV', 'ALAC', 'APE', 'PCM'];
   const isLossless = losslessFormats.includes(fmt);
 
   // HR: 高解析无损
@@ -112,7 +116,7 @@ const tooltipContent = computed(() => {
   }
 
   // HQ: 高品质音乐
-  const efficientCodecs = ['AAC', 'M4A', 'OGG', 'OPUS', 'WMA'];
+  const efficientCodecs = ['AAC', 'M4A', 'M4B', 'MP4', 'OGA', 'OGG', 'OPUS', 'VORBIS', 'WMA'];
   const hqThreshold = efficientCodecs.includes(fmt) ? 256 : 320;
   if (kbps >= hqThreshold) {
     return {

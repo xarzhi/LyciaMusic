@@ -58,8 +58,9 @@ const handleSave = () => {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-    <div class="bg-[#2b2b2b] w-[500px] rounded-2xl shadow-2xl overflow-hidden text-white border border-white/10 flex flex-col">
+  <Teleport to="body">
+    <div class="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+      <div class="bg-[#2b2b2b] w-full max-w-[500px] max-h-[calc(100vh-2rem)] rounded-2xl shadow-2xl overflow-hidden text-white border border-white/10 flex flex-col">
       
       <!-- 标题栏 -->
       <div class="flex items-center justify-between px-6 py-4 border-b border-white/10">
@@ -71,7 +72,8 @@ const handleSave = () => {
         </button>
       </div>
 
-      <div class="flex flex-col p-6 gap-6">
+      <div class="flex-1 overflow-y-auto">
+        <div class="flex flex-col p-6 gap-6">
         
         <!-- 预览区 -->
         <div class="relative w-full h-48 bg-[#1a1a1a] rounded-xl overflow-hidden border border-white/5 group">
@@ -85,7 +87,7 @@ const handleSave = () => {
              <img 
                :src="convertFileSrc(preview.imagePath)" 
                class="w-full h-full object-cover"
-               :style="{ filter: `blur(${preview.blur}px)`, transform: `scale(${preview.scale})` }"
+               :style="{ filter: `blur(${preview.blur}px) brightness(${preview.opacity ?? 1.0})`, transform: `scale(${preview.scale})` }"
              />
           </div>
           <div v-else class="absolute inset-0 flex flex-col items-center justify-center text-white/20">
@@ -181,6 +183,7 @@ const handleSave = () => {
             </div>
           </div>
         </div>
+        </div>
       </div>
 
       <!-- 底部按钮 -->
@@ -195,8 +198,9 @@ const handleSave = () => {
         </button>
       </div>
 
+      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <style scoped>

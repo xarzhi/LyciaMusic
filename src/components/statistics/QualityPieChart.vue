@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue';
 
+const TEXT = {
+  other: '\u5176\u4ed6',
+  losslessRate: '\u65e0\u635f\u5360\u6bd4',
+};
+
 const props = defineProps<{
   hires: number;
   superQuality: number;
@@ -8,265 +13,153 @@ const props = defineProps<{
   other: number;
 }>();
 
-// --- 动画数字工具 ---
 const useAnimatedNumber = (target: number, duration = 1500) => {
   const current = ref(0);
-  
+
   const animate = () => {
     const start = current.value;
     const startTime = performance.now();
-    
+
     const tick = (now: number) => {
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      // EaseOutQuart
       const ease = 1 - Math.pow(1 - progress, 4);
-      
       current.value = start + (target - start) * ease;
-      
+
       if (progress < 1) {
         requestAnimationFrame(tick);
       }
     };
-    
+
     requestAnimationFrame(tick);
   };
 
-  watch(() => target, () => {
-    // 简单的重启动画逻辑
-    animate();
-  });
-
-  onMounted(() => {
-    animate();
-  });
-  
+  watch(() => target, animate);
+  onMounted(animate);
   return current;
 };
 
-// --- 数据计算 ---
 const total = computed(() => props.hires + props.superQuality + props.highQuality + props.other);
 
-// 原始数据定义
 const rawData = computed(() => [
-  { 
-    id: 'hires',
-    name: 'HR', 
-    label: 'Hi-Res',
-    value: props.hires, 
-    startColor: '#f59e0b', // Amber 500
-    endColor: '#fbbf24',   // Amber 400
-    bgClass: 'bg-gradient-to-br from-amber-400 to-amber-600',
-    shadowColor: 'rgba(245, 158, 11, 0.5)'
-  },
-  { 
-    id: 'sq',
-    name: 'SQ', 
-    label: 'Super Quality',
-    value: props.superQuality, 
-    startColor: '#3b82f6', // Blue 500
-    endColor: '#60a5fa',   // Blue 400
-    bgClass: 'bg-gradient-to-br from-blue-400 to-blue-600',
-    shadowColor: 'rgba(59, 130, 246, 0.5)'
-  },
-  { 
-    id: 'hq',
-    name: 'HQ', 
-    label: 'High Quality',
-    value: props.highQuality, 
-    startColor: '#10b981', // Emerald 500
-    endColor: '#34d399',   // Emerald 400
-    bgClass: 'bg-gradient-to-br from-emerald-400 to-emerald-600',
-    shadowColor: 'rgba(16, 185, 129, 0.5)'
-  },
-  { 
-    id: 'other',
-    name: '其他', 
-    label: 'Standard',
-    value: props.other, 
-    startColor: '#6b7280', // Gray 500
-    endColor: '#9ca3af',   // Gray 400
-    bgClass: 'bg-gradient-to-br from-gray-400 to-gray-600',
-    shadowColor: 'rgba(107, 114, 128, 0.5)'
-  },
+  { id: 'hires', name: 'HR', label: 'Hi-Res', value: props.hires, startColor: '#f59e0b', endColor: '#fbbf24', bgClass: 'bg-gradient-to-br from-amber-400 to-amber-600', shadowColor: 'rgba(245, 158, 11, 0.5)' },
+  { id: 'sq', name: 'SQ', label: 'Super Quality', value: props.superQuality, startColor: '#3b82f6', endColor: '#60a5fa', bgClass: 'bg-gradient-to-br from-blue-400 to-blue-600', shadowColor: 'rgba(59, 130, 246, 0.5)' },
+  { id: 'hq', name: 'HQ', label: 'High Quality', value: props.highQuality, startColor: '#10b981', endColor: '#34d399', bgClass: 'bg-gradient-to-br from-emerald-400 to-emerald-600', shadowColor: 'rgba(16, 185, 129, 0.5)' },
+  { id: 'other', name: TEXT.other, label: 'Standard', value: props.other, startColor: '#6b7280', endColor: '#9ca3af', bgClass: 'bg-gradient-to-br from-gray-400 to-gray-600', shadowColor: 'rgba(107, 114, 128, 0.5)' },
 ]);
 
-// 交互状态
 const hoveredSegmentId = ref<string | null>(null);
 
-// 计算分段数据
 const segments = computed(() => {
-  if (total.value === 0) return [];
-  
+  if (total.value === 0) {
+    return [];
+  }
+
   let currentAngle = 0;
-  const radius = 40; // SVG viewBox 0 0 100 100, center 50 50
+  const radius = 40;
   const circumference = 2 * Math.PI * radius;
-  
-  return rawData.value.map(item => {
-    const percentage = (item.value / total.value) * 100;
-    const dashArray = (percentage / 100) * circumference;
-    // const gap = 2; // unused
-    
-    // 我们使用 stroke-dasharray 来实现环形
-    // dashArray string: "length gap"
-    // 为了美观，可以不用gap，或者用 transparent stroke overlay。
-    // 这里采用简单的积累 offset 方式
-    
-    const segmentObj = {
-      ...item,
-      percentage: percentage,
-      displayPercentage: percentage.toFixed(1),
-      strokeDasharray: `${dashArray} ${circumference - dashArray}`,
-      strokeDashoffset: -currentAngle, // SVG stroke starts at 3 o'clock usually, rotated -90deg makes it 12 o'clock
-      angle: currentAngle, // store for other usages if needed 
-    };
-    
-    // Convert angle length to arc length
-    currentAngle += (percentage / 100) * circumference;
-    
-    return segmentObj;
-  }).filter(s => s.value > 0);
+
+  return rawData.value
+    .map(item => {
+      const percentage = (item.value / total.value) * 100;
+      const dashArray = (percentage / 100) * circumference;
+      const segment = {
+        ...item,
+        percentage,
+        displayPercentage: percentage.toFixed(1),
+        strokeDasharray: `${dashArray} ${circumference - dashArray}`,
+        strokeDashoffset: -currentAngle,
+      };
+      currentAngle += (percentage / 100) * circumference;
+      return segment;
+    })
+    .filter(segment => segment.value > 0);
 });
 
-// 无损占比数字动画
 const losslessCount = computed(() => props.hires + props.superQuality);
-const losslessPercentRaw = computed(() => {
-  if (total.value === 0) return 0;
-  return (losslessCount.value / total.value) * 100;
-});
+const losslessPercentRaw = computed(() => (total.value === 0 ? 0 : (losslessCount.value / total.value) * 100));
 const animatedLosslessPercent = useAnimatedNumber(losslessPercentRaw.value, 2000);
-
-// 总数显式动画 (可选)
-// const animatedTotal = useAnimatedNumber(total.value, 2000); // unused
-
 </script>
 
 <template>
   <div class="flex flex-col md:flex-row items-center justify-center gap-12 p-8 w-full max-w-4xl mx-auto">
-    
-    <!-- 左侧：酷炫饼图 -->
     <div class="relative group cursor-default">
-      <!-- Glow Effect Layer (Behind) -->
       <div class="absolute inset-0 bg-pink-500/20 rounded-full blur-3xl transform scale-75 opacity-50 group-hover:opacity-80 transition-opacity duration-1000"></div>
-      
+
       <div class="relative w-64 h-64 md:w-80 md:h-80 transition-transform duration-500 hover:scale-105">
         <svg class="w-full h-full transform -rotate-90 drop-shadow-2xl" viewBox="0 0 100 100">
-          <!-- Definitions for Gradients and Filters -->
           <defs>
-            <filter id="glow-shadow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-              <feMerge>
-                <feMergeNode in="coloredBlur"/>
-                <feMergeNode in="SourceGraphic"/>
-              </feMerge>
-            </filter>
-            
-            <linearGradient v-for="seg in rawData" :key="`grad-${seg.id}`" :id="`grad-${seg.id}`" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" :stop-color="seg.startColor" />
-              <stop offset="100%" :stop-color="seg.endColor" />
+            <linearGradient v-for="segment in rawData" :key="`grad-${segment.id}`" :id="`grad-${segment.id}`" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" :stop-color="segment.startColor" />
+              <stop offset="100%" :stop-color="segment.endColor" />
             </linearGradient>
           </defs>
-          
-          <!-- Background Track -->
+
+          <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" class="dark:stroke-white/5" stroke-width="8" />
+
           <circle
-            cx="50" cy="50" r="40"
+            v-for="(segment, index) in segments"
+            :key="segment.id"
+            cx="50"
+            cy="50"
+            r="40"
             fill="none"
-            stroke="#e5e7eb"
-            class="dark:stroke-white/5"
-            stroke-width="8"
-          />
-          
-          <!-- Segments -->
-          <!-- Using stroke-width transition for hover effect -->
-          <circle
-            v-for="(seg, index) in segments"
-            :key="seg.id"
-            cx="50" cy="50" r="40"
-            fill="none"
-            :stroke="`url(#grad-${seg.id})`"
-            :stroke-width="hoveredSegmentId === seg.id ? 10 : 8"
+            :stroke="`url(#grad-${segment.id})`"
+            :stroke-width="hoveredSegmentId === segment.id ? 10 : 8"
             stroke-linecap="round"
-            :stroke-dasharray="seg.strokeDasharray"
-            :stroke-dashoffset="seg.strokeDashoffset"
+            :stroke-dasharray="segment.strokeDasharray"
+            :stroke-dashoffset="segment.strokeDashoffset"
             class="transition-all duration-300 cursor-pointer"
-            :class="{ 'opacity-30': hoveredSegmentId && hoveredSegmentId !== seg.id }"
-            @mouseenter="hoveredSegmentId = seg.id"
+            :class="{ 'opacity-30': hoveredSegmentId && hoveredSegmentId !== segment.id }"
+            @mouseenter="hoveredSegmentId = segment.id"
             @mouseleave="hoveredSegmentId = null"
             style="transform-origin: 50px 50px;"
           >
-            <!-- CSS Animation for initial draw -->
-            <animate attributeName="stroke-dashoffset" 
-              :from="seg.strokeDashoffset + 251.2" 
-              :to="seg.strokeDashoffset" 
-              dur="1s" 
-              calcMode="spline" 
-              keySplines="0.16 1 0.3 1"
-              fill="freeze" 
-              :begin="`${index * 0.1}s`"
-            />
+            <animate attributeName="stroke-dashoffset" :from="segment.strokeDashoffset + 251.2" :to="segment.strokeDashoffset" dur="1s" calcMode="spline" keySplines="0.16 1 0.3 1" fill="freeze" :begin="`${index * 0.1}s`" />
           </circle>
         </svg>
 
-        <!-- Center Info -->
         <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
           <div class="text-center">
             <span class="block text-4xl md:text-5xl font-black text-gray-900 dark:text-white tracking-tighter tabular-nums">
               {{ animatedLosslessPercent.toFixed(1) }}<span class="text-xl md:text-2xl text-pink-500">%</span>
             </span>
-            <span class="text-xs md:text-sm font-bold text-gray-400 uppercase tracking-widest mt-1">无损占比</span>
+            <span class="text-xs md:text-sm font-bold text-gray-400 uppercase tracking-widest mt-1">{{ TEXT.losslessRate }}</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 右侧：交互式图例 -->
     <div class="flex flex-col gap-4 min-w-[200px] w-full max-w-xs">
-      <div 
-        v-for="(seg, index) in segments" 
-        :key="seg.id"
+      <div
+        v-for="(segment, index) in segments"
+        :key="segment.id"
         class="group/item relative p-3 rounded-xl transition-all duration-300 cursor-pointer overflow-hidden border border-transparent animate-slide-in"
-        :class="[
-           hoveredSegmentId === seg.id ? 'bg-gray-100/80 dark:bg-white/10 border-gray-200 dark:border-white/10 scale-105' : 'hover:bg-gray-50 dark:hover:bg-white/5'
-        ]"
-        @mouseenter="hoveredSegmentId = seg.id"
+        :class="[hoveredSegmentId === segment.id ? 'bg-gray-100/80 dark:bg-white/10 border-gray-200 dark:border-white/10 scale-105' : 'hover:bg-gray-50 dark:hover:bg-white/5']"
+        @mouseenter="hoveredSegmentId = segment.id"
         @mouseleave="hoveredSegmentId = null"
         :style="{ animationDelay: `${0.5 + index * 0.1}s` }"
       >
-        <!-- Background Progress Bar (subtle) -->
-        <div 
-          class="absolute bottom-0 left-0 h-1 transition-all duration-1000 ease-out opacity-20 dark:opacity-40"
-          :class="seg.bgClass"
-          :style="{ width: hoveredSegmentId === seg.id ? '100%' : '0%' }"
-        ></div>
+        <div class="absolute bottom-0 left-0 h-1 transition-all duration-1000 ease-out opacity-20 dark:opacity-40" :class="segment.bgClass" :style="{ width: hoveredSegmentId === segment.id ? '100%' : '0%' }"></div>
 
         <div class="flex items-center justify-between mb-1">
           <div class="flex items-center gap-3">
-             <!-- Icon / Dot -->
-            <div class="w-3 h-3 rounded-full shadow-lg" :class="seg.bgClass" :style="{ boxShadow: `0 0 10px ${seg.shadowColor}` }"></div>
-            <span class="font-bold text-gray-700 dark:text-gray-200">{{ seg.name }}</span>
-            <span class="text-[10px] text-gray-400 border border-gray-200 dark:border-white/10 px-1 rounded">{{ seg.label }}</span>
+            <div class="w-3 h-3 rounded-full shadow-lg" :class="segment.bgClass" :style="{ boxShadow: `0 0 10px ${segment.shadowColor}` }"></div>
+            <span class="font-bold text-gray-700 dark:text-gray-200">{{ segment.name }}</span>
+            <span class="text-[10px] text-gray-400 border border-gray-200 dark:border-white/10 px-1 rounded">{{ segment.label }}</span>
           </div>
-          <span class="font-mono font-medium text-gray-900 dark:text-white tabular-nums">
-            {{ seg.value.toLocaleString() }}
-          </span>
-        </div>
-        
-        <!-- Progress Bar Visual inside legend -->
-        <div class="w-full h-1.5 bg-gray-100 dark:bg-white/10 rounded-full mt-2 overflow-hidden">
-          <div 
-            class="h-full rounded-full transition-all duration-1000 ease-out"
-            :class="seg.bgClass"
-            :style="{ width: `${seg.percentage}%` }"
-          ></div>
-        </div>
-        
-        <div class="flex justify-end mt-1">
-             <span class="text-xs text-gray-400 font-medium">{{ seg.displayPercentage }}%</span>
+          <span class="font-mono font-medium text-gray-900 dark:text-white tabular-nums">{{ segment.value.toLocaleString() }}</span>
         </div>
 
+        <div class="w-full h-1.5 bg-gray-100 dark:bg-white/10 rounded-full mt-2 overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-1000 ease-out" :class="segment.bgClass" :style="{ width: `${segment.percentage}%` }"></div>
+        </div>
+
+        <div class="flex justify-end mt-1">
+          <span class="text-xs text-gray-400 font-medium">{{ segment.displayPercentage }}%</span>
+        </div>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -281,10 +174,10 @@ const animatedLosslessPercent = useAnimatedNumber(losslessPercentRaw.value, 2000
     opacity: 0;
     transform: translateX(20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
   }
 }
 </style>
-

@@ -215,9 +215,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="w-[300px] h-full relative select-none overflow-hidden bg-transparent" @mouseenter="onMouseEnter" @mouseleave="onMouseLeave">
-    <div class="h-[75px] shrink-0 relative">
-      <div class="h-[45px] w-full bg-white dark:bg-gray-900 flex relative" data-tauri-drag-region>
+  <div class="w-[300px] h-full relative select-none overflow-hidden bg-transparent !border-none !outline-none !ring-0 !shadow-none" @mouseenter="onMouseEnter" @mouseleave="onMouseLeave">
+    <div class="h-[75px] shrink-0 relative overflow-hidden border-0 border-transparent">
+      <div class="h-[45px] w-full bg-white dark:bg-gray-900 flex relative border-0" data-tauri-drag-region>
         <div class="w-[45px] h-[45px] shrink-0 relative overflow-hidden" @mouseenter="isCoverHovering = true" @mouseleave="isCoverHovering = false" data-tauri-drag-region>
           <img v-if="localCoverUrl" :src="localCoverUrl" class="w-full h-full object-cover pointer-events-none" />
           <div v-else class="w-full h-full bg-gray-200 dark:bg-gray-800 flex items-center justify-center text-gray-400 pointer-events-none">
@@ -319,7 +319,7 @@ onUnmounted(() => {
 
       <transition name="slide-up">
         <div v-if="isCoverHovering && currentSong && !showMiniPlaylist" class="w-full flex justify-center pointer-events-none mt-1 z-40">
-          <div class="px-3 py-1 bg-black/70 backdrop-blur-md rounded-lg text-white/90 text-xs font-medium max-w-[90%] truncate shadow-md border border-white/10">
+          <div class="px-3 py-1 bg-black/80 backdrop-blur-md rounded-lg text-white/90 text-xs font-medium max-w-[95%] truncate border border-white/10">
             {{ currentSong.title || currentSong.name }} - {{ currentSong.artist }}
           </div>
         </div>

@@ -9,10 +9,10 @@ const Albums = () => import('../views/Albums.vue');
 const Settings = () => import('../views/Settings.vue'); 
 
 const routes: Array<RouteRecordRaw> = [
-  { path: '/', name: 'Home', component: Home },
+  { path: '/', name: 'Home', component: Home, meta: { keepAlive: true } },
   { path: '/favorites', name: 'Favorites', component: Favorites },
   { path: '/recent', name: 'Recent', component: Recent },
-  { path: '/artists', name: 'Artists', component: Artists },
+  { path: '/artists', name: 'Artists', component: Artists }, 
   { path: '/albums', name: 'Albums', component: Albums },
   { path: '/settings', name: 'Settings', component: Settings },
 ];

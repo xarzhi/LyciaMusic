@@ -59,7 +59,11 @@ pub enum AudioCommand {
     Play(String),
     Pause,
     Resume,
-    Seek(u32, bool),
+    Seek {
+        time: f64,
+        is_playing: bool,
+        request_id: u64,
+    },
     SetVolume(f32),
     SetDevice(String),
 }
@@ -74,6 +78,12 @@ pub struct PlayerState {
 pub struct AudioDevice {
     id: String,
     name: String,
+}
+
+#[derive(Serialize, Clone)]
+struct SeekCompletedPayload {
+    request_id: u64,
+    time: f64,
 }
 
 #[tauri::command]
@@ -242,8 +252,13 @@ pub fn init_player(app: &AppHandle) -> PlayerState {
                         sink.play();
                     }
                 }
-                AudioCommand::Seek(time, is_playing) => {
-                    let jump_target = Duration::from_secs(time as u64);
+                AudioCommand::Seek {
+                    time,
+                    is_playing,
+                    request_id,
+                } => {
+                    let clamped_time = time.max(0.0);
+                    let jump_target = Duration::from_secs_f64(clamped_time);
                     is_playing_flag = is_playing;
 
                     // 🚀 使用 rodio 0.20 的 try_seek 快速定位
@@ -253,7 +268,8 @@ pub fn init_player(app: &AppHandle) -> PlayerState {
                             // 更新进度跟踪
                             let rate = thread_progress.sample_rate.load(Ordering::Relaxed);
                             let channels = thread_progress.channels.load(Ordering::Relaxed);
-                            let samples_at_target = time as u64 * rate as u64 * channels as u64;
+                            let samples_at_target =
+                                (clamped_time * rate as f64 * channels as f64).round() as u64;
                             thread_progress
                                 .samples_played
                                 .store(samples_at_target, Ordering::Relaxed);
@@ -277,7 +293,9 @@ pub fn init_player(app: &AppHandle) -> PlayerState {
                                             let rate = source.sample_rate();
                                             let channels = source.channels();
                                             let samples_to_skip =
-                                                time as u64 * rate as u64 * channels as u64;
+                                                (clamped_time * rate as f64 * channels as f64)
+                                                    .round()
+                                                    as u64;
                                             thread_progress
                                                 .samples_played
                                                 .store(samples_to_skip, Ordering::Relaxed);
@@ -305,7 +323,13 @@ pub fn init_player(app: &AppHandle) -> PlayerState {
                         }
                     }
                     // Seek 完成后发送事件通知前端
-                    let _ = thread_app_handle.emit("seek_completed", time);
+                    let _ = thread_app_handle.emit(
+                        "seek_completed",
+                        SeekCompletedPayload {
+                            request_id,
+                            time: clamped_time,
+                        },
+                    );
                 }
                 AudioCommand::SetVolume(vol) => {
                     current_volume = vol;
@@ -437,22 +461,28 @@ pub fn resume_audio(state: tauri::State<PlayerState>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn seek_audio(
-    time: u32,
+    time: f64,
     is_playing: bool,
+    request_id: u64,
     state: tauri::State<PlayerState>,
 ) -> Result<(), String> {
     let tx = state.tx.lock().map_err(|e| e.to_string())?;
-    tx.send(AudioCommand::Seek(time, is_playing))
-        .map_err(|e| e.to_string())?;
+    tx.send(AudioCommand::Seek {
+        time,
+        is_playing,
+        request_id,
+    })
+    .map_err(|e| e.to_string())?;
     if let Ok(mut controls) = state.controls.lock() {
         if let Some(mc) = controls.as_mut() {
+            let progress = MediaPosition(Duration::from_secs_f64(time.max(0.0)));
             if is_playing {
                 let _ = mc.set_playback(MediaPlayback::Playing {
-                    progress: Some(MediaPosition(Duration::from_secs(time as u64))),
+                    progress: Some(progress),
                 });
             } else {
                 let _ = mc.set_playback(MediaPlayback::Paused {
-                    progress: Some(MediaPosition(Duration::from_secs(time as u64))),
+                    progress: Some(progress),
                 });
             }
         }

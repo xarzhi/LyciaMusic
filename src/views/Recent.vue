@@ -80,8 +80,9 @@ const {
   displaySongList, 
   playSong, 
   addSongsToPlaylist,
+  removeFromHistory,
+  clearHistory,
   switchToRecent,
-  recentSongs,
   currentViewMode
 } = usePlayer();
 
@@ -134,9 +135,9 @@ const handleBatchPlay = () => {
 };
 
 // 批量删除（从最近播放移除）
-const executeBatchDelete = () => {
+const executeBatchDelete = async () => {
   const newPathSet = new Set(selectedPaths.value);
-  recentSongs.value = recentSongs.value.filter((r: any) => !newPathSet.has(r.song.path));
+  await removeFromHistory(Array.from(newPathSet));
   selectedPaths.value.clear();
   showConfirm.value = false;
 };
@@ -156,8 +157,8 @@ const executeConfirmAction = async () => {
 // 清空历史
 const handleClearHistory = () => {
   confirmMessage.value = "确定要清空所有播放记录吗？";
-  confirmAction.value = () => {
-    recentSongs.value = [];
+  confirmAction.value = async () => {
+    await clearHistory();
     showConfirm.value = false;
   };
   showConfirm.value = true;

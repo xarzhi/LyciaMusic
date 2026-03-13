@@ -320,12 +320,7 @@ const { coverCache, loadingSet, preloadCovers } = useCoverCache();
 const localViewMode = ref(currentViewMode.value);
 const localFilterCondition = ref(filterCondition.value);
 
-const localSongList = ref<Song[]>([]);
-watch(displaySongList, (newVal) => {
-  if (currentViewMode.value === localViewMode.value) {
-    localSongList.value = newVal;
-  }
-}, { immediate: true });
+const localSongList = computed(() => displaySongList.value);
 
 const selectedAlbumSong = computed(() => localSongList.value[0] || null);
 const songHasArtistName = (song: Song, artistName: string) =>

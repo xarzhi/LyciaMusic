@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { usePlayer, Song } from '../composables/player';
 import { useToast } from '../composables/toast';
@@ -82,16 +82,10 @@ const {
   addSongsToPlaylist,
   removeFromHistory,
   clearHistory,
-  switchToRecent,
-  currentViewMode
+  switchToRecent
 } = usePlayer();
 
-const localSongList = ref<Song[]>([]);
-watch(displaySongList, (newVal) => {
-  if (currentViewMode.value === 'recent') {
-    localSongList.value = newVal;
-  }
-}, { immediate: true });
+const localSongList = computed(() => displaySongList.value);
 
 // ========== 状态管理 ==========
 const isBatchMode = ref(false);

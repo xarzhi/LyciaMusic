@@ -47,6 +47,19 @@ interface SeekCompletedPayload {
   time: number;
 }
 
+interface LibraryScanBatchPayload {
+  songs: State.Song[];
+  deleted_paths: string[];
+  folder_path: string;
+  folder_index: number;
+  folder_total: number;
+}
+
+interface LibraryScanProgressPayload {
+  done: boolean;
+  failed: boolean;
+}
+
 
 
 // 🟢 辅助函数：判断是否为直属父目录 (非递归)
@@ -217,6 +230,70 @@ const resolveSongsFromPaths = (paths: string[], fallbackSongs: State.Song[] = []
     .filter((song): song is State.Song => !!song);
 };
 
+const LIBRARY_SCAN_BATCH_FLUSH_MS = 120;
+let libraryScanBatchFlushTimer: ReturnType<typeof setTimeout> | null = null;
+const pendingLibraryScanSongs = new Map<string, State.Song>();
+const pendingLibraryScanDeletedPaths = new Set<string>();
+const pendingLibraryScanFallbackSongs = new Map<string, State.Song>();
+
+const flushBufferedLibraryScanBatch = () => {
+  if (libraryScanBatchFlushTimer) {
+    clearTimeout(libraryScanBatchFlushTimer);
+    libraryScanBatchFlushTimer = null;
+  }
+
+  if (pendingLibraryScanSongs.size === 0 && pendingLibraryScanDeletedPaths.size === 0) {
+    pendingLibraryScanFallbackSongs.clear();
+    return;
+  }
+
+  const merged = new Map<string, State.Song>();
+  for (const song of State.librarySongs.value) {
+    if (!pendingLibraryScanDeletedPaths.has(song.path)) {
+      merged.set(song.path, song);
+    }
+  }
+
+  for (const [path, song] of pendingLibraryScanSongs) {
+    if (!pendingLibraryScanDeletedPaths.has(path)) {
+      merged.set(path, song);
+    }
+  }
+
+  State.librarySongs.value = Array.from(merged.values());
+  refreshStateSongReferences(Array.from(pendingLibraryScanFallbackSongs.values()));
+
+  pendingLibraryScanSongs.clear();
+  pendingLibraryScanDeletedPaths.clear();
+  pendingLibraryScanFallbackSongs.clear();
+};
+
+const scheduleLibraryScanBatchFlush = () => {
+  if (libraryScanBatchFlushTimer) return;
+  libraryScanBatchFlushTimer = setTimeout(() => {
+    flushBufferedLibraryScanBatch();
+  }, LIBRARY_SCAN_BATCH_FLUSH_MS);
+};
+
+const applyLibraryScanBatch = (payload: LibraryScanBatchPayload) => {
+  const incomingSongs = Array.isArray(payload.songs) ? payload.songs : [];
+
+  for (const deletedPath of payload.deleted_paths ?? []) {
+    pendingLibraryScanDeletedPaths.add(deletedPath);
+    pendingLibraryScanSongs.delete(deletedPath);
+    pendingLibraryScanFallbackSongs.delete(deletedPath);
+  }
+
+  for (const song of incomingSongs) {
+    if (!song?.path) continue;
+    pendingLibraryScanDeletedPaths.delete(song.path);
+    pendingLibraryScanSongs.set(song.path, song);
+    pendingLibraryScanFallbackSongs.set(song.path, song);
+  }
+
+  scheduleLibraryScanBatchFlush();
+};
+
 const refreshStateSongReferences = (fallbackSongs: State.Song[] = []) => {
   const lookup = createSongLookup([
     ...fallbackSongs,
@@ -318,6 +395,7 @@ export function usePlayer() {
 
   async function loadLibrarySongsFromCache() {
     try {
+      flushBufferedLibraryScanBatch();
       const songs = await invoke<State.Song[]>('get_library_songs_cached');
       State.librarySongs.value = songs;
       refreshStateSongReferences(songs);
@@ -768,6 +846,7 @@ export function usePlayer() {
 
     libraryRefreshPromise = (async () => {
       try {
+        flushBufferedLibraryScanBatch();
         const songs = await invoke<State.Song[]>('scan_library');
         State.librarySongs.value = songs;
         refreshStateSongReferences(songs);
@@ -2221,6 +2300,14 @@ export function usePlayer() {
     listen('player:pause', () => { if (State.isPlaying.value) togglePlay(); });
     listen('player:next', () => { nextSong(); });
     listen('player:prev', () => { prevSong(); });
+    listen<LibraryScanBatchPayload>('library-scan-batch', (event) => {
+      applyLibraryScanBatch(event.payload);
+    });
+    listen<LibraryScanProgressPayload>('library-scan-progress', (event) => {
+      if (event.payload.done) {
+        flushBufferedLibraryScanBatch();
+      }
+    });
 
     // 🟢 监听 seek_completed 事件，恢复同步
     listen<SeekCompletedPayload>('seek_completed', (e) => {
@@ -2487,6 +2574,13 @@ export function usePlayer() {
     onScopeDispose(() => {
       cancelRestoreState();
       if (persistTimer) clearTimeout(persistTimer);
+      if (libraryScanBatchFlushTimer) {
+        clearTimeout(libraryScanBatchFlushTimer);
+        libraryScanBatchFlushTimer = null;
+      }
+      pendingLibraryScanSongs.clear();
+      pendingLibraryScanDeletedPaths.clear();
+      pendingLibraryScanFallbackSongs.clear();
     });
   }
 

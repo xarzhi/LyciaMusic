@@ -1,32 +1,37 @@
 // music/scanner.rs - 扫描逻辑
 
-use super::tags::{extract_text_metadata, read_tagged_file_from_path};
+use super::tags::{extract_text_metadata, read_tagged_file_from_path_for_scan};
 use super::types::{FolderNode, GeneratedFolder, Song};
 use super::utils::{descendant_like_patterns, is_supported_library_extension, normalize_path};
 use crate::database::DbState;
 use lofty::file::FileType;
 use lofty::prelude::*;
-use lofty::probe::Probe;
+use rayon::prelude::*;
 use regex::Regex;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, params_from_iter, OptionalExtension};
+use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::File;
-use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
 use symphonia::core::codecs::CODEC_TYPE_NULL;
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::MetadataOptions;
+use symphonia::core::meta::{Limit, MetadataOptions};
 use symphonia::core::probe::Hint;
 use symphonia::core::units::TimeBase;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use walkdir::WalkDir;
 
 const VARIOUS_ARTISTS: &str = "Various Artists";
 const VARIOUS_ARTISTS_THRESHOLD: usize = 5;
+const PROGRESS_EMIT_INTERVAL_MS: u64 = 200;
+const DB_PROGRESS_BATCH: usize = 100;
+const LIBRARY_SCAN_PROGRESS_EVENT: &str = "library-scan-progress";
+const LIBRARY_SCAN_BATCH_EVENT: &str = "library-scan-batch";
 
 const UNKNOWN_ARTIST: &str = "未知歌手";
 const UNKNOWN_ALBUM: &str = "未知专辑";
@@ -44,6 +49,63 @@ struct ScanDiff {
     to_update: Vec<Song>,
     to_delete: Vec<String>,
     has_disk_songs: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct ScanProgressPayload {
+    phase: &'static str,
+    current: usize,
+    total: usize,
+    folder_path: String,
+    folder_index: usize,
+    folder_total: usize,
+    message: Option<String>,
+    done: bool,
+    failed: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct ScanBatchPayload {
+    songs: Vec<Song>,
+    deleted_paths: Vec<String>,
+    folder_path: String,
+    folder_index: usize,
+    folder_total: usize,
+}
+
+#[derive(Clone)]
+struct ScanProgressReporter {
+    app: AppHandle,
+    folder_path: String,
+    folder_index: usize,
+    folder_total: usize,
+    parse_processed: Arc<AtomicUsize>,
+    last_emit_ms: Arc<AtomicU64>,
+}
+
+struct DiskCandidate {
+    index: usize,
+    path: PathBuf,
+    path_str: String,
+    ext: String,
+    disk_mtime: Option<i64>,
+    disk_size: i64,
+}
+
+struct ParseTask {
+    index: usize,
+    path: PathBuf,
+    path_str: String,
+    ext: String,
+    is_add: bool,
+}
+
+struct ParsedTaskResult {
+    index: usize,
+    song: Song,
+    is_add: bool,
 }
 
 #[derive(Default)]
@@ -230,6 +292,166 @@ fn song_metadata_incomplete(song: &Song) -> bool {
         || song.duration == 0
 }
 
+fn song_identity_missing(song: &Song) -> bool {
+    song.format.trim().is_empty()
+        && song
+            .container
+            .as_deref()
+            .map(|v| v.trim().is_empty())
+            .unwrap_or(true)
+}
+
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64
+}
+
+fn preferred_parse_workers(task_count: usize) -> usize {
+    if task_count <= 1 {
+        return 1;
+    }
+
+    let available = std::thread::available_parallelism()
+        .map(|value| value.get())
+        .unwrap_or(4);
+
+    preferred_parse_workers_for_available(task_count, available)
+}
+
+fn preferred_parse_workers_for_available(task_count: usize, available: usize) -> usize {
+    if task_count <= 1 {
+        return 1;
+    }
+
+    let reserved = if available <= 8 { 1 } else { 2 };
+    let usable = available.saturating_sub(reserved).max(1);
+
+    task_count.min(usable).max(1)
+}
+
+impl ScanProgressReporter {
+    fn new(app: AppHandle, folder_path: String, folder_index: usize, folder_total: usize) -> Self {
+        Self {
+            app,
+            folder_path,
+            folder_index,
+            folder_total,
+            parse_processed: Arc::new(AtomicUsize::new(0)),
+            last_emit_ms: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    fn emit(
+        &self,
+        phase: &'static str,
+        current: usize,
+        total: usize,
+        message: Option<String>,
+        done: bool,
+        failed: bool,
+    ) {
+        let _ = self.app.emit(
+            LIBRARY_SCAN_PROGRESS_EVENT,
+            ScanProgressPayload {
+                phase,
+                current,
+                total,
+                folder_path: self.folder_path.clone(),
+                folder_index: self.folder_index,
+                folder_total: self.folder_total,
+                message,
+                done,
+                failed,
+            },
+        );
+    }
+
+    fn emit_collecting(&self, current: usize, total: usize, message: Option<String>) {
+        self.emit("collecting", current, total, message, false, false);
+    }
+
+    fn start_parsing(&self, total: usize) {
+        self.parse_processed.store(0, Ordering::Relaxed);
+        self.last_emit_ms.store(0, Ordering::Relaxed);
+        self.emit(
+            "parsing",
+            0,
+            total,
+            Some(format!("正在解析 {} 首歌曲", total)),
+            false,
+            false,
+        );
+    }
+
+    fn advance_parsing(&self, total: usize) {
+        let processed = self.parse_processed.fetch_add(1, Ordering::Relaxed) + 1;
+        let now = now_millis();
+        let last = self.last_emit_ms.load(Ordering::Relaxed);
+        let should_emit = processed == total
+            || processed == 1
+            || processed % 25 == 0
+            || now.saturating_sub(last) >= PROGRESS_EMIT_INTERVAL_MS;
+
+        if should_emit {
+            self.last_emit_ms.store(now, Ordering::Relaxed);
+            self.emit(
+                "parsing",
+                processed,
+                total,
+                Some(format!("已解析 {processed}/{total} 首歌曲")),
+                false,
+                false,
+            );
+        }
+    }
+
+    fn emit_writing(&self, current: usize, total: usize) {
+        self.emit(
+            "writing",
+            current,
+            total,
+            Some(format!("正在写入数据库 {current}/{total}")),
+            false,
+            false,
+        );
+    }
+
+    fn emit_complete(&self, total_songs: usize) {
+        self.emit(
+            "complete",
+            total_songs,
+            total_songs,
+            Some(format!("已完成扫描，共 {} 首歌曲", total_songs)),
+            true,
+            false,
+        );
+    }
+
+    fn emit_error(&self, message: String) {
+        self.emit("error", 0, 0, Some(message), true, true);
+    }
+
+    fn emit_batch(&self, songs: Vec<Song>, deleted_paths: Vec<String>) {
+        if songs.is_empty() && deleted_paths.is_empty() {
+            return;
+        }
+
+        let _ = self.app.emit(
+            LIBRARY_SCAN_BATCH_EVENT,
+            ScanBatchPayload {
+                songs,
+                deleted_paths,
+                folder_path: self.folder_path.clone(),
+                folder_index: self.folder_index,
+                folder_total: self.folder_total,
+            },
+        );
+    }
+}
+
 /// 从文件解析歌曲信息
 fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Song> {
     let mut artist = String::from("未知歌手");
@@ -242,7 +464,8 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
     let mut bit_depth: Option<u8> = None;
     let mut file_size = 0u64;
     let mut file_modified_at: Option<u64> = None;
-    let identity = detect_audio_identity(path, format);
+    let mut container = Some(normalize_container_from_extension(format));
+    let mut codec = None;
 
     if let Ok(meta) = fs::metadata(path) {
         file_size = meta.len();
@@ -254,12 +477,13 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
         }
     }
 
-    if let Ok(tagged_file) = read_tagged_file_from_path(path).map_err(|e| e.to_string()) {
+    if let Ok(tagged_file) = read_tagged_file_from_path_for_scan(path).map_err(|e| e.to_string()) {
         let props = tagged_file.properties();
         duration = props.duration().as_secs() as u32;
         bitrate = props.audio_bitrate().unwrap_or(0);
         sample_rate = props.sample_rate().unwrap_or(0);
         bit_depth = props.bit_depth().map(|b| b as u8);
+        container = Some(normalize_container(tagged_file.file_type()).to_string());
 
         fill_text_fields_from_tags(
             &tagged_file,
@@ -270,14 +494,26 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
         );
     }
 
-    if duration == 0 {
-        duration = identity.duration_seconds.unwrap_or(0);
-    }
-    if sample_rate == 0 {
-        sample_rate = identity.sample_rate.unwrap_or(0);
-    }
-    if bit_depth.is_none() {
-        bit_depth = identity.bit_depth;
+    if duration == 0 || sample_rate == 0 || bit_depth.is_none() {
+        let identity = detect_audio_identity(path, format);
+
+        if duration == 0 {
+            duration = identity.duration_seconds.unwrap_or(0);
+        }
+        if sample_rate == 0 {
+            sample_rate = identity.sample_rate.unwrap_or(0);
+        }
+        if bit_depth.is_none() {
+            bit_depth = identity.bit_depth;
+        }
+        if container
+            .as_deref()
+            .map(|value| value.trim().is_empty())
+            .unwrap_or(true)
+        {
+            container = identity.container;
+        }
+        codec = identity.codec;
     }
     if bitrate == 0 {
         bitrate = derive_bitrate_kbps(file_size, duration);
@@ -311,8 +547,8 @@ fn parse_song_from_file(path: &Path, path_str: &str, format: &str) -> Option<Son
         sample_rate,
         bit_depth,
         format: format.to_string(),
-        container: identity.container,
-        codec: identity.codec,
+        container,
+        codec,
         file_size,
         added_at: Some(
             std::time::SystemTime::now()
@@ -377,12 +613,16 @@ fn normalize_container(file_type: FileType) -> &'static str {
     }
 }
 
-fn detect_container(path: &Path) -> Option<String> {
-    let file = File::open(path).ok()?;
-    let reader = BufReader::new(file);
-    let probe = Probe::new(reader).guess_file_type().ok()?;
-    let file_type = probe.file_type()?;
-    Some(normalize_container(file_type).to_string())
+fn normalize_container_from_extension(ext: &str) -> String {
+    match ext.to_ascii_lowercase().as_str() {
+        "aif" | "aiff" => "aiff".to_string(),
+        "m4a" | "m4b" | "m4p" | "mp4" => "mp4".to_string(),
+        "mp1" | "mp2" | "mp3" => "mpeg".to_string(),
+        "oga" | "ogg" | "opus" | "spx" | "speex" | "vorbis" => "ogg".to_string(),
+        "wav" | "wave" => "wav".to_string(),
+        "wv" => "wavpack".to_string(),
+        other => other.to_string(),
+    }
 }
 
 fn normalize_codec(short_name: &str) -> String {
@@ -396,35 +636,15 @@ fn normalize_codec(short_name: &str) -> String {
     }
 }
 
-fn detect_codec(path: &Path, ext: &str) -> Option<String> {
-    let file = File::open(path).ok()?;
-    let mss = MediaSourceStream::new(Box::new(file), Default::default());
-    let mut hint = Hint::new();
-    hint.with_extension(ext);
-
-    let probed = symphonia::default::get_probe()
-        .format(
-            &hint,
-            mss,
-            &FormatOptions::default(),
-            &MetadataOptions::default(),
-        )
-        .ok()?;
-
-    let track = probed
-        .format
-        .tracks()
-        .iter()
-        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)?;
-
-    let descriptor = symphonia::default::get_codecs().get_codec(track.codec_params.codec)?;
-    Some(normalize_codec(descriptor.short_name))
-}
-
-fn detect_stream_details(path: &Path, ext: &str) -> (Option<u32>, Option<u32>, Option<u8>) {
+fn detect_audio_identity(path: &Path, ext: &str) -> AudioIdentity {
     let file = match File::open(path) {
         Ok(file) => file,
-        Err(_) => return (None, None, None),
+        Err(_) => {
+            return AudioIdentity {
+                container: Some(normalize_container_from_extension(ext)),
+                ..Default::default()
+            };
+        }
     };
 
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -435,10 +655,18 @@ fn detect_stream_details(path: &Path, ext: &str) -> (Option<u32>, Option<u32>, O
         &hint,
         mss,
         &FormatOptions::default(),
-        &MetadataOptions::default(),
+        &MetadataOptions {
+            limit_visual_bytes: Limit::Maximum(0),
+            ..Default::default()
+        },
     ) {
         Ok(probed) => probed,
-        Err(_) => return (None, None, None),
+        Err(_) => {
+            return AudioIdentity {
+                container: Some(normalize_container_from_extension(ext)),
+                ..Default::default()
+            };
+        }
     };
 
     let track = match probed
@@ -448,7 +676,12 @@ fn detect_stream_details(path: &Path, ext: &str) -> (Option<u32>, Option<u32>, O
         .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
     {
         Some(track) => track,
-        None => return (None, None, None),
+        None => {
+            return AudioIdentity {
+                container: Some(normalize_container_from_extension(ext)),
+                ..Default::default()
+            };
+        }
     };
 
     let duration_seconds = match (track.codec_params.time_base, track.codec_params.n_frames) {
@@ -463,19 +696,43 @@ fn detect_stream_details(path: &Path, ext: &str) -> (Option<u32>, Option<u32>, O
         .bits_per_sample
         .or(track.codec_params.bits_per_coded_sample)
         .and_then(|depth| u8::try_from(depth).ok());
-
-    (duration_seconds, sample_rate, bit_depth)
-}
-
-fn detect_audio_identity(path: &Path, ext: &str) -> AudioIdentity {
-    let (duration_seconds, sample_rate, bit_depth) = detect_stream_details(path, ext);
+    let codec = symphonia::default::get_codecs()
+        .get_codec(track.codec_params.codec)
+        .map(|descriptor| normalize_codec(descriptor.short_name));
 
     AudioIdentity {
-        container: detect_container(path),
-        codec: detect_codec(path, ext),
+        container: Some(normalize_container_from_extension(ext)),
+        codec,
         duration_seconds,
         sample_rate,
         bit_depth,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::preferred_parse_workers_for_available;
+
+    #[test]
+    fn parse_workers_return_one_for_single_task() {
+        assert_eq!(preferred_parse_workers_for_available(1, 32), 1);
+    }
+
+    #[test]
+    fn parse_workers_reserve_one_core_on_smaller_cpus() {
+        assert_eq!(preferred_parse_workers_for_available(10, 8), 7);
+        assert_eq!(preferred_parse_workers_for_available(10, 4), 3);
+    }
+
+    #[test]
+    fn parse_workers_reserve_two_cores_on_larger_cpus() {
+        assert_eq!(preferred_parse_workers_for_available(32, 16), 14);
+        assert_eq!(preferred_parse_workers_for_available(32, 24), 22);
+    }
+
+    #[test]
+    fn parse_workers_never_exceed_task_count() {
+        assert_eq!(preferred_parse_workers_for_available(3, 16), 3);
     }
 }
 
@@ -674,30 +931,20 @@ fn load_db_snapshot_for_folder(
     Ok(snapshot)
 }
 
-fn collect_scan_diff(
+fn collect_disk_candidates(
     normalized_folder: &str,
-    mut db_snapshot: HashMap<String, DbSongSnapshot>,
-) -> ScanDiff {
-    let mut songs: Vec<Song> = Vec::new();
-    let mut to_add: Vec<Song> = Vec::new();
-    let mut to_update: Vec<Song> = Vec::new();
-    let mut has_disk_songs = false;
+    reporter: Option<&ScanProgressReporter>,
+) -> Vec<DiskCandidate> {
+    let mut candidates = Vec::new();
+    let mut discovered = 0usize;
 
-    fn song_identity_missing(song: &Song) -> bool {
-        song.container
-            .as_deref()
-            .map(|v| v.trim().is_empty())
-            .unwrap_or(true)
-            || song
-                .codec
-                .as_deref()
-                .map(|v| v.trim().is_empty())
-                .unwrap_or(true)
+    if let Some(reporter) = reporter {
+        reporter.emit_collecting(0, 0, Some("正在扫描文件夹".to_string()));
     }
 
     for entry in WalkDir::new(normalized_folder)
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(|entry| entry.ok())
     {
         let path = entry.path();
         if !path.is_file() {
@@ -705,50 +952,154 @@ fn collect_scan_diff(
         }
 
         let ext = match path.extension() {
-            Some(e) => e.to_string_lossy().to_lowercase(),
+            Some(ext) => ext.to_string_lossy().to_lowercase(),
             None => continue,
         };
 
         if !is_supported_library_extension(&ext) {
             continue;
         }
-        has_disk_songs = true;
+
+        let metadata = match entry.metadata() {
+            Ok(metadata) => metadata,
+            Err(_) => continue,
+        };
 
         let raw_path_str = path.to_string_lossy().to_string();
         let path_str = normalize_path(&raw_path_str);
 
-        let (disk_mtime, disk_size) = match fs::metadata(path) {
-            Ok(meta) => {
-                let mtime = meta
-                    .modified()
-                    .ok()
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_secs() as i64);
-                let size = meta.len() as i64;
-                (mtime, size)
-            }
-            Err(_) => continue,
-        };
+        discovered += 1;
+        candidates.push(DiskCandidate {
+            index: candidates.len(),
+            path: path.to_path_buf(),
+            path_str,
+            ext,
+            disk_mtime: metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|duration| duration.as_secs() as i64),
+            disk_size: metadata.len() as i64,
+        });
 
-        if let Some(db_info) = db_snapshot.remove(&path_str) {
-            if db_info.file_modified_at != disk_mtime
-                || db_info.file_size != disk_size
-                || song_identity_missing(&db_info.song)
-                || song_metadata_incomplete(&db_info.song)
-            {
-                if let Some(song) = parse_song_from_file(path, &path_str, &ext) {
-                    to_update.push(song.clone());
-                    songs.push(song);
-                }
-            } else {
-                songs.push(db_info.song);
+        if let Some(reporter) = reporter {
+            if discovered == 1 || discovered % 200 == 0 {
+                reporter.emit_collecting(
+                    discovered,
+                    0,
+                    Some(format!("已发现 {} 首候选歌曲", discovered)),
+                );
             }
-        } else if let Some(song) = parse_song_from_file(path, &path_str, &ext) {
-            to_add.push(song.clone());
-            songs.push(song);
         }
     }
 
+    if let Some(reporter) = reporter {
+        reporter.emit_collecting(
+            candidates.len(),
+            candidates.len(),
+            Some(format!(
+                "已完成文件收集，共 {} 首候选歌曲",
+                candidates.len()
+            )),
+        );
+    }
+
+    candidates
+}
+
+fn parse_tasks_in_parallel(
+    tasks: Vec<ParseTask>,
+    reporter: Option<ScanProgressReporter>,
+) -> Result<Vec<ParsedTaskResult>, String> {
+    if tasks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let total = tasks.len();
+    let worker_count = preferred_parse_workers(total);
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(worker_count)
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let results = pool.install(|| {
+        tasks
+            .into_par_iter()
+            .filter_map(|task| {
+                let parsed = parse_song_from_file(&task.path, &task.path_str, &task.ext);
+
+                if let Some(reporter) = reporter.as_ref() {
+                    reporter.advance_parsing(total);
+                }
+
+                parsed.map(|song| ParsedTaskResult {
+                    index: task.index,
+                    song,
+                    is_add: task.is_add,
+                })
+            })
+            .collect()
+    });
+
+    Ok(results)
+}
+
+fn collect_scan_diff(
+    normalized_folder: &str,
+    mut db_snapshot: HashMap<String, DbSongSnapshot>,
+    reporter: Option<&ScanProgressReporter>,
+) -> Result<ScanDiff, String> {
+    let candidates = collect_disk_candidates(normalized_folder, reporter);
+    let has_disk_songs = !candidates.is_empty();
+    let mut songs_by_index: Vec<Option<Song>> = vec![None; candidates.len()];
+    let mut parse_tasks = Vec::new();
+
+    for candidate in &candidates {
+        if let Some(db_info) = db_snapshot.remove(&candidate.path_str) {
+            if db_info.file_modified_at != candidate.disk_mtime
+                || db_info.file_size != candidate.disk_size
+                || song_identity_missing(&db_info.song)
+                || song_metadata_incomplete(&db_info.song)
+            {
+                parse_tasks.push(ParseTask {
+                    index: candidate.index,
+                    path: candidate.path.clone(),
+                    path_str: candidate.path_str.clone(),
+                    ext: candidate.ext.clone(),
+                    is_add: false,
+                });
+            } else {
+                songs_by_index[candidate.index] = Some(db_info.song);
+            }
+        } else {
+            parse_tasks.push(ParseTask {
+                index: candidate.index,
+                path: candidate.path.clone(),
+                path_str: candidate.path_str.clone(),
+                ext: candidate.ext.clone(),
+                is_add: true,
+            });
+        }
+    }
+
+    if let Some(reporter) = reporter {
+        reporter.start_parsing(parse_tasks.len());
+    }
+
+    let parsed_results = parse_tasks_in_parallel(parse_tasks, reporter.cloned())?;
+    let mut to_add = Vec::new();
+    let mut to_update = Vec::new();
+
+    for result in parsed_results {
+        songs_by_index[result.index] = Some(result.song.clone());
+        if result.is_add {
+            to_add.push(result.song);
+        } else {
+            to_update.push(result.song);
+        }
+    }
+
+    let mut songs: Vec<Song> = songs_by_index.into_iter().flatten().collect();
     let to_delete: Vec<String> = db_snapshot.keys().cloned().collect();
 
     enrich_album_groups(&mut songs);
@@ -769,29 +1120,25 @@ fn collect_scan_diff(
         .map(|song| song_by_path.get(&song.path).cloned().unwrap_or(song))
         .collect();
 
-    ScanDiff {
+    Ok(ScanDiff {
         songs,
         to_add,
         to_update,
         to_delete,
         has_disk_songs,
-    }
+    })
 }
 
-fn get_song_id_by_path(
+fn ensure_artist_id(
     conn: &rusqlite::Transaction<'_>,
-    path: &str,
-) -> Result<Option<i64>, String> {
-    conn.query_row(
-        "SELECT id FROM songs WHERE path = ?1",
-        params![path],
-        |row| row.get(0),
-    )
-    .optional()
-    .map_err(|e| e.to_string())
-}
+    artist_cache: &mut HashMap<String, i64>,
+    artist_name: &str,
+) -> Result<i64, String> {
+    let cache_key = artist_name.to_lowercase();
+    if let Some(artist_id) = artist_cache.get(&cache_key) {
+        return Ok(*artist_id);
+    }
 
-fn ensure_artist_id(conn: &rusqlite::Transaction<'_>, artist_name: &str) -> Result<i64, String> {
     conn.execute(
         "INSERT INTO artists (name) VALUES (?1)
          ON CONFLICT(name) DO NOTHING",
@@ -799,108 +1146,148 @@ fn ensure_artist_id(conn: &rusqlite::Transaction<'_>, artist_name: &str) -> Resu
     )
     .map_err(|e| e.to_string())?;
 
-    conn.query_row(
-        "SELECT id FROM artists WHERE name = ?1 COLLATE NOCASE",
-        params![artist_name],
-        |row| row.get(0),
-    )
-    .map_err(|e| e.to_string())
-}
-
-fn sync_song_artists(
-    conn: &rusqlite::Transaction<'_>,
-    song_id: i64,
-    artist_names: &[String],
-) -> Result<(), String> {
-    conn.execute(
-        "DELETE FROM song_artists WHERE song_id = ?1",
-        params![song_id],
-    )
-    .map_err(|e| e.to_string())?;
-
-    let normalized_names = if artist_names.is_empty() {
-        vec![UNKNOWN_ARTIST.to_string()]
-    } else {
-        artist_names.to_vec()
-    };
-
-    for (sort_order, artist_name) in normalized_names.iter().enumerate() {
-        let artist_id = ensure_artist_id(conn, artist_name)?;
-        conn.execute(
-            "INSERT INTO song_artists (song_id, artist_id, sort_order)
-             VALUES (?1, ?2, ?3)",
-            params![song_id, artist_id, sort_order as i64],
+    let artist_id = conn
+        .query_row(
+            "SELECT id FROM artists WHERE name = ?1 COLLATE NOCASE",
+            params![artist_name],
+            |row| row.get(0),
         )
         .map_err(|e| e.to_string())?;
+
+    artist_cache.insert(cache_key, artist_id);
+    Ok(artist_id)
+}
+
+fn load_song_ids_by_paths(
+    conn: &rusqlite::Transaction<'_>,
+    paths: &[String],
+) -> Result<HashMap<String, i64>, String> {
+    if paths.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = vec!["?"; paths.len()].join(", ");
+    let sql = format!("SELECT path, id FROM songs WHERE path IN ({placeholders})");
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params_from_iter(paths.iter()), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut song_ids = HashMap::with_capacity(paths.len());
+    for row in rows.flatten() {
+        song_ids.insert(row.0, row.1);
+    }
+
+    Ok(song_ids)
+}
+
+fn sync_song_artists_batch(
+    conn: &rusqlite::Transaction<'_>,
+    songs: &[Song],
+    song_ids: &HashMap<String, i64>,
+    artist_cache: &mut HashMap<String, i64>,
+) -> Result<(), String> {
+    if songs.is_empty() || song_ids.is_empty() {
+        return Ok(());
+    }
+
+    let mut delete_stmt = conn
+        .prepare("DELETE FROM song_artists WHERE song_id = ?1")
+        .map_err(|e| e.to_string())?;
+    let mut insert_stmt = conn
+        .prepare(
+            "INSERT INTO song_artists (song_id, artist_id, sort_order)
+             VALUES (?1, ?2, ?3)",
+        )
+        .map_err(|e| e.to_string())?;
+
+    for song in songs {
+        let Some(song_id) = song_ids.get(&song.path).copied() else {
+            continue;
+        };
+
+        delete_stmt
+            .execute(params![song_id])
+            .map_err(|e| e.to_string())?;
+
+        let normalized_names = if song.artist_names.is_empty() {
+            vec![UNKNOWN_ARTIST.to_string()]
+        } else {
+            song.artist_names.clone()
+        };
+
+        for (sort_order, artist_name) in normalized_names.iter().enumerate() {
+            let artist_id = ensure_artist_id(conn, artist_cache, artist_name)?;
+            insert_stmt
+                .execute(params![song_id, artist_id, sort_order as i64])
+                .map_err(|e| e.to_string())?;
+        }
     }
 
     Ok(())
 }
 
-fn apply_scan_changes(
-    conn: &mut rusqlite::Connection,
-    to_add: &[Song],
-    to_update: &[Song],
-    to_delete: &[String],
-) -> Result<(), String> {
-    if to_add.is_empty() && to_update.is_empty() && to_delete.is_empty() {
+fn apply_insert_batch(conn: &mut rusqlite::Connection, songs: &[Song]) -> Result<(), String> {
+    if songs.is_empty() {
         return Ok(());
     }
 
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-
+    let mut artist_cache = HashMap::new();
     {
         let mut insert_stmt = tx
             .prepare(
                 "INSERT INTO songs (
-                    path,
-                    title,
-                    artist,
-                    artist_names,
-                    effective_artist_names,
-                    album,
-                    album_artist,
-                    album_key,
-                    is_various_artists_album,
-                    collapse_artist_credits,
-                    duration,
-                    cover_path,
-                    bitrate,
-                    sample_rate,
-                    bit_depth,
-                    format,
-                    container,
-                    codec,
-                    file_size,
-                    added_at,
-                    file_modified_at
-                 )
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
-                 ON CONFLICT(path) DO UPDATE SET
-                    title = excluded.title,
-                    artist = excluded.artist,
-                    artist_names = excluded.artist_names,
-                    effective_artist_names = excluded.effective_artist_names,
-                    album = excluded.album,
-                    album_artist = excluded.album_artist,
-                    album_key = excluded.album_key,
-                    is_various_artists_album = excluded.is_various_artists_album,
-                    collapse_artist_credits = excluded.collapse_artist_credits,
-                    duration = excluded.duration,
-                    cover_path = COALESCE(songs.cover_path, excluded.cover_path),
-                    bitrate = excluded.bitrate,
-                    sample_rate = excluded.sample_rate,
-                    bit_depth = excluded.bit_depth,
-                    format = excluded.format,
-                    container = excluded.container,
-                    codec = excluded.codec,
-                    file_size = excluded.file_size,
-                    added_at = COALESCE(songs.added_at, excluded.added_at),
-                    file_modified_at = excluded.file_modified_at",
+                path,
+                title,
+                artist,
+                artist_names,
+                effective_artist_names,
+                album,
+                album_artist,
+                album_key,
+                is_various_artists_album,
+                collapse_artist_credits,
+                duration,
+                cover_path,
+                bitrate,
+                sample_rate,
+                bit_depth,
+                format,
+                container,
+                codec,
+                file_size,
+                added_at,
+                file_modified_at
+             )
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+             ON CONFLICT(path) DO UPDATE SET
+                title = excluded.title,
+                artist = excluded.artist,
+                artist_names = excluded.artist_names,
+                effective_artist_names = excluded.effective_artist_names,
+                album = excluded.album,
+                album_artist = excluded.album_artist,
+                album_key = excluded.album_key,
+                is_various_artists_album = excluded.is_various_artists_album,
+                collapse_artist_credits = excluded.collapse_artist_credits,
+                duration = excluded.duration,
+                cover_path = COALESCE(songs.cover_path, excluded.cover_path),
+                bitrate = excluded.bitrate,
+                sample_rate = excluded.sample_rate,
+                bit_depth = excluded.bit_depth,
+                format = excluded.format,
+                container = excluded.container,
+                codec = excluded.codec,
+                file_size = excluded.file_size,
+                added_at = COALESCE(songs.added_at, excluded.added_at),
+                file_modified_at = excluded.file_modified_at",
             )
             .map_err(|e| e.to_string())?;
 
-        for song in to_add {
+        for song in songs {
             let file_size_i64 = u64_to_i64_saturated(song.file_size);
             let added_at_i64 = u64_opt_to_i64_saturated(song.added_at);
             let mtime_i64 = u64_opt_to_i64_saturated(song.file_modified_at);
@@ -931,40 +1318,50 @@ fn apply_scan_changes(
                     mtime_i64
                 ])
                 .map_err(|e| format!("insert failed for '{}': {}", song.path, e))?;
-
-            if let Some(song_id) = get_song_id_by_path(&tx, &song.path)? {
-                sync_song_artists(&tx, song_id, &song.artist_names)?;
-            }
         }
+
+        let song_paths: Vec<String> = songs.iter().map(|song| song.path.clone()).collect();
+        let song_ids = load_song_ids_by_paths(&tx, &song_paths)?;
+        sync_song_artists_batch(&tx, songs, &song_ids, &mut artist_cache)?;
     }
 
+    tx.commit().map_err(|e| e.to_string())
+}
+
+fn apply_update_batch(conn: &mut rusqlite::Connection, songs: &[Song]) -> Result<(), String> {
+    if songs.is_empty() {
+        return Ok(());
+    }
+
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let mut artist_cache = HashMap::new();
     {
         let mut update_stmt = tx
             .prepare(
                 "UPDATE songs
-                 SET title = ?1,
-                     artist = ?2,
-                     artist_names = ?3,
-                     effective_artist_names = ?4,
-                     album = ?5,
-                     album_artist = ?6,
-                     album_key = ?7,
-                     is_various_artists_album = ?8,
-                     collapse_artist_credits = ?9,
-                     duration = ?10,
-                     bitrate = ?11,
-                     sample_rate = ?12,
-                     bit_depth = ?13,
-                     format = ?14,
-                     container = ?15,
-                     codec = ?16,
-                     file_size = ?17,
-                     file_modified_at = ?18
-                 WHERE path = ?19",
+             SET title = ?1,
+                 artist = ?2,
+                 artist_names = ?3,
+                 effective_artist_names = ?4,
+                 album = ?5,
+                 album_artist = ?6,
+                 album_key = ?7,
+                 is_various_artists_album = ?8,
+                 collapse_artist_credits = ?9,
+                 duration = ?10,
+                 bitrate = ?11,
+                 sample_rate = ?12,
+                 bit_depth = ?13,
+                 format = ?14,
+                 container = ?15,
+                 codec = ?16,
+                 file_size = ?17,
+                 file_modified_at = ?18
+             WHERE path = ?19",
             )
             .map_err(|e| e.to_string())?;
 
-        for song in to_update {
+        for song in songs {
             let file_size_i64 = u64_to_i64_saturated(song.file_size);
             let mtime_i64 = u64_opt_to_i64_saturated(song.file_modified_at);
             let artist_names_json = serialize_string_list(&song.artist_names)?;
@@ -992,32 +1389,94 @@ fn apply_scan_changes(
                     &song.path
                 ])
                 .map_err(|e| format!("update failed for '{}': {}", song.path, e))?;
-
-            if let Some(song_id) = get_song_id_by_path(&tx, &song.path)? {
-                sync_song_artists(&tx, song_id, &song.artist_names)?;
-            }
         }
+
+        let song_paths: Vec<String> = songs.iter().map(|song| song.path.clone()).collect();
+        let song_ids = load_song_ids_by_paths(&tx, &song_paths)?;
+        sync_song_artists_batch(&tx, songs, &song_ids, &mut artist_cache)?;
     }
 
+    tx.commit().map_err(|e| e.to_string())
+}
+
+fn apply_delete_batch(conn: &mut rusqlite::Connection, paths: &[String]) -> Result<(), String> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
     {
         let mut delete_stmt = tx
             .prepare("DELETE FROM songs WHERE path = ?1")
             .map_err(|e| e.to_string())?;
-        for path in to_delete {
+
+        for path in paths {
             delete_stmt
                 .execute(params![path])
                 .map_err(|e| format!("delete failed for '{}': {}", path, e))?;
         }
     }
 
-    tx.execute(
+    tx.commit().map_err(|e| e.to_string())
+}
+
+fn cleanup_unused_artists(conn: &mut rusqlite::Connection) {
+    conn.execute(
         "DELETE FROM artists
          WHERE id NOT IN (SELECT DISTINCT artist_id FROM song_artists)",
         [],
     )
     .ok();
+}
 
-    tx.commit().map_err(|e| e.to_string())?;
+fn apply_scan_changes(
+    conn: &mut rusqlite::Connection,
+    to_add: &[Song],
+    to_update: &[Song],
+    to_delete: &[String],
+    reporter: Option<&ScanProgressReporter>,
+) -> Result<(), String> {
+    if to_add.is_empty() && to_update.is_empty() && to_delete.is_empty() {
+        if let Some(reporter) = reporter {
+            reporter.emit_writing(0, 0);
+        }
+        return Ok(());
+    }
+
+    let total_operations = to_add.len() + to_update.len() + to_delete.len();
+    let mut written_operations = 0usize;
+    if let Some(reporter) = reporter {
+        reporter.emit_writing(0, total_operations);
+    }
+
+    for chunk in to_add.chunks(DB_PROGRESS_BATCH) {
+        apply_insert_batch(conn, chunk)?;
+        written_operations += chunk.len();
+        if let Some(reporter) = reporter {
+            reporter.emit_writing(written_operations, total_operations);
+            reporter.emit_batch(chunk.to_vec(), Vec::new());
+        }
+    }
+
+    for chunk in to_update.chunks(DB_PROGRESS_BATCH) {
+        apply_update_batch(conn, chunk)?;
+        written_operations += chunk.len();
+        if let Some(reporter) = reporter {
+            reporter.emit_writing(written_operations, total_operations);
+            reporter.emit_batch(chunk.to_vec(), Vec::new());
+        }
+    }
+
+    for chunk in to_delete.chunks(DB_PROGRESS_BATCH) {
+        apply_delete_batch(conn, chunk)?;
+        written_operations += chunk.len();
+        if let Some(reporter) = reporter {
+            reporter.emit_writing(written_operations, total_operations);
+            reporter.emit_batch(Vec::new(), chunk.to_vec());
+        }
+    }
+
+    cleanup_unused_artists(conn);
     Ok(())
 }
 
@@ -1025,8 +1484,14 @@ fn apply_scan_changes(
 pub fn scan_single_directory_internal(
     folder_path: String,
     db_conn: Arc<Mutex<rusqlite::Connection>>,
+    app: Option<AppHandle>,
+    folder_index: usize,
+    folder_total: usize,
 ) -> Result<Vec<Song>, String> {
     let normalized_folder = normalize_path(&folder_path);
+    let reporter = app.map(|app| {
+        ScanProgressReporter::new(app, normalized_folder.clone(), folder_index, folder_total)
+    });
 
     // Step 1: 仅持锁读取 DB 快照
     let db_snapshot = {
@@ -1037,7 +1502,15 @@ pub fn scan_single_directory_internal(
     let original_db_count = db_snapshot.len();
 
     // Step 2: 无锁扫描文件系统 + 差异计算
-    let scan_diff = collect_scan_diff(&normalized_folder, db_snapshot);
+    let scan_diff = collect_scan_diff(&normalized_folder, db_snapshot, reporter.as_ref())?;
+
+    if !scan_diff.has_disk_songs && original_db_count > 0 {
+        let error = "文件夹可能已断开连接或路径错误，未执行删除操作".to_string();
+        if let Some(reporter) = reporter.as_ref() {
+            reporter.emit_error(error.clone());
+        }
+        return Err(error);
+    }
 
     // Step 3: 空阈值保护
     if !scan_diff.has_disk_songs && original_db_count > 0 {
@@ -1052,6 +1525,7 @@ pub fn scan_single_directory_internal(
             &scan_diff.to_add,
             &scan_diff.to_update,
             &scan_diff.to_delete,
+            reporter.as_ref(),
         )?;
     }
 
@@ -1067,6 +1541,10 @@ pub fn scan_single_directory_internal(
         );
     }
 
+    if let Some(reporter) = reporter.as_ref() {
+        reporter.emit_complete(scan_diff.songs.len());
+    }
+
     Ok(scan_diff.songs)
 }
 
@@ -1079,7 +1557,7 @@ pub async fn scan_music_folder(
     let db_conn = db_state.conn.clone();
 
     let result = tauri::async_runtime::spawn_blocking(move || {
-        scan_single_directory_internal(folder_path, db_conn)
+        scan_single_directory_internal(folder_path, db_conn, None, 1, 1)
     })
     .await
     .map_err(|e| e.to_string())??;

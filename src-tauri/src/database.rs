@@ -22,6 +22,12 @@ impl DbState {
         let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
         conn.pragma_update(None, "foreign_keys", "ON")
             .map_err(|e| e.to_string())?;
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .map_err(|e| e.to_string())?;
+        conn.pragma_update(None, "synchronous", "NORMAL")
+            .map_err(|e| e.to_string())?;
+        conn.pragma_update(None, "temp_store", "MEMORY")
+            .map_err(|e| e.to_string())?;
 
         // Create songs table
         conn.execute(

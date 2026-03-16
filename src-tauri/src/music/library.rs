@@ -58,8 +58,7 @@ fn load_cached_songs(conn: &rusqlite::Connection) -> Result<Vec<Song>, String> {
             let added_at_i64 = row.get::<_, Option<i64>>(20)?;
             let file_modified_at_i64 = row.get::<_, Option<i64>>(21)?;
             let artist_names = deserialize_string_list(row.get::<_, Option<String>>(4)?);
-            let effective_artist_names =
-                deserialize_string_list(row.get::<_, Option<String>>(5)?);
+            let effective_artist_names = deserialize_string_list(row.get::<_, Option<String>>(5)?);
 
             let name = std::path::Path::new(&path)
                 .file_name()
@@ -194,9 +193,7 @@ pub async fn remove_library_folder(
 }
 
 #[tauri::command]
-pub async fn get_library_songs_cached(
-    db_state: State<'_, DbState>,
-) -> Result<Vec<Song>, String> {
+pub async fn get_library_songs_cached(db_state: State<'_, DbState>) -> Result<Vec<Song>, String> {
     let db_conn = db_state.conn.clone();
 
     let result = tauri::async_runtime::spawn_blocking(move || {
@@ -211,7 +208,7 @@ pub async fn get_library_songs_cached(
 
 #[tauri::command]
 pub async fn scan_library(
-    _app: AppHandle,
+    app: AppHandle,
     db_state: State<'_, DbState>,
 ) -> Result<Vec<Song>, String> {
     let db_conn = db_state.conn.clone();
@@ -232,8 +229,15 @@ pub async fn scan_library(
 
         let mut all_songs = Vec::new();
 
-        for folder in folder_paths {
-            if let Ok(songs) = scan_single_directory_internal(folder, db_conn.clone()) {
+        let folder_total = folder_paths.len();
+        for (index, folder) in folder_paths.into_iter().enumerate() {
+            if let Ok(songs) = scan_single_directory_internal(
+                folder,
+                db_conn.clone(),
+                Some(app.clone()),
+                index + 1,
+                folder_total.max(1),
+            ) {
                 all_songs.extend(songs);
             }
         }

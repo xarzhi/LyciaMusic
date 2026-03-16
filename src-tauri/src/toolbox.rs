@@ -238,5 +238,11 @@ pub fn refresh_folder_songs(
     db_state: tauri::State<'_, crate::database::DbState>,
 ) -> Result<Vec<crate::music::types::Song>, String> {
     // 复用现有的扫描逻辑
-    crate::music::scanner::scan_single_directory_internal(folder_path, db_state.conn.clone())
+    crate::music::scanner::scan_single_directory_internal(
+        folder_path,
+        db_state.conn.clone(),
+        None,
+        1,
+        1,
+    )
 }

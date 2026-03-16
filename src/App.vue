@@ -30,7 +30,8 @@ const {
   showPlaylist,
   closeMiniPlaylist,
   showVolumePopover,
-  handleExternalPaths
+  handleExternalPaths,
+  libraryScanProgress
 } = usePlayer();
 const { activeWindowMaterial, applyWindowMaterial, loadWindowMaterialCapabilities } = useWindowMaterial();
 
@@ -38,6 +39,46 @@ init();
 
 const isExternalDragActive = ref(false);
 let externalPathTask: Promise<void> = Promise.resolve();
+let libraryScanHideTimer: ReturnType<typeof setTimeout> | null = null;
+
+interface LibraryScanProgressPayload {
+  phase: 'collecting' | 'parsing' | 'writing' | 'complete' | 'error';
+  current: number;
+  total: number;
+  folder_path: string;
+  folder_index: number;
+  folder_total: number;
+  message?: string | null;
+  done: boolean;
+  failed: boolean;
+}
+
+const clearLibraryScanHideTimer = () => {
+  if (libraryScanHideTimer) {
+    clearTimeout(libraryScanHideTimer);
+    libraryScanHideTimer = null;
+  }
+};
+
+const scheduleLibraryScanHide = (delayMs: number) => {
+  clearLibraryScanHideTimer();
+  libraryScanHideTimer = setTimeout(() => {
+    libraryScanProgress.value = null;
+    libraryScanHideTimer = null;
+  }, delayMs);
+};
+
+const applyLibraryScanProgress = (payload: LibraryScanProgressPayload) => {
+  clearLibraryScanHideTimer();
+  libraryScanProgress.value = {
+    ...payload,
+    message: payload.message ?? null,
+  };
+
+  if (payload.done) {
+    scheduleLibraryScanHide(payload.failed ? 2600 : 1400);
+  }
+};
 
 const enqueueExternalPaths = (paths: string[], source: 'drop' | 'open') => {
   externalPathTask = externalPathTask
@@ -59,6 +100,35 @@ const consumePendingOpenPaths = async () => {
 const isFooterVisible = computed(() => playQueue.value.length > 0);
 const hasWindowMaterial = computed(() => activeWindowMaterial.value !== 'none');
 const isMicaWindowMaterial = computed(() => activeWindowMaterial.value === 'mica');
+const libraryScanPercent = computed(() => {
+  if (!libraryScanProgress.value) return 0;
+  if (libraryScanProgress.value.total <= 0) return 8;
+  const percent = (libraryScanProgress.value.current / libraryScanProgress.value.total) * 100;
+  return Math.min(100, Math.max(6, percent));
+});
+const libraryScanPhaseLabel = computed(() => {
+  switch (libraryScanProgress.value?.phase) {
+    case 'collecting':
+      return '扫描文件';
+    case 'parsing':
+      return '解析元数据';
+    case 'writing':
+      return '写入音乐库';
+    case 'complete':
+      return '扫描完成';
+    case 'error':
+      return '扫描失败';
+    default:
+      return '扫描音乐库';
+  }
+});
+const libraryScanFolderLabel = computed(() => {
+  if (!libraryScanProgress.value || libraryScanProgress.value.folder_total <= 1) {
+    return '';
+  }
+
+  return `文件夹 ${libraryScanProgress.value.folder_index}/${libraryScanProgress.value.folder_total}`;
+});
 
 const applyTheme = async () => {
   const theme = settings.value.theme;
@@ -279,6 +349,7 @@ let unlistenDragDrop: (() => void) | null = null;
 let unlistenDragOver: (() => void) | null = null;
 let unlistenDragLeave: (() => void) | null = null;
 let unlistenOpenPaths: (() => void) | null = null;
+let unlistenLibraryScanProgress: (() => void) | null = null;
 
 onMounted(async () => {
   unlistenDragDrop = await listen<{ paths: string[] }>('tauri://drag-drop', async (event) => {
@@ -298,6 +369,10 @@ onMounted(async () => {
     await consumePendingOpenPaths();
   });
 
+  unlistenLibraryScanProgress = await listen<LibraryScanProgressPayload>('library-scan-progress', (event) => {
+    applyLibraryScanProgress(event.payload);
+  });
+
   await consumePendingOpenPaths();
   
   // 🟢 在所有初次资源或状态加载完毕后，平滑显示主窗口
@@ -315,6 +390,8 @@ onUnmounted(() => {
   unlistenDragOver?.();
   unlistenDragLeave?.();
   unlistenOpenPaths?.();
+  unlistenLibraryScanProgress?.();
+  clearLibraryScanHideTimer();
 });
 
 
@@ -338,6 +415,45 @@ onUnmounted(() => {
         <div class="rounded-[28px] border border-white/35 bg-white/75 px-8 py-6 text-center shadow-[0_24px_60px_rgba(0,0,0,0.2)] dark:border-white/10 dark:bg-black/65">
           <div class="text-lg font-semibold text-gray-900 dark:text-white">松开即可导入或播放</div>
           <div class="mt-2 text-sm text-gray-600 dark:text-white/70">音频文件将直接播放，文件夹将导入音乐库</div>
+        </div>
+      </div>
+    </transition>
+
+    <transition name="scan-progress">
+      <div
+        v-if="libraryScanProgress && !isMiniMode"
+        class="absolute right-4 top-14 z-[145] w-[320px] overflow-hidden rounded-[22px] border border-white/45 bg-white/82 p-4 shadow-[0_24px_60px_rgba(15,23,42,0.18)] backdrop-blur-2xl dark:border-white/10 dark:bg-black/70"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="text-[13px] font-semibold uppercase tracking-[0.18em] text-[#ec4141]/80">
+              {{ libraryScanPhaseLabel }}
+            </div>
+            <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+              {{ libraryScanProgress.message || '正在处理音乐库' }}
+            </div>
+            <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500 dark:text-white/55">
+              <span v-if="libraryScanFolderLabel">{{ libraryScanFolderLabel }}</span>
+              <span v-if="libraryScanProgress.total > 0">
+                {{ libraryScanProgress.current }}/{{ libraryScanProgress.total }}
+              </span>
+              <span class="truncate max-w-[220px]" :title="libraryScanProgress.folder_path">
+                {{ libraryScanProgress.folder_path }}
+              </span>
+            </div>
+          </div>
+          <div
+            class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+            :class="libraryScanProgress.failed ? 'bg-rose-500' : libraryScanProgress.done ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'"
+          ></div>
+        </div>
+
+        <div class="mt-3 h-2 overflow-hidden rounded-full bg-black/8 dark:bg-white/10">
+          <div
+            class="h-full rounded-full bg-gradient-to-r from-[#ec4141] via-[#ff8364] to-[#f7b267] transition-[width] duration-300 ease-out"
+            :class="{ 'scan-progress-bar-indeterminate': libraryScanProgress.total <= 0 && !libraryScanProgress.done }"
+            :style="{ width: `${libraryScanPercent}%` }"
+          ></div>
         </div>
       </div>
     </transition>
@@ -483,5 +599,31 @@ html.mini-mode-active,
 .drop-overlay-enter-from,
 .drop-overlay-leave-to {
   opacity: 0;
+}
+
+.scan-progress-enter-active,
+.scan-progress-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.scan-progress-enter-from,
+.scan-progress-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.98);
+}
+
+.scan-progress-bar-indeterminate {
+  min-width: 28%;
+  animation: scan-progress-indeterminate 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes scan-progress-indeterminate {
+  from {
+    transform: translateX(-14%);
+  }
+
+  to {
+    transform: translateX(14%);
+  }
 }
 </style>

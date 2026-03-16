@@ -17,6 +17,20 @@ export interface FolderNode {
   is_expanded: boolean;
 }
 
+export type LibraryScanPhase = 'collecting' | 'parsing' | 'writing' | 'complete' | 'error';
+
+export interface LibraryScanProgress {
+  phase: LibraryScanPhase;
+  current: number;
+  total: number;
+  folder_path: string;
+  folder_index: number;
+  folder_total: number;
+  message: string | null;
+  done: boolean;
+  failed: boolean;
+}
+
 // --- 全局播放状态 ---
 export const isPlaying = ref(false);
 export const volume = ref(100);
@@ -66,6 +80,7 @@ export const currentSong = ref<Song | null>(null);
 export const currentCover = ref<string>('');
 export const dominantColors = ref<string[]>(['transparent', 'transparent', 'transparent', 'transparent']);
 export const playlistCover = ref<string>('');
+export const libraryScanProgress = ref<LibraryScanProgress | null>(null);
 export const watchedFolders = ref<string[]>([]); // Legacy/Folder View
 export const favoritePaths = ref<string[]>([]);
 export const playlists = ref<Playlist[]>([]);

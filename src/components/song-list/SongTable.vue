@@ -450,10 +450,13 @@ const isLibraryEmpty = computed(() => librarySongs.value.length === 0);
 const isLibraryScanRunning = computed(() =>
   !!libraryScanProgress.value && !libraryScanProgress.value.done && !libraryScanProgress.value.failed,
 );
+const hasHeroLibrarySession = computed(() =>
+  libraryScanSession.value?.trigger === 'first-import'
+  && libraryScanSession.value?.visibility === 'hero',
+);
 const isHeroLibraryScan = computed(() =>
   currentViewMode.value === 'all'
-  && libraryScanSession.value?.trigger === 'first-import'
-  && libraryScanSession.value?.visibility === 'hero',
+  && hasHeroLibrarySession.value,
 );
 const isSilentBootstrapScan = computed(() =>
   currentViewMode.value === 'all'
@@ -565,16 +568,16 @@ const retryHeroLibraryScan = async () => {
 };
 
 watch(
-  [isHeroLibraryScan, () => libraryScanProgress.value?.done, () => libraryScanProgress.value?.failed],
-  ([isHero, done, failed]) => {
+  [hasHeroLibrarySession, isHeroLibraryScan, () => libraryScanProgress.value?.done, () => libraryScanProgress.value?.failed],
+  ([hasHeroSession, isHeroVisible, done, failed]) => {
     clearHeroScanHideTimer();
 
-    if (!isHero) {
+    if (!hasHeroSession) {
       showHeroScanCard.value = false;
       return;
     }
 
-    showHeroScanCard.value = true;
+    showHeroScanCard.value = !!isHeroVisible;
 
     if (failed || !done) {
       return;
@@ -584,6 +587,9 @@ watch(
     const waitMs = Math.max(0, HERO_MIN_VISIBLE_MS - (Date.now() - startedAt)) + HERO_SUCCESS_DWELL_MS;
     heroScanHideTimer = setTimeout(() => {
       showHeroScanCard.value = false;
+      if (libraryScanSession.value?.trigger === 'first-import' && libraryScanSession.value?.visibility === 'hero') {
+        libraryScanSession.value = null;
+      }
       heroScanHideTimer = null;
     }, waitMs);
   },

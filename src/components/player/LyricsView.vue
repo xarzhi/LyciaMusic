@@ -333,8 +333,8 @@ onUnmounted(() => {
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  --lyrics-edge-fade: 16%;
-  --lyrics-edge-softness: 7%;
+  --lyrics-edge-fade: 12%;
+  --lyrics-edge-softness: 8%;
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0%,

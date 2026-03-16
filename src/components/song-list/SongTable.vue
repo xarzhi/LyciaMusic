@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { Song, usePlayer, dragSession } from '../../composables/player';
-import { currentSong, isPlaying } from '../../composables/playerState';
+import { currentSong, isPlaying, libraryFolders, libraryScanProgress, libraryScanSession, lastLibraryScanError } from '../../composables/playerState';
 import { useSettings } from '../../composables/settings';
 import { useRoute, useRouter } from 'vue-router';
 import QualityBadge from '../common/QualityBadge.vue';
@@ -30,6 +30,7 @@ const {
   currentViewMode,
   viewArtist,
   addLibraryFolder,
+  scanLibrary,
   searchQuery,
   librarySongs,
   localSortMode,
@@ -47,10 +48,14 @@ const { coverCache, preloadCovers } = useCoverCache();
 const ROW_HEIGHT = 72;
 const OVERSCAN = 20;
 const INDEX_PROXIMITY_PX = 72;
+const HERO_MIN_VISIBLE_MS = 700;
+const HERO_SUCCESS_DWELL_MS = 900;
 const rootRef = ref<HTMLElement | null>(null);
 const containerRef = ref<HTMLElement | null>(null);
 const scrollTop = ref(0);
 const containerHeight = ref(600);
+const showHeroScanCard = ref(false);
+let heroScanHideTimer: ReturnType<typeof setTimeout> | null = null;
 
 const updateContainerHeight = () => {
   if (containerRef.value) {
@@ -442,10 +447,87 @@ const showDragIcon = computed(() =>
 );
 const hasSearchQuery = computed(() => searchQuery.value.trim().length > 0);
 const isLibraryEmpty = computed(() => librarySongs.value.length === 0);
+const isLibraryScanRunning = computed(() =>
+  !!libraryScanProgress.value && !libraryScanProgress.value.done && !libraryScanProgress.value.failed,
+);
+const isHeroLibraryScan = computed(() =>
+  currentViewMode.value === 'all'
+  && libraryScanSession.value?.trigger === 'first-import'
+  && libraryScanSession.value?.visibility === 'hero',
+);
+const isSilentBootstrapScan = computed(() =>
+  currentViewMode.value === 'all'
+  && libraryScanSession.value?.trigger === 'bootstrap'
+  && libraryScanSession.value?.visibility === 'silent'
+  && isLibraryScanRunning.value,
+);
 const showLibraryOnboarding = computed(
-  () => currentViewMode.value === 'all' && !hasSearchQuery.value && isLibraryEmpty.value,
+  () =>
+    currentViewMode.value === 'all'
+    && !hasSearchQuery.value
+    && isLibraryEmpty.value
+    && libraryFolders.value.length === 0
+    && !showHeroScanCard.value,
 );
 const showFolderEmpty = computed(() => currentViewMode.value === 'folder' && !hasSearchQuery.value);
+const showLibraryChecking = computed(
+  () =>
+    currentViewMode.value === 'all'
+    && !hasSearchQuery.value
+    && isLibraryEmpty.value
+    && libraryFolders.value.length > 0
+    && isSilentBootstrapScan.value
+    && !showHeroScanCard.value,
+);
+const showLibraryEmptyResult = computed(
+  () =>
+    currentViewMode.value === 'all'
+    && !hasSearchQuery.value
+    && isLibraryEmpty.value
+    && libraryFolders.value.length > 0
+    && !showLibraryChecking.value
+    && !showHeroScanCard.value,
+);
+const libraryScanPercent = computed(() => {
+  if (!libraryScanProgress.value) return 0;
+  if (libraryScanProgress.value.total <= 0) return 12;
+  const percent = (libraryScanProgress.value.current / libraryScanProgress.value.total) * 100;
+  return Math.min(100, Math.max(8, percent));
+});
+const libraryScanPhaseLabel = computed(() => {
+  switch (libraryScanProgress.value?.phase) {
+    case 'collecting':
+      return '扫描文件';
+    case 'parsing':
+      return '解析信息';
+    case 'writing':
+      return '写入音乐库';
+    case 'complete':
+      return '导入完成';
+    case 'error':
+      return '导入失败';
+    default:
+      return '准备导入';
+  }
+});
+const libraryScanFolderLabel = computed(() => {
+  if (!libraryScanProgress.value || libraryScanProgress.value.folder_total <= 1) {
+    return '';
+  }
+
+  return `文件夹 ${libraryScanProgress.value.folder_index}/${libraryScanProgress.value.folder_total}`;
+});
+const heroScanStatus = computed<'scanning' | 'success' | 'error'>(() => {
+  if (libraryScanProgress.value?.failed) {
+    return 'error';
+  }
+
+  if (libraryScanProgress.value?.done) {
+    return 'success';
+  }
+
+  return 'scanning';
+});
 const emptyStateMessage = computed(() => {
   if (hasSearchQuery.value) return '未找到匹配的歌曲';
   if (showFolderEmpty.value) return '该文件夹内暂无歌曲';
@@ -461,6 +543,53 @@ const handleArtistClick = (artistName: string) => {
   router.push('/');
 };
 
+const clearHeroScanHideTimer = () => {
+  if (heroScanHideTimer) {
+    clearTimeout(heroScanHideTimer);
+    heroScanHideTimer = null;
+  }
+};
+
+const retryHeroLibraryScan = async () => {
+  const sourcePath = libraryScanSession.value?.sourcePath;
+  if (!sourcePath) {
+    await addLibraryFolder();
+    return;
+  }
+
+  await scanLibrary({
+    trigger: 'first-import',
+    visibility: 'hero',
+    sourcePath,
+  });
+};
+
+watch(
+  [isHeroLibraryScan, () => libraryScanProgress.value?.done, () => libraryScanProgress.value?.failed],
+  ([isHero, done, failed]) => {
+    clearHeroScanHideTimer();
+
+    if (!isHero) {
+      showHeroScanCard.value = false;
+      return;
+    }
+
+    showHeroScanCard.value = true;
+
+    if (failed || !done) {
+      return;
+    }
+
+    const startedAt = libraryScanSession.value?.startedAt ?? Date.now();
+    const waitMs = Math.max(0, HERO_MIN_VISIBLE_MS - (Date.now() - startedAt)) + HERO_SUCCESS_DWELL_MS;
+    heroScanHideTimer = setTimeout(() => {
+      showHeroScanCard.value = false;
+      heroScanHideTimer = null;
+    }, waitMs);
+  },
+  { immediate: true },
+);
+
 onMounted(() => {
   window.addEventListener('resize', updateContainerHeight);
   if (containerRef.value) {
@@ -472,6 +601,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', updateContainerHeight);
   stopIndexDrag();
   clearHideIndexBarTimer();
+  clearHeroScanHideTimer();
 });
 
 defineExpose({ containerRef });
@@ -650,6 +780,26 @@ const getRowStyle = (songIndex: number, songPath: string) => {
             添加本地音乐
           </button>
         </template>
+        <template v-else-if="showLibraryChecking">
+          <div class="flex h-14 w-14 items-center justify-center rounded-full bg-white/70 shadow-[0_10px_30px_rgba(15,23,42,0.08)] dark:bg-white/10">
+            <div class="h-6 w-6 rounded-full border-2 border-[#ec4141]/25 border-t-[#ec4141] scan-spinner"></div>
+          </div>
+          <p class="mt-5 text-[15px] font-medium text-gray-700 dark:text-white/80">正在检查你的音乐库…</p>
+          <p class="mt-2 text-[13px] opacity-70">启动后会在后台快速核对目录变化，不会打断当前浏览。</p>
+        </template>
+        <template v-else-if="showLibraryEmptyResult">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mb-4 text-gray-300 dark:text-white/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 17V7a2 2 0 012-2h12a2 2 0 012 2v10"></path>
+            <path d="M8 17h8"></path>
+            <path d="M9 13V8l8-1v6"></path>
+            <circle cx="7" cy="17" r="2"></circle>
+            <circle cx="17" cy="15" r="2"></circle>
+          </svg>
+          <p class="mb-2 text-[15px]">{{ lastLibraryScanError ? '暂时无法读取你的音乐库' : '未在当前音乐库中发现可导入音频' }}</p>
+          <p class="text-[13px] opacity-70">
+            {{ lastLibraryScanError ? '你可以前往设置中的音乐库页重新扫描，或检查目录是否仍然可访问。' : '可以尝试重新选择文件夹，或确认目录中包含受支持的音频文件。' }}
+          </p>
+        </template>
         <template v-else-if="currentViewMode === 'playlist'">
           <p>{{ emptyStateMessage }}</p>
         </template>
@@ -658,6 +808,71 @@ const getRowStyle = (songIndex: number, songPath: string) => {
         </template>
       </div>
     </div>
+
+    <transition name="library-hero">
+      <div
+        v-if="showHeroScanCard"
+        class="absolute inset-0 z-30 flex items-center justify-center px-6"
+      >
+        <div class="absolute inset-0 bg-white/72 backdrop-blur-md dark:bg-black/45"></div>
+        <div class="relative z-10 w-full max-w-[560px] overflow-hidden rounded-[32px] border border-white/60 bg-white/88 p-7 text-gray-800 shadow-[0_28px_80px_rgba(15,23,42,0.16)] backdrop-blur-2xl dark:border-white/10 dark:bg-black/70 dark:text-white">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="text-[12px] font-semibold uppercase tracking-[0.24em] text-[#ec4141]/80">
+                {{ libraryScanPhaseLabel }}
+              </div>
+              <h3 class="mt-3 text-[28px] font-semibold leading-tight">
+                {{ heroScanStatus === 'error' ? '导入过程中出现问题' : heroScanStatus === 'success' ? '音乐库已经准备好了' : '正在导入你的音乐' }}
+              </h3>
+              <p class="mt-3 max-w-[420px] text-[14px] leading-6 text-gray-500 dark:text-white/65">
+                {{
+                  heroScanStatus === 'error'
+                    ? (lastLibraryScanError || '你可以重新扫描当前目录，或重新选择一个可访问的音乐文件夹。')
+                    : heroScanStatus === 'success'
+                      ? (librarySongs.length > 0 ? '已经完成首次建立音乐库，马上就可以开始浏览和播放。' : '这次扫描没有发现可导入的音频文件。')
+                      : '首次建立音乐库时会读取文件信息并写入数据库，通常只需要几十秒。'
+                }}
+              </p>
+            </div>
+            <div
+              class="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+              :class="heroScanStatus === 'error' ? 'bg-rose-500/12 text-rose-500' : heroScanStatus === 'success' ? 'bg-emerald-500/12 text-emerald-500' : 'bg-[#ec4141]/10 text-[#ec4141]'"
+            >
+              <svg v-if="heroScanStatus === 'success'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <svg v-else-if="heroScanStatus === 'error'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86l-7.5 13A1 1 0 003.65 18h16.7a1 1 0 00.86-1.5l-7.5-13a1 1 0 00-1.72 0z" />
+              </svg>
+              <div v-else class="h-5 w-5 rounded-full border-2 border-current/25 border-t-current scan-spinner"></div>
+            </div>
+          </div>
+
+          <div class="mt-6 overflow-hidden rounded-full bg-black/6 dark:bg-white/10">
+            <div
+              class="h-2.5 rounded-full bg-gradient-to-r from-[#ec4141] via-[#ff7b63] to-[#f7b267] transition-[width] duration-300 ease-out"
+              :class="{ 'scan-progress-indeterminate': libraryScanProgress && libraryScanProgress.total <= 0 && heroScanStatus === 'scanning' }"
+              :style="{ width: `${heroScanStatus === 'success' ? 100 : libraryScanPercent}%` }"
+            ></div>
+          </div>
+
+          <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px] text-gray-500 dark:text-white/55">
+            <span v-if="libraryScanFolderLabel">{{ libraryScanFolderLabel }}</span>
+            <span v-if="libraryScanProgress && libraryScanProgress.total > 0">
+              {{ libraryScanProgress.current }}/{{ libraryScanProgress.total }}
+            </span>
+            <span v-if="libraryScanProgress?.folder_path" class="truncate max-w-[280px]" :title="libraryScanProgress.folder_path">
+              {{ libraryScanProgress.folder_path }}
+            </span>
+          </div>
+
+          <div v-if="heroScanStatus === 'error'" class="mt-7 flex flex-wrap gap-3">
+            <button type="button" class="hero-primary-btn" @click="retryHeroLibraryScan">重新扫描</button>
+            <button type="button" class="hero-secondary-btn" @click="addLibraryFolder">重新选择文件夹</button>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <div
       v-if="showAlphabetIndex"
@@ -727,6 +942,48 @@ const getRowStyle = (songIndex: number, songPath: string) => {
 
 .spectrum-bar {
   animation: spectrum 1s ease-in-out infinite;
+}
+
+.scan-spinner {
+  animation: scan-spin 0.9s linear infinite;
+}
+
+.hero-primary-btn,
+.hero-secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 124px;
+  border-radius: 9999px;
+  padding: 0.8rem 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition:
+    transform 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.hero-primary-btn {
+  background: #ec4141;
+  color: white;
+}
+
+.hero-primary-btn:hover {
+  transform: translateY(-1px);
+  background: #d73a3a;
+}
+
+.hero-secondary-btn {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.7);
+  color: rgb(31, 41, 55);
+}
+
+.hero-secondary-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .index-nav-item {
@@ -838,6 +1095,48 @@ const getRowStyle = (songIndex: number, songPath: string) => {
 .index-bubble-leave-to {
   opacity: 0;
   transform: scale(0.92);
+}
+
+.library-hero-enter-active,
+.library-hero-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.library-hero-enter-from,
+.library-hero-leave-to {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
+.scan-progress-indeterminate {
+  min-width: 28%;
+  animation: scan-progress-indeterminate 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes scan-progress-indeterminate {
+  from {
+    transform: translateX(-14%);
+  }
+
+  to {
+    transform: translateX(14%);
+  }
+}
+
+@keyframes scan-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+:global(.dark) .hero-secondary-btn {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+:global(.dark) .hero-secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 @keyframes spectrum {

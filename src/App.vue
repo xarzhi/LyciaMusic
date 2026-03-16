@@ -39,46 +39,6 @@ init();
 
 const isExternalDragActive = ref(false);
 let externalPathTask: Promise<void> = Promise.resolve();
-let libraryScanHideTimer: ReturnType<typeof setTimeout> | null = null;
-
-interface LibraryScanProgressPayload {
-  phase: 'collecting' | 'parsing' | 'writing' | 'complete' | 'error';
-  current: number;
-  total: number;
-  folder_path: string;
-  folder_index: number;
-  folder_total: number;
-  message?: string | null;
-  done: boolean;
-  failed: boolean;
-}
-
-const clearLibraryScanHideTimer = () => {
-  if (libraryScanHideTimer) {
-    clearTimeout(libraryScanHideTimer);
-    libraryScanHideTimer = null;
-  }
-};
-
-const scheduleLibraryScanHide = (delayMs: number) => {
-  clearLibraryScanHideTimer();
-  libraryScanHideTimer = setTimeout(() => {
-    libraryScanProgress.value = null;
-    libraryScanHideTimer = null;
-  }, delayMs);
-};
-
-const applyLibraryScanProgress = (payload: LibraryScanProgressPayload) => {
-  clearLibraryScanHideTimer();
-  libraryScanProgress.value = {
-    ...payload,
-    message: payload.message ?? null,
-  };
-
-  if (payload.done) {
-    scheduleLibraryScanHide(payload.failed ? 2600 : 1400);
-  }
-};
 
 const enqueueExternalPaths = (paths: string[], source: 'drop' | 'open') => {
   externalPathTask = externalPathTask
@@ -349,7 +309,6 @@ let unlistenDragDrop: (() => void) | null = null;
 let unlistenDragOver: (() => void) | null = null;
 let unlistenDragLeave: (() => void) | null = null;
 let unlistenOpenPaths: (() => void) | null = null;
-let unlistenLibraryScanProgress: (() => void) | null = null;
 
 onMounted(async () => {
   unlistenDragDrop = await listen<{ paths: string[] }>('tauri://drag-drop', async (event) => {
@@ -369,10 +328,6 @@ onMounted(async () => {
     await consumePendingOpenPaths();
   });
 
-  unlistenLibraryScanProgress = await listen<LibraryScanProgressPayload>('library-scan-progress', (event) => {
-    applyLibraryScanProgress(event.payload);
-  });
-
   await consumePendingOpenPaths();
   
   // 🟢 在所有初次资源或状态加载完毕后，平滑显示主窗口
@@ -390,8 +345,6 @@ onUnmounted(() => {
   unlistenDragOver?.();
   unlistenDragLeave?.();
   unlistenOpenPaths?.();
-  unlistenLibraryScanProgress?.();
-  clearLibraryScanHideTimer();
 });
 
 
@@ -422,7 +375,7 @@ onUnmounted(() => {
     <transition name="scan-progress">
       <div
         v-if="libraryScanProgress && !isMiniMode"
-        class="absolute right-4 top-14 z-[145] w-[320px] overflow-hidden rounded-[22px] border border-white/45 bg-white/82 p-4 shadow-[0_24px_60px_rgba(15,23,42,0.18)] backdrop-blur-2xl dark:border-white/10 dark:bg-black/70"
+        class="hidden absolute right-4 top-14 z-[145] w-[320px] overflow-hidden rounded-[22px] border border-white/45 bg-white/82 p-4 shadow-[0_24px_60px_rgba(15,23,42,0.18)] backdrop-blur-2xl dark:border-white/10 dark:bg-black/70"
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">

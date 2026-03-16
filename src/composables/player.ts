@@ -55,9 +55,12 @@ interface LibraryScanBatchPayload {
   folder_total: number;
 }
 
-interface LibraryScanProgressPayload {
-  done: boolean;
-  failed: boolean;
+interface LibraryScanProgressPayload extends State.LibraryScanProgress {}
+
+interface ScanLibraryOptions {
+  trigger?: State.LibraryScanTrigger;
+  visibility?: State.LibraryScanVisibility;
+  sourcePath?: string;
 }
 
 
@@ -135,6 +138,11 @@ const LEGACY_PLAYER_PLAYLIST_KEY = 'player_playlist';
 const LEGACY_PLAYER_QUEUE_KEY = 'player_queue';
 const LEGACY_PLAYER_HISTORY_KEY = 'player_history';
 const LEGACY_PLAYER_LAST_SONG_KEY = 'player_last_song';
+const LIBRARY_SCAN_VISIBILITY_PRIORITY: Record<State.LibraryScanVisibility, number> = {
+  silent: 1,
+  inline: 2,
+  hero: 3,
+};
 
 const parseStoredJson = <T>(raw: string | null): T | null => {
   if (!raw) return null;
@@ -143,6 +151,98 @@ const parseStoredJson = <T>(raw: string | null): T | null => {
   } catch {
     return null;
   }
+};
+
+const resolveScanLibraryOptions = (
+  options: ScanLibraryOptions = {},
+): Required<ScanLibraryOptions> => ({
+  trigger: options.trigger ?? 'manual-rescan',
+  visibility: options.visibility ?? 'inline',
+  sourcePath: options.sourcePath ?? '',
+});
+
+const isLibraryScanActive = () =>
+  !!State.libraryScanProgress.value && !State.libraryScanProgress.value.done && !State.libraryScanProgress.value.failed;
+
+const shouldReplaceLibraryScanSession = (nextVisibility: State.LibraryScanVisibility) => {
+  if (!State.libraryScanSession.value) {
+    return true;
+  }
+
+  if (!isLibraryScanActive()) {
+    return true;
+  }
+
+  const currentPriority = LIBRARY_SCAN_VISIBILITY_PRIORITY[State.libraryScanSession.value.visibility];
+  const nextPriority = LIBRARY_SCAN_VISIBILITY_PRIORITY[nextVisibility];
+  return nextPriority > currentPriority;
+};
+
+const startLibraryScanSession = (options: Required<ScanLibraryOptions>) => {
+  const nextSession: State.LibraryScanSession = {
+    trigger: options.trigger,
+    visibility: options.visibility,
+    startedAt: Date.now(),
+    hadLibraryFoldersAtStart: State.libraryFolders.value.length > 0,
+    hadSongsAtStart: State.librarySongs.value.length > 0,
+    sourcePath: options.sourcePath || undefined,
+  };
+
+  if (shouldReplaceLibraryScanSession(options.visibility)) {
+    State.libraryScanSession.value = nextSession;
+    return nextSession;
+  }
+
+  if (
+    State.libraryScanSession.value &&
+    !State.libraryScanSession.value.sourcePath &&
+    nextSession.sourcePath
+  ) {
+    State.libraryScanSession.value = {
+      ...State.libraryScanSession.value,
+      sourcePath: nextSession.sourcePath,
+    };
+  }
+
+  return State.libraryScanSession.value!;
+};
+
+const beginLibraryScanProgress = (session: State.LibraryScanSession) => {
+  State.libraryScanProgress.value = {
+    phase: 'collecting',
+    current: 0,
+    total: 0,
+    folder_path: session.sourcePath ?? '',
+    folder_index: session.sourcePath ? 1 : 0,
+    folder_total: Math.max(1, State.libraryFolders.value.length),
+    message: null,
+    done: false,
+    failed: false,
+  };
+};
+
+const getLibraryAddScanOptions = (path: string): Required<ScanLibraryOptions> => {
+  const isFirstImport = State.libraryFolders.value.length === 0 && State.librarySongs.value.length === 0;
+  return {
+    trigger: isFirstImport ? 'first-import' : 'folder-add',
+    visibility: isFirstImport ? 'hero' : 'silent',
+    sourcePath: path,
+  };
+};
+
+const finalizeLibraryScanProgress = (songs: State.Song[], failed = false, message?: string) => {
+  const existing = State.libraryScanProgress.value;
+  State.libraryScanProgress.value = {
+    phase: failed ? 'error' : 'complete',
+    current: songs.length,
+    total: songs.length,
+    folder_path: existing?.folder_path ?? State.libraryScanSession.value?.sourcePath ?? '',
+    folder_index: existing?.folder_index ?? 0,
+    folder_total: existing?.folder_total ?? Math.max(1, State.libraryFolders.value.length),
+    message: message ?? (failed ? '扫描音乐库时出现问题' : `已完成扫描，共 ${songs.length} 首歌曲`),
+    done: true,
+    failed,
+  };
 };
 
 const readStoredStringArray = (key: string): string[] | null => {
@@ -409,10 +509,21 @@ export function usePlayer() {
       return;
     }
 
+    if (State.libraryFolders.value.length === 0) {
+      return;
+    }
+
+    const scheduledSession = startLibraryScanSession({
+      trigger: 'bootstrap',
+      visibility: 'silent',
+      sourcePath: '',
+    });
+    beginLibraryScanProgress(scheduledSession);
+
     const runRefresh = () => {
       libraryRefreshIdleId = null;
       libraryRefreshTimer = null;
-      void scanLibrary();
+      void scanLibrary({ trigger: 'bootstrap', visibility: 'silent' });
     };
 
     if ('requestIdleCallback' in window) {
@@ -423,9 +534,10 @@ export function usePlayer() {
     libraryRefreshTimer = setTimeout(runRefresh, 220);
   }
 
-  async function addLibraryFolderRecord(path: string) {
+  async function addLibraryFolderRecord(path: string, scanOptions?: ScanLibraryOptions) {
     await invoke('add_library_folder', { path });
-    await scanLibrary();
+    await fetchLibraryFolders();
+    await scanLibrary(scanOptions ?? getLibraryAddScanOptions(path));
   }
 
   async function addSidebarFolderRecord(path: string) {
@@ -436,7 +548,8 @@ export function usePlayer() {
 
   async function removeLibraryFolderRecord(path: string) {
     await invoke('remove_library_folder', { path });
-    await scanLibrary();
+    await fetchLibraryFolders();
+    await scanLibrary({ trigger: 'manual-rescan', visibility: 'inline' });
   }
 
   async function removeSidebarFolderRecord(path: string) {
@@ -446,17 +559,25 @@ export function usePlayer() {
 
   async function addLibraryFolderLinked(
     path: string,
-    options: { syncLinked?: boolean; showToast?: boolean } = {}
+    options: { syncLinked?: boolean; showToast?: boolean; scanOptions?: ScanLibraryOptions } = {}
   ) {
-    const { syncLinked = true, showToast = false } = options;
+    const { syncLinked = true, showToast = false, scanOptions } = options;
+    const resolvedScanOptions = resolveScanLibraryOptions(scanOptions ?? getLibraryAddScanOptions(path));
 
-    await addLibraryFolderRecord(path);
+    await addLibraryFolderRecord(path, resolvedScanOptions);
 
     if (syncLinked && appSettings.value.linkFoldersToLibrary) {
       await addSidebarFolderRecord(path);
     }
 
     if (showToast) {
+      const toastText = resolvedScanOptions.visibility === 'silent'
+        ? "已添加文件夹，正在后台扫描"
+        : syncLinked && appSettings.value.linkFoldersToLibrary
+          ? "已将文件夹同时添加到本地音乐库和侧边栏"
+          : "已添加文件夹到音乐库";
+      useToast().showToast(toastText, "success");
+      return;
       useToast().showToast(
         syncLinked && appSettings.value.linkFoldersToLibrary
           ? "已将文件夹同时添加到本地音乐库和侧边栏"
@@ -652,7 +773,11 @@ export function usePlayer() {
     try {
       const selected = await open({ directory: true, multiple: false, title: '选择音乐文件夹' });
       if (selected && typeof selected === 'string') {
-        await addLibraryFolderLinked(selected, { showToast: true });
+        const scanOptions = getLibraryAddScanOptions(selected);
+        await addLibraryFolderLinked(selected, {
+          showToast: scanOptions.visibility === 'silent',
+          scanOptions,
+        });
       }
     } catch (e) {
       console.error("Failed to add library folder:", e);
@@ -664,7 +789,7 @@ export function usePlayer() {
     try {
       await invoke('add_library_folder', { path });
       await fetchLibraryFolders();
-      await scanLibrary();
+      await scanLibrary(getLibraryAddScanOptions(path));
     } catch (e) {
       console.error("Failed to add library folder path:", e);
     }
@@ -837,12 +962,26 @@ export function usePlayer() {
     return null;
   };
 
-  async function scanLibrary() {
+  async function scanLibrary(options: ScanLibraryOptions = {}) {
+    const resolvedOptions = resolveScanLibraryOptions(options);
+
     if (libraryRefreshPromise) {
+      startLibraryScanSession(resolvedOptions);
       return libraryRefreshPromise;
     }
 
     cancelScheduledLibraryRefresh();
+
+    if (State.libraryFolders.value.length === 0) {
+      State.libraryScanSession.value = null;
+      State.libraryScanProgress.value = null;
+      State.lastLibraryScanError.value = null;
+      return Promise.resolve();
+    }
+
+    const session = startLibraryScanSession(resolvedOptions);
+    beginLibraryScanProgress(session);
+    State.lastLibraryScanError.value = null;
 
     libraryRefreshPromise = (async () => {
       try {
@@ -851,9 +990,18 @@ export function usePlayer() {
         State.librarySongs.value = songs;
         refreshStateSongReferences(songs);
         await fetchLibraryFolders();
-        // NOTE: We do NOT refresh folderTree here anymore. Sidebar is independent.
+
+        if (!State.libraryScanProgress.value?.done) {
+          finalizeLibraryScanProgress(songs);
+        }
       } catch (e) {
         console.error("Library scan failed:", e);
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        State.lastLibraryScanError.value = errorMessage;
+        finalizeLibraryScanProgress([], true, errorMessage || '扫描音乐库时出现问题');
+        if (session.visibility === 'silent') {
+          useToast().showToast("后台扫描失败，请在音乐库设置中重试", "error");
+        }
       } finally {
         libraryRefreshPromise = null;
       }
@@ -2304,6 +2452,15 @@ export function usePlayer() {
       applyLibraryScanBatch(event.payload);
     });
     listen<LibraryScanProgressPayload>('library-scan-progress', (event) => {
+      State.libraryScanProgress.value = {
+        ...event.payload,
+        message: event.payload.message ?? null,
+      };
+
+      if (event.payload.failed) {
+        State.lastLibraryScanError.value = event.payload.message ?? '扫描音乐库时出现问题';
+      }
+
       if (event.payload.done) {
         flushBufferedLibraryScanBatch();
       }

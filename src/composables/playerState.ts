@@ -18,6 +18,8 @@ export interface FolderNode {
 }
 
 export type LibraryScanPhase = 'collecting' | 'parsing' | 'writing' | 'complete' | 'error';
+export type LibraryScanTrigger = 'bootstrap' | 'first-import' | 'manual-rescan' | 'folder-add';
+export type LibraryScanVisibility = 'silent' | 'hero' | 'inline';
 
 export interface LibraryScanProgress {
   phase: LibraryScanPhase;
@@ -29,6 +31,15 @@ export interface LibraryScanProgress {
   message: string | null;
   done: boolean;
   failed: boolean;
+}
+
+export interface LibraryScanSession {
+  trigger: LibraryScanTrigger;
+  visibility: LibraryScanVisibility;
+  startedAt: number;
+  hadLibraryFoldersAtStart: boolean;
+  hadSongsAtStart: boolean;
+  sourcePath?: string;
 }
 
 // --- 全局播放状态 ---
@@ -81,6 +92,8 @@ export const currentCover = ref<string>('');
 export const dominantColors = ref<string[]>(['transparent', 'transparent', 'transparent', 'transparent']);
 export const playlistCover = ref<string>('');
 export const libraryScanProgress = ref<LibraryScanProgress | null>(null);
+export const libraryScanSession = ref<LibraryScanSession | null>(null);
+export const lastLibraryScanError = ref<string | null>(null);
 export const watchedFolders = ref<string[]>([]); // Legacy/Folder View
 export const favoritePaths = ref<string[]>([]);
 export const playlists = ref<Playlist[]>([]);

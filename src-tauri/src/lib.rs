@@ -8,7 +8,7 @@ mod window_boundary;
 mod window_material;
 mod window_theme;
 
-use database::DbState;
+use database::{clear_all_app_data, DbState};
 use music::{
     add_library_folder, add_sidebar_folder, batch_move_music_files, create_folder, delete_folder,
     delete_music_file, get_folder_first_song, get_library_folders, get_library_hierarchy,
@@ -242,6 +242,7 @@ pub fn run() {
             get_behavior_stats,
             get_quality_distribution,
             get_format_distribution,
+            clear_all_app_data,
             open_external_program,
             refresh_folder_songs,
             set_mini_boundary_enabled,

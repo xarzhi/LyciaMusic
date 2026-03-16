@@ -2,10 +2,17 @@
 import { computed, ref, onMounted } from 'vue';
 import { useSettings } from '../../composables/settings';
 import { usePlayer } from '../../composables/player';
+import { useToast } from '../../composables/toast';
+import ConfirmModal from '../overlays/ConfirmModal.vue';
 import { invoke } from '@tauri-apps/api/core';
 
 const { settings } = useSettings();
-const { settings: playerSettings } = usePlayer();
+const {
+  settings: playerSettings,
+  pauseSong,
+  libraryScanProgress,
+} = usePlayer();
+const { showToast } = useToast();
 
 // Placeholder states for demonstration
 const launchOnStartup = ref(false);
@@ -23,6 +30,12 @@ const showDeviceMenu = ref(false);
 const triggerButtonRef = ref<HTMLElement | null>(null);
 const dropdownStyle = ref({});
 const showLyricsSyncOffsetPanel = ref(false);
+const showClearAllDataConfirm = ref(false);
+const isClearingAllData = ref(false);
+
+const isLibraryScanActive = computed(
+  () => !!libraryScanProgress.value && !libraryScanProgress.value.done
+);
 
 const lyricsSyncOffsetMs = computed({
   get: () => Math.round(settings.value.lyricsSyncOffset * 1000),
@@ -41,6 +54,35 @@ const lyricsSyncOffsetLabel = computed(() => {
 
 const resetLyricsSyncOffset = () => {
   lyricsSyncOffsetMs.value = 0;
+};
+
+const openClearAllDataConfirm = () => {
+  if (isClearingAllData.value || isLibraryScanActive.value) {
+    return;
+  }
+
+  showClearAllDataConfirm.value = true;
+};
+
+const handleClearAllData = async () => {
+  if (isClearingAllData.value) {
+    return;
+  }
+
+  isClearingAllData.value = true;
+
+  try {
+    await pauseSong().catch(() => {});
+    await invoke('clear_all_app_data');
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.reload();
+  } catch (error) {
+    console.error('Failed to clear all app data:', error);
+    showToast('清除所有数据失败，请重试', 'error');
+    showClearAllDataConfirm.value = false;
+    isClearingAllData.value = false;
+  }
 };
 
 const fetchDevices = async () => {
@@ -436,5 +478,40 @@ onMounted(async () => {
       </div>
     </section>
 
+    <section class="space-y-3">
+      <h2 class="text-sm font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+        <span class="w-1 h-4 bg-[#EC4141] rounded-full"></span>
+        数据重置
+      </h2>
+      <div class="bg-white/50 dark:bg-black/40 backdrop-blur-sm rounded-xl border border-gray-100/50 dark:border-white/5 overflow-hidden">
+        <div class="p-4 flex items-center justify-between gap-4 hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">清除所有数据</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              删除媒体库、播放记录、收藏和设置，恢复初始状态，不会删除你的音乐文件
+            </div>
+          </div>
+          <button
+            type="button"
+            :disabled="isClearingAllData || isLibraryScanActive"
+            @click="openClearAllDataConfirm"
+            class="shrink-0 text-xs px-3 py-1.5 rounded border transition"
+            :class="isClearingAllData || isLibraryScanActive
+              ? 'bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+              : 'bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 text-red-500 hover:border-red-500 hover:bg-red-50/60 dark:hover:bg-red-500/10'"
+          >
+            {{ isClearingAllData ? '正在清除...' : isLibraryScanActive ? '扫描中不可用' : '恢复初始状态' }}
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <ConfirmModal
+      :visible="showClearAllDataConfirm"
+      title="清除所有数据"
+      content="此操作会清空媒体库、播放记录、收藏和设置，并恢复初始状态，但不会删除你的音乐文件。确定继续吗？"
+      @cancel="!isClearingAllData && (showClearAllDataConfirm = false)"
+      @confirm="handleClearAllData"
+    />
   </div>
 </template>

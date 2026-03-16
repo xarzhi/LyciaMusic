@@ -28,6 +28,8 @@ let libraryRefreshPromise: Promise<void> | null = null;
 let libraryRefreshIdleId: number | null = null;
 let libraryRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let playerInitDone = false;
+const PLAYER_OUTPUT_DEVICE_KEY = 'player_output_device';
+const PLAYER_OUTPUT_DEVICE_MODE_KEY = 'player_output_device_mode';
 
 // 插值锚点
 
@@ -2620,6 +2622,17 @@ export function usePlayer() {
       // 🟢 性能优化：同步恢复持久化数据，避免空状态渲染后再次闪烁
       const restoreState = async () => {
         const sVol = localStorage.getItem('player_volume'); if (sVol) { State.volume.value = parseInt(sVol); await invoke('set_volume', { volume: State.volume.value / 100.0 }); }
+        const sOutputDevice = localStorage.getItem(PLAYER_OUTPUT_DEVICE_KEY);
+        const sOutputMode = localStorage.getItem(PLAYER_OUTPUT_DEVICE_MODE_KEY);
+        if ((sOutputMode === 'manual' || (!sOutputMode && sOutputDevice)) && sOutputDevice) {
+          await invoke('set_output_device', { deviceId: sOutputDevice }).catch((error) => {
+            console.warn('Failed to restore output device:', error);
+          });
+        } else {
+          await invoke('set_output_device', { deviceId: null }).catch((error) => {
+            console.warn('Failed to restore default output device mode:', error);
+          });
+        }
         const sFolders = localStorage.getItem('player_watched_folders'); if (sFolders) try { State.watchedFolders.value = JSON.parse(sFolders); } catch (e) { }
         const sFavs = localStorage.getItem('player_favorites'); if (sFavs) try { State.favoritePaths.value = JSON.parse(sFavs); } catch (e) { }
         const sPlaylists = localStorage.getItem('player_custom_playlists'); if (sPlaylists) try { State.playlists.value = JSON.parse(sPlaylists); } catch (e) { }

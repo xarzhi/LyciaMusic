@@ -8,7 +8,7 @@ use souvlaki::{
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -18,11 +18,13 @@ pub struct TimedSource<S> {
     pub inner: S,
     pub samples_played: Arc<AtomicU64>,
 }
+
 impl<S> Iterator for TimedSource<S>
 where
     S: Source<Item = f32>,
 {
     type Item = f32;
+
     fn next(&mut self) -> Option<Self::Item> {
         let sample = self.inner.next();
         if sample.is_some() {
@@ -31,6 +33,7 @@ where
         sample
     }
 }
+
 impl<S> Source for TimedSource<S>
 where
     S: Source<Item = f32>,
@@ -38,12 +41,15 @@ where
     fn channels(&self) -> u16 {
         self.inner.channels()
     }
+
     fn sample_rate(&self) -> u32 {
         self.inner.sample_rate()
     }
+
     fn current_frame_len(&self) -> Option<usize> {
         self.inner.current_frame_len()
     }
+
     fn total_duration(&self) -> Option<Duration> {
         self.inner.total_duration()
     }
@@ -65,19 +71,27 @@ pub enum AudioCommand {
         request_id: u64,
     },
     SetVolume(f32),
-    SetDevice(String),
+    SetDevice(Option<String>),
 }
 
 pub struct PlayerState {
     pub tx: Mutex<Sender<AudioCommand>>,
     pub progress: Arc<SharedProgress>,
-    pub controls: Arc<Mutex<Option<MediaControls>>>, // Store MediaControls
+    pub controls: Arc<Mutex<Option<MediaControls>>>,
+    pub output_status: Arc<Mutex<AudioOutputStatus>>,
 }
 
 #[derive(Serialize, Clone)]
 pub struct AudioDevice {
     id: String,
     name: String,
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct AudioOutputStatus {
+    selected_device_id: Option<String>,
+    active_device_name: Option<String>,
+    follows_system_default: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -91,27 +105,125 @@ pub fn get_output_devices() -> Result<Vec<AudioDevice>, String> {
     let host = cpal::default_host();
     let devices = host.output_devices().map_err(|e| e.to_string())?;
     let mut result = Vec::new();
+
     for device in devices {
         if let Ok(name) = device.name() {
-            // Using name as ID for simplicity since cpal doesn't expose stable IDs easily across platforms
             result.push(AudioDevice {
                 id: name.clone(),
                 name,
             });
         }
     }
+
     Ok(result)
 }
 
 #[tauri::command]
 pub fn set_output_device(
-    device_id: String,
+    device_id: Option<String>,
     state: tauri::State<PlayerState>,
 ) -> Result<(), String> {
     let tx = state.tx.lock().map_err(|e| e.to_string())?;
     tx.send(AudioCommand::SetDevice(device_id))
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_current_output_device(
+    state: tauri::State<PlayerState>,
+) -> Result<AudioOutputStatus, String> {
+    let status = state.output_status.lock().map_err(|e| e.to_string())?;
+    Ok(status.clone())
+}
+
+fn default_output_device_name(host: &cpal::Host) -> Option<String> {
+    host.default_output_device()?.name().ok()
+}
+
+fn create_output_stream(
+    host: &cpal::Host,
+    device_name: Option<&str>,
+) -> Option<(OutputStream, OutputStreamHandle, String)> {
+    if let Some(name) = device_name {
+        if let Ok(mut devices) = host.output_devices() {
+            if let Some(device) = devices.find(|d| d.name().map(|n| n == name).unwrap_or(false)) {
+                if let Ok((stream, handle)) = OutputStream::try_from_device(&device) {
+                    return Some((stream, handle, name.to_string()));
+                }
+            }
+        }
+    }
+
+    let default_device = host.default_output_device()?;
+    let active_name = default_device.name().ok()?;
+    let (stream, handle) = OutputStream::try_from_device(&default_device).ok()?;
+    Some((stream, handle, active_name))
+}
+
+fn emit_output_status(
+    app: &AppHandle,
+    status: &Arc<Mutex<AudioOutputStatus>>,
+    selected_device_id: Option<String>,
+    active_device_name: Option<String>,
+) {
+    let next_status = AudioOutputStatus {
+        selected_device_id: selected_device_id.clone(),
+        active_device_name,
+        follows_system_default: selected_device_id.is_none(),
+    };
+
+    if let Ok(mut current_status) = status.lock() {
+        *current_status = next_status.clone();
+    }
+
+    let _ = app.emit("audio-output-device-changed", next_status);
+}
+
+fn restore_current_playback(
+    stream_data: &Option<(OutputStream, OutputStreamHandle, String)>,
+    current_sink: &mut Option<Sink>,
+    current_path: &str,
+    current_volume: f32,
+    is_playing_flag: bool,
+    progress: &Arc<SharedProgress>,
+) {
+    if current_path.is_empty() {
+        return;
+    }
+
+    if let Some((_, handle, _)) = stream_data {
+        *current_sink = Sink::try_new(handle).ok();
+
+        let current_samples = progress.samples_played.load(Ordering::Relaxed);
+        let rate = progress.sample_rate.load(Ordering::Relaxed);
+        let channels = progress.channels.load(Ordering::Relaxed);
+        let time_played = if rate > 0 && channels > 0 {
+            current_samples as f64 / (rate as u64 * channels as u64) as f64
+        } else {
+            0.0
+        };
+        let jump_target = Duration::from_secs_f64(time_played);
+
+        if let Ok(file) = File::open(current_path) {
+            let reader = BufReader::with_capacity(512 * 1024, file);
+            if let Ok(source) = Decoder::new(reader) {
+                let timed_source = TimedSource {
+                    inner: source.convert_samples::<f32>().skip_duration(jump_target),
+                    samples_played: progress.samples_played.clone(),
+                };
+                if let Some(sink) = current_sink.as_ref() {
+                    sink.set_volume(current_volume);
+                    sink.append(timed_source);
+                    if is_playing_flag {
+                        sink.play();
+                    } else {
+                        sink.pause();
+                    }
+                }
+            }
+        }
+    }
 }
 
 pub fn init_player(app: &AppHandle) -> PlayerState {
@@ -122,21 +234,17 @@ pub fn init_player(app: &AppHandle) -> PlayerState {
         channels: Arc::new(AtomicU32::new(2)),
     });
     let thread_progress = shared_progress.clone();
-    let thread_app_handle = app.clone(); // 用于在播放线程中发送事件
-
-    // Initialize MediaControls
+    let thread_app_handle = app.clone();
     let controls = Arc::new(Mutex::new(None));
+    let output_status = Arc::new(Mutex::new(AudioOutputStatus::default()));
 
-    // Attempt to initialize souvlaki (must be on main thread logic, or have handle)
-    // Here we are likely on the main thread (setup hook)
     if let Some(window) = app.get_webview_window("main") {
         if let Ok(handle) = window.window_handle() {
             let raw_handle = handle.as_raw();
-            // Determine HWND for Windows
+
             #[cfg(target_os = "windows")]
             {
                 if let RawWindowHandle::Win32(h) = raw_handle {
-                    // Cast NonZeroIisize to *mut c_void
                     let hwnd = h.hwnd.get() as *mut std::ffi::c_void;
 
                     let config = PlatformConfig {
@@ -148,10 +256,6 @@ pub fn init_player(app: &AppHandle) -> PlayerState {
                     match MediaControls::new(config) {
                         Ok(mut mc) => {
                             let app_clone = app.clone();
-                            // Attach event handler
-                            // We cannot easily send commands to the rodio thread from here without a clone of tx.
-                            // But PlayerState is not created yet.
-                            // We will emit events to frontend, and frontend will call invoke commands.
                             let _ = mc.attach(move |event| match event {
                                 MediaControlEvent::Play => {
                                     let _ = app_clone.emit("player:play", ());
@@ -176,114 +280,105 @@ pub fn init_player(app: &AppHandle) -> PlayerState {
         }
     }
 
+    let thread_output_status = output_status.clone();
+
     thread::spawn(move || {
         let host = cpal::default_host();
-
-        // Helper to create stream
-        let create_stream =
-            |device_name: Option<String>| -> Option<(OutputStream, OutputStreamHandle)> {
-                if let Some(name) = device_name {
-                    if let Ok(mut devices) = host.output_devices() {
-                        if let Some(device) =
-                            devices.find(|d| d.name().map(|n| n == name).unwrap_or(false))
-                        {
-                            return OutputStream::try_from_device(&device).ok();
-                        }
-                    }
-                }
-                OutputStream::try_default().ok()
-            };
-
-        let mut stream_data = create_stream(None);
+        let mut selected_device_name: Option<String> = None;
+        let mut stream_data = create_output_stream(&host, None);
         let mut current_sink: Option<Sink> = None;
-        let mut current_path: String = String::new();
-        let mut current_volume: f32 = 1.0;
+        let mut current_path = String::new();
+        let mut current_volume = 1.0;
         let mut is_playing_flag = false;
+        let mut active_device_name = stream_data.as_ref().map(|(_, _, name)| name.clone());
 
-        // Try to create initial sink
-        if let Some((_, ref handle)) = stream_data {
+        if let Some((_, handle, _)) = &stream_data {
             current_sink = Sink::try_new(handle).ok();
         }
 
-        while let Ok(cmd) = rx.recv() {
-            match cmd {
-                AudioCommand::Play(path) => {
-                    current_path = path.clone();
-                    is_playing_flag = true;
-                    if let Some((_, ref handle)) = stream_data {
-                        // Recreate sink to clear previous
-                        if let Some(sink) = &current_sink {
-                            sink.stop();
-                        }
-                        current_sink = Sink::try_new(handle).ok();
+        emit_output_status(
+            &thread_app_handle,
+            &thread_output_status,
+            selected_device_name.clone(),
+            active_device_name.clone(),
+        );
 
-                        if let Ok(file) = File::open(&current_path) {
-                            let reader = BufReader::with_capacity(512 * 1024, file);
-                            if let Ok(source) = Decoder::new(reader) {
-                                let rate = source.sample_rate();
-                                let channels = source.channels();
-                                thread_progress.sample_rate.store(rate, Ordering::Relaxed);
-                                thread_progress
-                                    .channels
-                                    .store(channels as u32, Ordering::Relaxed);
-                                thread_progress.samples_played.store(0, Ordering::Relaxed);
-                                let timed_source = TimedSource {
-                                    inner: source.convert_samples::<f32>(),
-                                    samples_played: thread_progress.samples_played.clone(),
-                                };
-                                if let Some(sink) = &current_sink {
-                                    sink.append(timed_source);
-                                    sink.set_volume(current_volume);
-                                    sink.play();
+        loop {
+            match rx.recv_timeout(Duration::from_millis(750)) {
+                Ok(cmd) => match cmd {
+                    AudioCommand::Play(path) => {
+                        current_path = path.clone();
+                        is_playing_flag = true;
+
+                        if let Some((_, handle, _)) = &stream_data {
+                            if let Some(sink) = &current_sink {
+                                sink.stop();
+                            }
+                            current_sink = Sink::try_new(handle).ok();
+
+                            if let Ok(file) = File::open(&current_path) {
+                                let reader = BufReader::with_capacity(512 * 1024, file);
+                                if let Ok(source) = Decoder::new(reader) {
+                                    let rate = source.sample_rate();
+                                    let channels = source.channels();
+                                    thread_progress.sample_rate.store(rate, Ordering::Relaxed);
+                                    thread_progress
+                                        .channels
+                                        .store(channels as u32, Ordering::Relaxed);
+                                    thread_progress.samples_played.store(0, Ordering::Relaxed);
+
+                                    let timed_source = TimedSource {
+                                        inner: source.convert_samples::<f32>(),
+                                        samples_played: thread_progress.samples_played.clone(),
+                                    };
+
+                                    if let Some(sink) = &current_sink {
+                                        sink.append(timed_source);
+                                        sink.set_volume(current_volume);
+                                        sink.play();
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                AudioCommand::Pause => {
-                    is_playing_flag = false;
-                    if let Some(sink) = &current_sink {
-                        sink.pause();
+                    AudioCommand::Pause => {
+                        is_playing_flag = false;
+                        if let Some(sink) = &current_sink {
+                            sink.pause();
+                        }
                     }
-                }
-                AudioCommand::Resume => {
-                    is_playing_flag = true;
-                    if let Some(sink) = &current_sink {
-                        sink.play();
+                    AudioCommand::Resume => {
+                        is_playing_flag = true;
+                        if let Some(sink) = &current_sink {
+                            sink.play();
+                        }
                     }
-                }
-                AudioCommand::Seek {
-                    time,
-                    is_playing,
-                    request_id,
-                } => {
-                    let clamped_time = time.max(0.0);
-                    let jump_target = Duration::from_secs_f64(clamped_time);
-                    is_playing_flag = is_playing;
+                    AudioCommand::Seek {
+                        time,
+                        is_playing,
+                        request_id,
+                    } => {
+                        let clamped_time = time.max(0.0);
+                        let jump_target = Duration::from_secs_f64(clamped_time);
+                        is_playing_flag = is_playing;
 
-                    // 🚀 使用 rodio 0.20 的 try_seek 快速定位
-                    if let Some(sink) = &current_sink {
-                        // 尝试使用快速 seek
-                        if sink.try_seek(jump_target).is_ok() {
-                            // 更新进度跟踪
-                            let rate = thread_progress.sample_rate.load(Ordering::Relaxed);
-                            let channels = thread_progress.channels.load(Ordering::Relaxed);
-                            let samples_at_target =
-                                (clamped_time * rate as f64 * channels as f64).round() as u64;
-                            thread_progress
-                                .samples_played
-                                .store(samples_at_target, Ordering::Relaxed);
+                        if let Some(sink) = &current_sink {
+                            if sink.try_seek(jump_target).is_ok() {
+                                let rate = thread_progress.sample_rate.load(Ordering::Relaxed);
+                                let channels = thread_progress.channels.load(Ordering::Relaxed);
+                                let samples_at_target =
+                                    (clamped_time * rate as f64 * channels as f64).round() as u64;
+                                thread_progress
+                                    .samples_played
+                                    .store(samples_at_target, Ordering::Relaxed);
 
-                            // 根据播放状态暂停或播放
-                            if is_playing {
-                                sink.play();
-                            } else {
-                                sink.pause();
-                            }
-                        } else {
-                            // 回退到旧方法（重新打开文件）
-                            if !current_path.is_empty() {
-                                if let Some((_, ref handle)) = stream_data {
+                                if is_playing {
+                                    sink.play();
+                                } else {
+                                    sink.pause();
+                                }
+                            } else if !current_path.is_empty() {
+                                if let Some((_, handle, _)) = &stream_data {
                                     sink.stop();
                                     current_sink = Sink::try_new(handle).ok();
 
@@ -294,11 +389,11 @@ pub fn init_player(app: &AppHandle) -> PlayerState {
                                             let channels = source.channels();
                                             let samples_to_skip =
                                                 (clamped_time * rate as f64 * channels as f64)
-                                                    .round()
-                                                    as u64;
+                                                    .round() as u64;
                                             thread_progress
                                                 .samples_played
                                                 .store(samples_to_skip, Ordering::Relaxed);
+
                                             let timed_source = TimedSource {
                                                 inner: source
                                                     .convert_samples::<f32>()
@@ -307,6 +402,7 @@ pub fn init_player(app: &AppHandle) -> PlayerState {
                                                     .samples_played
                                                     .clone(),
                                             };
+
                                             if let Some(new_sink) = &current_sink {
                                                 new_sink.set_volume(current_volume);
                                                 new_sink.append(timed_source);
@@ -321,72 +417,80 @@ pub fn init_player(app: &AppHandle) -> PlayerState {
                                 }
                             }
                         }
+
+                        let _ = thread_app_handle.emit(
+                            "seek_completed",
+                            SeekCompletedPayload {
+                                request_id,
+                                time: clamped_time,
+                            },
+                        );
                     }
-                    // Seek 完成后发送事件通知前端
-                    let _ = thread_app_handle.emit(
-                        "seek_completed",
-                        SeekCompletedPayload {
-                            request_id,
-                            time: clamped_time,
-                        },
-                    );
-                }
-                AudioCommand::SetVolume(vol) => {
-                    current_volume = vol;
-                    if let Some(sink) = &current_sink {
-                        sink.set_volume(vol);
+                    AudioCommand::SetVolume(vol) => {
+                        current_volume = vol;
+                        if let Some(sink) = &current_sink {
+                            sink.set_volume(vol);
+                        }
                     }
-                }
-                AudioCommand::SetDevice(device_name) => {
-                    // 1. Drop current sink and stream (implicitly done by reassignment)
-                    if let Some(sink) = &current_sink {
-                        sink.stop();
+                    AudioCommand::SetDevice(device_name) => {
+                        selected_device_name = device_name;
+
+                        if let Some(sink) = &current_sink {
+                            sink.stop();
+                        }
+                        current_sink = None;
+
+                        stream_data = create_output_stream(&host, selected_device_name.as_deref());
+                        active_device_name = stream_data.as_ref().map(|(_, _, name)| name.clone());
+
+                        restore_current_playback(
+                            &stream_data,
+                            &mut current_sink,
+                            &current_path,
+                            current_volume,
+                            is_playing_flag,
+                            &thread_progress,
+                        );
+
+                        emit_output_status(
+                            &thread_app_handle,
+                            &thread_output_status,
+                            selected_device_name.clone(),
+                            active_device_name.clone(),
+                        );
                     }
-                    current_sink = None;
-
-                    // 2. Create new stream
-                    stream_data = create_stream(Some(device_name));
-
-                    // 3. Resume playback if we had a path and stream is valid
-                    if let Some((_, ref handle)) = stream_data {
-                        current_sink = Sink::try_new(handle).ok();
-
-                        if !current_path.is_empty() {
-                            // Resume logic similar to Seek
-                            let current_samples =
-                                thread_progress.samples_played.load(Ordering::Relaxed);
-                            let rate = thread_progress.sample_rate.load(Ordering::Relaxed);
-                            let channels = thread_progress.channels.load(Ordering::Relaxed);
-                            let time_played = if rate > 0 && channels > 0 {
-                                current_samples as f64 / (rate as u64 * channels as u64) as f64
-                            } else {
-                                0.0
-                            };
-                            let jump_target = Duration::from_secs_f64(time_played);
-
-                            if let Ok(file) = File::open(&current_path) {
-                                let reader = BufReader::with_capacity(512 * 1024, file);
-                                if let Ok(source) = Decoder::new(reader) {
-                                    let timed_source = TimedSource {
-                                        inner: source
-                                            .convert_samples::<f32>()
-                                            .skip_duration(jump_target),
-                                        samples_played: thread_progress.samples_played.clone(),
-                                    };
-                                    if let Some(sink) = &current_sink {
-                                        sink.set_volume(current_volume);
-                                        sink.append(timed_source);
-                                        if is_playing_flag {
-                                            sink.play();
-                                        } else {
-                                            sink.pause();
-                                        }
-                                    }
-                                }
+                },
+                Err(RecvTimeoutError::Timeout) => {
+                    if selected_device_name.is_none() {
+                        let next_default_name = default_output_device_name(&host);
+                        if next_default_name != active_device_name {
+                            if let Some(sink) = &current_sink {
+                                sink.stop();
                             }
+                            current_sink = None;
+                            stream_data = create_output_stream(&host, None);
+                            active_device_name =
+                                stream_data.as_ref().map(|(_, _, name)| name.clone());
+
+                            restore_current_playback(
+                                &stream_data,
+                                &mut current_sink,
+                                &current_path,
+                                current_volume,
+                                is_playing_flag,
+                                &thread_progress,
+                            );
+
+                            emit_output_status(
+                                &thread_app_handle,
+                                &thread_output_status,
+                                None,
+                                active_device_name.clone(),
+                            );
                         }
                     }
                 }
+                Err(RecvTimeoutError::Disconnected) => break,
             }
         }
     });
@@ -395,6 +499,7 @@ pub fn init_player(app: &AppHandle) -> PlayerState {
         tx: Mutex::new(tx),
         progress: shared_progress,
         controls,
+        output_status,
     }
 }
 
@@ -412,7 +517,6 @@ pub fn play_audio(
     tx.send(AudioCommand::Play(path))
         .map_err(|e| e.to_string())?;
 
-    // Update Media Controls
     if let Ok(mut controls) = state.controls.lock() {
         if let Some(mc) = controls.as_mut() {
             let _ = mc.set_metadata(MediaMetadata {
@@ -473,6 +577,7 @@ pub fn seek_audio(
         request_id,
     })
     .map_err(|e| e.to_string())?;
+
     if let Ok(mut controls) = state.controls.lock() {
         if let Some(mc) = controls.as_mut() {
             let progress = MediaPosition(Duration::from_secs_f64(time.max(0.0)));
@@ -487,6 +592,7 @@ pub fn seek_audio(
             }
         }
     }
+
     Ok(())
 }
 
@@ -497,14 +603,17 @@ pub fn set_volume(volume: f32, state: tauri::State<PlayerState>) -> Result<(), S
         .map_err(|e| e.to_string())?;
     Ok(())
 }
+
 #[tauri::command]
 pub fn get_playback_progress(state: tauri::State<PlayerState>) -> f64 {
     let samples = state.progress.samples_played.load(Ordering::Relaxed);
     let rate = state.progress.sample_rate.load(Ordering::Relaxed);
     let channels = state.progress.channels.load(Ordering::Relaxed);
+
     if rate == 0 || channels == 0 {
         return 0.0;
     }
+
     let total_samples_per_sec = rate as u64 * channels as u64;
     samples as f64 / total_samples_per_sec as f64
 }

@@ -19,8 +19,8 @@ use music::{
     ImageConcurrencyLimit,
 };
 use player::{
-    get_output_devices, get_playback_progress, init_player, pause_audio, play_audio, resume_audio,
-    seek_audio, set_output_device, set_volume,
+    get_current_output_device, get_output_devices, get_playback_progress, init_player,
+    pause_audio, play_audio, resume_audio, seek_audio, set_output_device, set_volume,
 };
 use statistics::{
     add_to_history, clear_recent_history, get_behavior_stats, get_format_distribution,
@@ -216,6 +216,7 @@ pub fn run() {
             preview_rename,
             apply_rename,
             get_output_devices,
+            get_current_output_device,
             set_output_device,
             get_library_folders,
             is_directory,

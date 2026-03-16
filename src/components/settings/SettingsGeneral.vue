@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { listen } from '@tauri-apps/api/event';
 import { useSettings } from '../../composables/settings';
 import { usePlayer } from '../../composables/player';
 import { useToast } from '../../composables/toast';
-import ConfirmModal from '../overlays/ConfirmModal.vue';
 import { invoke } from '@tauri-apps/api/core';
+import ConfirmModal from '../overlays/ConfirmModal.vue';
+
+const OUTPUT_DEVICE_KEY = 'player_output_device';
+const OUTPUT_DEVICE_MODE_KEY = 'player_output_device_mode';
 
 const { settings } = useSettings();
 const {
@@ -14,7 +18,6 @@ const {
 } = usePlayer();
 const { showToast } = useToast();
 
-// Placeholder states for demonstration
 const launchOnStartup = ref(false);
 const gpuAcceleration = ref(true);
 const autoPlay = ref(true);
@@ -24,18 +27,46 @@ interface AudioDevice {
   name: string;
 }
 
+interface AudioOutputStatus {
+  selected_device_id: string | null;
+  active_device_name: string | null;
+  follows_system_default: boolean;
+}
+
 const outputDevices = ref<AudioDevice[]>([]);
-const currentDeviceId = ref('');
+const selectedDeviceId = ref<string | null>(null);
+const activeDeviceName = ref('');
+const followsSystemDefault = ref(true);
 const showDeviceMenu = ref(false);
 const triggerButtonRef = ref<HTMLElement | null>(null);
 const dropdownStyle = ref({});
 const showLyricsSyncOffsetPanel = ref(false);
 const showClearAllDataConfirm = ref(false);
 const isClearingAllData = ref(false);
+let unlistenOutputStatus: (() => void) | null = null;
 
 const isLibraryScanActive = computed(
   () => !!libraryScanProgress.value && !libraryScanProgress.value.done
 );
+
+const currentOutputDeviceLabel = computed(() => {
+  if (activeDeviceName.value) {
+    return activeDeviceName.value;
+  }
+
+  const selectedDevice = outputDevices.value.find(device => device.id === selectedDeviceId.value);
+  return selectedDevice?.name || '默认系统设备';
+});
+
+const outputDeviceDescription = computed(() => {
+  if (!currentOutputDeviceLabel.value) {
+    return '未检测到可用输出设备';
+  }
+
+  return followsSystemDefault.value
+    ? `当前播放设备：${currentOutputDeviceLabel.value}（跟随系统默认）`
+    : `当前播放设备：${currentOutputDeviceLabel.value}`;
+});
 
 const lyricsSyncOffsetMs = computed({
   get: () => Math.round(settings.value.lyricsSyncOffset * 1000),
@@ -85,23 +116,51 @@ const handleClearAllData = async () => {
   }
 };
 
+const applyOutputStatus = (status: AudioOutputStatus) => {
+  selectedDeviceId.value = status.selected_device_id;
+  activeDeviceName.value = status.active_device_name || '';
+  followsSystemDefault.value = status.follows_system_default;
+};
+
 const fetchDevices = async () => {
   try {
     const devices = await invoke<AudioDevice[]>('get_output_devices');
     outputDevices.value = devices;
-  } catch (e) {
-    console.error("Failed to get devices:", e);
+  } catch (error) {
+    console.error('Failed to get devices:', error);
+  }
+};
+
+const fetchCurrentOutputStatus = async () => {
+  try {
+    const status = await invoke<AudioOutputStatus>('get_current_output_device');
+    applyOutputStatus(status);
+  } catch (error) {
+    console.error('Failed to get current output device:', error);
+  }
+};
+
+const selectSystemDefaultDevice = async () => {
+  try {
+    await invoke('set_output_device', { deviceId: null });
+    localStorage.removeItem(OUTPUT_DEVICE_KEY);
+    localStorage.setItem(OUTPUT_DEVICE_MODE_KEY, 'default');
+    showDeviceMenu.value = false;
+    await fetchCurrentOutputStatus();
+  } catch (error) {
+    console.error('Failed to switch to system default device:', error);
   }
 };
 
 const selectDevice = async (device: AudioDevice) => {
   try {
     await invoke('set_output_device', { deviceId: device.id });
-    currentDeviceId.value = device.id;
-    localStorage.setItem('player_output_device', device.id);
+    localStorage.setItem(OUTPUT_DEVICE_KEY, device.id);
+    localStorage.setItem(OUTPUT_DEVICE_MODE_KEY, 'manual');
     showDeviceMenu.value = false;
-  } catch (e) {
-    console.error("Failed to set device:", e);
+    await fetchCurrentOutputStatus();
+  } catch (error) {
+    console.error('Failed to set device:', error);
   }
 };
 
@@ -111,11 +170,9 @@ const toggleDeviceMenu = () => {
   } else {
     if (triggerButtonRef.value) {
       const rect = triggerButtonRef.value.getBoundingClientRect();
-      // Calculate position: align right edge of dropdown with right edge of button
-      // Dropdown width is w-48 (12rem = 192px)
       dropdownStyle.value = {
         top: `${rect.bottom + 8}px`,
-        left: `${rect.right - 192}px`,
+        left: `${rect.right - 224}px`,
         position: 'fixed',
         zIndex: 9999
       };
@@ -125,11 +182,15 @@ const toggleDeviceMenu = () => {
 };
 
 onMounted(async () => {
-  await fetchDevices();
-  const savedId = localStorage.getItem('player_output_device');
-  if (savedId) {
-    currentDeviceId.value = savedId;
-  }
+  await Promise.all([fetchDevices(), fetchCurrentOutputStatus()]);
+  unlistenOutputStatus = await listen<AudioOutputStatus>('audio-output-device-changed', async (event) => {
+    applyOutputStatus(event.payload);
+    await fetchDevices();
+  });
+});
+
+onUnmounted(() => {
+  unlistenOutputStatus?.();
 });
 </script>
 
@@ -225,7 +286,7 @@ onMounted(async () => {
            <div>
             <div class="text-sm font-medium text-gray-800 dark:text-gray-200">输出设备</div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              {{ outputDevices.find(d => d.id === currentDeviceId)?.name || '默认系统设备' }}
+              {{ outputDeviceDescription }}
             </div>
           </div>
           
@@ -235,7 +296,7 @@ onMounted(async () => {
               @click="toggleDeviceMenu"
               class="text-xs px-3 py-1.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded text-gray-600 dark:text-gray-300 hover:text-[#EC4141] hover:border-[#EC4141] transition flex items-center gap-1"
             >
-              管理设备
+              <span class="max-w-[140px] truncate">{{ currentOutputDeviceLabel }}</span>
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
               </svg>
@@ -249,19 +310,33 @@ onMounted(async () => {
                 
                 <!-- Menu -->
                 <div 
-                  class="fixed w-48 bg-white dark:bg-[#2b2b2b] rounded-xl shadow-xl border border-gray-100 dark:border-white/10 py-1 z-[9999] animate-in fade-in zoom-in-95 duration-100"
+                  class="fixed w-56 bg-white dark:bg-[#2b2b2b] rounded-xl shadow-xl border border-gray-100 dark:border-white/10 py-1 z-[9999] animate-in fade-in zoom-in-95 duration-100"
                   :style="dropdownStyle"
                 >
+                  <button
+                    @click="selectSystemDefaultDevice"
+                    class="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 dark:hover:bg-white/5 transition-colors flex items-center justify-between gap-3"
+                    :class="followsSystemDefault ? 'text-[#EC4141] font-medium' : 'text-gray-600 dark:text-gray-300'"
+                  >
+                    <span class="min-w-0">
+                      <span class="block truncate">跟随系统默认设备</span>
+                      <span class="block truncate text-[11px] text-gray-400 dark:text-gray-500">
+                        {{ currentOutputDeviceLabel }}
+                      </span>
+                    </span>
+                    <span v-if="followsSystemDefault" class="text-[#EC4141]">✓</span>
+                  </button>
+                  <div class="my-1 border-t border-gray-100 dark:border-white/10"></div>
                   <div v-if="outputDevices.length === 0" class="px-4 py-2 text-xs text-gray-400">未找到设备</div>
                   <button 
                     v-for="device in outputDevices" 
                     :key="device.id"
                     @click="selectDevice(device)"
                     class="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 dark:hover:bg-white/5 transition-colors flex items-center justify-between group"
-                    :class="currentDeviceId === device.id ? 'text-[#EC4141] font-medium' : 'text-gray-600 dark:text-gray-300'"
+                    :class="!followsSystemDefault && selectedDeviceId === device.id ? 'text-[#EC4141] font-medium' : 'text-gray-600 dark:text-gray-300'"
                   >
                     <span class="truncate">{{ device.name }}</span>
-                    <span v-if="currentDeviceId === device.id" class="text-[#EC4141]">✓</span>
+                    <span v-if="!followsSystemDefault && selectedDeviceId === device.id" class="text-[#EC4141]">✓</span>
                   </button>
                 </div>
               </div>

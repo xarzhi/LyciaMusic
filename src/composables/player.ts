@@ -13,6 +13,7 @@ import { createPlayerLibraryBatch } from './playerLibraryBatch';
 import { createPlayerLibraryManager } from './playerLibraryManager';
 import { createPlayerPlayback } from './playerPlayback';
 import { createPlayerPersistence } from './playerPersistence';
+import { createPlayerQueue } from './playerQueue';
 import { createPlayerLibraryRuntime } from './playerLibraryRuntime';
 import { createPlayerRestore } from './playerRestore';
 import {
@@ -26,8 +27,6 @@ import { compareByAlphabetIndex, sortItemsByAlphabetIndex } from '../utils/alpha
 
 // 校准定时�?ID
 let dominantColorTaskId = 0;
-const shuffleHistory: string[] = [];
-const shuffleFuture: string[] = [];
 let playerInitDone = false;
 const PLAYER_OUTPUT_DEVICE_KEY = 'player_output_device';
 const PLAYER_OUTPUT_DEVICE_MODE_KEY = 'player_output_device_mode';
@@ -239,10 +238,8 @@ export function usePlayer() {
   } = createPlayerLibraryBatch({
     createSongLookup,
   });
-  const resetShuffleState = () => {
-    shuffleHistory.length = 0;
-    shuffleFuture.length = 0;
-  };
+  let playerQueue: ReturnType<typeof createPlayerQueue>;
+  const resetShuffleState = () => playerQueue.resetShuffleState();
   let playerPlayback: ReturnType<typeof createPlayerPlayback>;
   let libraryRuntime: ReturnType<typeof createPlayerLibraryRuntime>;
   const {
@@ -1319,27 +1316,19 @@ export function usePlayer() {
 
 
 
+  playerQueue = createPlayerQueue({
+    playSong: (song, options) => playerPlayback.playSong(song, options),
+    stopPlaybackRuntime: () => playerPlayback.stopPlaybackRuntime(),
+    showToast: (message, type) => useToast().showToast(message, type),
+  });
+
   playerPlayback = createPlayerPlayback({
     getDisplaySongList: () => displaySongList.value,
     addToHistory,
     loadLyrics,
     handleAutoNext,
     onBeforePlay: (song, options) => {
-      const shouldUpdateShuffleHistory = options.updateShuffleHistory ?? true;
-      const shouldClearShuffleFuture = options.clearShuffleFuture ?? true;
-      const previousSong = State.currentSong.value;
-
-      if (
-        State.playMode.value === 2 &&
-        shouldUpdateShuffleHistory &&
-        previousSong &&
-        previousSong.path !== song.path
-      ) {
-        shuffleHistory.push(previousSong.path);
-        if (shouldClearShuffleFuture) {
-          shuffleFuture.length = 0;
-        }
-      }
+      playerQueue.handleBeforePlay(song, options);
     },
   });
 
@@ -1714,16 +1703,12 @@ export function usePlayer() {
   function handleAutoNext() { if (State.playMode.value === 1 && State.currentSong.value) { playSong(State.currentSong.value); } else { nextSong(); } }
   async function handleVolume(e: Event) { const v = parseInt((e.target as HTMLInputElement).value); State.volume.value = v; await invoke('set_volume', { volume: v / 100.0 }); }
   async function toggleMute() { if (State.volume.value > 0) { State.volume.value = 0; await invoke('set_volume', { volume: 0.0 }); } else { State.volume.value = 100; await invoke('set_volume', { volume: 1.0 }); } }
-  function toggleMode() {
-    State.playMode.value = (State.playMode.value + 1) % 3;
-    shuffleHistory.length = 0;
-    shuffleFuture.length = 0;
-  }
+  function toggleMode() { playerQueue.toggleMode(); }
   function togglePlaylist() { State.showPlaylist.value = !State.showPlaylist.value; }
   function toggleMiniPlaylist() { State.showMiniPlaylist.value = !State.showMiniPlaylist.value; }
   function closeMiniPlaylist() { State.showMiniPlaylist.value = false; }
   async function handleScan() { addFolder(); }
-  function playNext(song: State.Song) { State.tempQueue.value.unshift(song); }
+  function playNext(song: State.Song) { playerQueue.playNext(song); }
   async function removeSongFromList(song: State.Song) {
     if (State.currentViewMode.value === 'all') {
       State.songList.value = State.songList.value.filter(s => s.path !== song.path);
@@ -1746,47 +1731,6 @@ export function usePlayer() {
     }
   }
 
-  function stopTimer() {
-    playerPlayback.stopPlaybackRuntime();
-  }
-
-  function getNavigationList() {
-    return State.playQueue.value.length ? State.playQueue.value : State.songList.value;
-  }
-
-  function findSongByPath(path: string | undefined, primaryList: State.Song[] = []) {
-    if (!path) return null;
-
-    const candidateLists = [
-      primaryList,
-      State.playQueue.value,
-      State.tempQueue.value,
-      State.songList.value,
-      State.librarySongs.value,
-      State.currentSong.value ? [State.currentSong.value] : []
-    ];
-
-    for (const list of candidateLists) {
-      const song = list.find(item => item.path === path);
-      if (song) return song;
-    }
-
-    return null;
-  }
-
-  function pickRandomSong(list: State.Song[]) {
-    if (list.length === 0) return null;
-    if (list.length === 1) return list[0];
-
-    const currentPath = State.currentSong.value?.path;
-    const candidates = currentPath
-      ? list.filter(song => song.path !== currentPath)
-      : list;
-
-    if (candidates.length === 0) return list[0];
-    return candidates[Math.floor(Math.random() * candidates.length)];
-  }
-
   async function playSong(song: State.Song, options: PlaySongOptions = {}) {
     return playerPlayback.playSong(song, options);
   }
@@ -1799,89 +1743,18 @@ export function usePlayer() {
     return playerPlayback.togglePlay();
   }
 
-  function nextSong() {
-    if (State.tempQueue.value.length > 0) { const next = State.tempQueue.value.shift(); if (next) { playSong(next); return; } }
+  function nextSong() { playerQueue.nextSong(); }
 
-    // 🟢 核心逻辑：使�?playQueue
-    const l = getNavigationList();
-    if (!l.length) return;
+  function prevSong() { playerQueue.prevSong(); }
 
-    if (State.playMode.value === 2) {
-      const futureSong = findSongByPath(shuffleFuture.pop(), l);
-      if (futureSong) {
-        playSong(futureSong, { updateShuffleHistory: false, clearShuffleFuture: false });
-        return;
-      }
+  async function clearQueue() { return playerQueue.clearQueue(); }
 
-      const randomSong = pickRandomSong(l);
-      if (randomSong) playSong(randomSong);
-      return;
-    }
+  function removeSongFromQueue(song: State.Song) { playerQueue.removeSongFromQueue(song); }
 
-    let i = l.findIndex(s => s.path === State.currentSong.value?.path);
-    i = (i + 1) % l.length;
-    playSong(l[i]);
-  }
+  function addSongToQueue(song: State.Song) { playerQueue.addSongToQueue(song); }
 
-  function prevSong() {
-    // 🟢 核心逻辑：使�?playQueue
-    const l = getNavigationList();
-    if (!l.length) return;
+  function addSongsToQueue(songs: State.Song[]) { playerQueue.addSongsToQueue(songs); }
 
-    if (State.playMode.value === 2) {
-      const previousPath = shuffleHistory.pop();
-      const previousSong = findSongByPath(previousPath, l);
-
-      if (previousSong) {
-        if (State.currentSong.value) {
-          shuffleFuture.push(State.currentSong.value.path);
-        }
-        playSong(previousSong, { updateShuffleHistory: false, clearShuffleFuture: false });
-        return;
-      }
-
-      const randomSong = pickRandomSong(l);
-      if (randomSong) playSong(randomSong);
-      return;
-    }
-
-    let i = l.findIndex(s => s.path === State.currentSong.value?.path);
-    i = (i - 1 + l.length) % l.length;
-    playSong(l[i]);
-  }
-
-  // 🟢 新增：清空播放队�?(仅内�?
-  async function clearQueue() {
-    State.playQueue.value = [];
-    shuffleHistory.length = 0;
-    shuffleFuture.length = 0;
-    State.tempQueue.value = []; // ???????
-    if (State.isPlaying.value) {
-      await invoke('pause_audio');
-      State.isPlaying.value = false;
-    }
-    stopTimer();
-    State.currentSong.value = null; // 可选：是否清空当前歌曲？通常清空列表也会停止当前播放
-  }
-
-  // 🟢 新增：从队列移除歌曲
-  function removeSongFromQueue(song: State.Song) {
-    State.playQueue.value = State.playQueue.value.filter(s => s.path !== song.path);
-    State.tempQueue.value = State.tempQueue.value.filter(s => s.path !== song.path);
-  }
-
-  // 🟢 新增：添加到队列末尾
-  function addSongToQueue(song: State.Song) {
-    State.playQueue.value.push(song);
-    useToast().showToast('已添加到队列', 'success');
-  }
-
-  // 🟢 批量添加
-  function addSongsToQueue(songs: State.Song[]) {
-    if (songs.length === 0) return;
-    State.playQueue.value.push(...songs);
-    useToast().showToast(`已添�?${songs.length} 首歌曲到队列`, 'success');
-  }
 
   function getSongsFromPlaylist(playlistId: string): State.Song[] {
     const pl = State.playlists.value.find(p => p.id === playlistId);
@@ -2188,11 +2061,10 @@ export function usePlayer() {
     moveFilesToFolder,
     refreshFolder,
     refreshAllFolders,
-    // 🟢 导出新函�?    clearQueue, removeSongFromQueue, addSongToQueue, toggleQueue,
+    clearQueue, removeSongFromQueue, addSongToQueue, toggleQueue,
     addSongsToQueue, getSongsFromPlaylist,
     // Mini 模式
     isMiniMode: State.isMiniMode,
-    clearQueue, removeSongFromQueue, addSongToQueue, toggleQueue,
     reorderWatchedFolders: (from: number, to: number) => {
       const list = [...State.watchedFolders.value];
       const [removed] = list.splice(from, 1);

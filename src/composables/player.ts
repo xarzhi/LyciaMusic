@@ -12,6 +12,7 @@ import { extractDominantColors } from './colorExtraction';
 import { createPlayerLibraryBatch } from './playerLibraryBatch';
 import { createPlayerLibraryManager } from './playerLibraryManager';
 import { createPlayerNavigation } from './playerNavigation';
+import { createPlayerHistoryFavorites } from './playerHistoryFavorites';
 import { createPlayerPlayback } from './playerPlayback';
 import { createPlayerPersistence } from './playerPersistence';
 import { createPlayerPlaylist } from './playerPlaylist';
@@ -246,6 +247,9 @@ export function usePlayer() {
   let playerPlayback: ReturnType<typeof createPlayerPlayback>;
   const playerPlaylist = createPlayerPlaylist({
     switchViewToAll,
+  });
+  const playerHistoryFavorites = createPlayerHistoryFavorites({
+    legacyPlayerHistoryKey: LEGACY_PLAYER_HISTORY_KEY,
   });
   let libraryRuntime: ReturnType<typeof createPlayerLibraryRuntime>;
   const {
@@ -1591,51 +1595,25 @@ export function usePlayer() {
 
   function switchFavTab(tab: 'songs' | 'artists' | 'albums') { playerNavigation.switchFavTab(tab); }
 
-  function isFavorite(s: State.Song | null) { if (!s) return false; return State.favoritePaths.value.includes(s.path); }
+  function isFavorite(s: State.Song | null) { return playerHistoryFavorites.isFavorite(s); }
 
-  function toggleFavorite(s: State.Song) { if (isFavorite(s)) State.favoritePaths.value = State.favoritePaths.value.filter(p => p !== s.path); else State.favoritePaths.value.push(s.path); }
+  function toggleFavorite(s: State.Song) { playerHistoryFavorites.toggleFavorite(s); }
 
   async function addToHistory(song: State.Song) {
-    State.recentSongs.value = State.recentSongs.value.filter(item => item.song.path !== song.path);
-    State.recentSongs.value.unshift({ song, playedAt: Date.now() });
-    if (State.recentSongs.value.length > 1000) {
-      State.recentSongs.value = State.recentSongs.value.slice(0, 1000);
-    }
-    localStorage.removeItem(LEGACY_PLAYER_HISTORY_KEY);
-
-    invoke('add_to_history', { songPath: song.path }).catch(e => {
-      console.warn('add_to_history failed:', e);
-    });
+    return playerHistoryFavorites.addToHistory(song);
   }
 
   async function removeFromHistory(songPaths: string[]) {
-    if (songPaths.length === 0) return;
-
-    const pathSet = new Set(songPaths);
-    State.recentSongs.value = State.recentSongs.value.filter(item => !pathSet.has(item.song.path));
-    localStorage.removeItem(LEGACY_PLAYER_HISTORY_KEY);
-
-    try {
-      await invoke('remove_from_recent_history', { songPaths });
-    } catch (e) {
-      console.warn('remove_from_recent_history failed:', e);
-    }
+    return playerHistoryFavorites.removeFromHistory(songPaths);
   }
 
   async function clearHistory() {
-    State.recentSongs.value = [];
-    localStorage.removeItem(LEGACY_PLAYER_HISTORY_KEY);
-
-    try {
-      await invoke('clear_recent_history');
-    } catch (e) {
-      console.warn('clear_recent_history failed:', e);
-    }
+    return playerHistoryFavorites.clearHistory();
   }
 
   function clearLocalMusic() { State.songList.value = []; State.watchedFolders.value = []; }
 
-  function clearFavorites() { State.favoritePaths.value = []; }
+  function clearFavorites() { playerHistoryFavorites.clearFavorites(); }
 
   async function addFolder() {
 
@@ -2108,6 +2086,7 @@ export function usePlayer() {
     playlistSortMode: computed(() => State.playlistSortMode.value),
   };
 }
+
 
 
 

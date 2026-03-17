@@ -11,6 +11,7 @@ import { useToast } from './toast';
 import { extractDominantColors } from './colorExtraction';
 import { createPlayerLibraryBatch } from './playerLibraryBatch';
 import { createPlayerLibraryManager } from './playerLibraryManager';
+import { createPlayerNavigation } from './playerNavigation';
 import { createPlayerPlayback } from './playerPlayback';
 import { createPlayerPersistence } from './playerPersistence';
 import { createPlayerPlaylist } from './playerPlaylist';
@@ -241,6 +242,7 @@ export function usePlayer() {
   });
   let playerQueue: ReturnType<typeof createPlayerQueue>;
   const resetShuffleState = () => playerQueue.resetShuffleState();
+  let playerNavigation: ReturnType<typeof createPlayerNavigation>;
   let playerPlayback: ReturnType<typeof createPlayerPlayback>;
   const playerPlaylist = createPlayerPlaylist({
     switchViewToAll,
@@ -974,6 +976,11 @@ export function usePlayer() {
 
   });
 
+  playerNavigation = createPlayerNavigation({
+    getArtistList: () => artistList.value,
+    getAlbumList: () => albumList.value,
+  });
+
   const filteredArtistList = computed(() => {
     const query = State.searchQuery.value.trim().toLowerCase();
     if (!query) return artistList.value;
@@ -1547,7 +1554,7 @@ export function usePlayer() {
 
   function viewPlaylist(id: string) { playerPlaylist.viewPlaylist(id); }
 
-  function switchToFolderView() { State.currentViewMode.value = 'folder'; State.searchQuery.value = ''; if (!State.currentFolderFilter.value && State.watchedFolders.value.length > 0) State.currentFolderFilter.value = State.watchedFolders.value[0]; }
+  function switchToFolderView() { playerNavigation.switchToFolderView(); }
 
   function removeFolder(folderPath: string) {
 
@@ -1560,29 +1567,29 @@ export function usePlayer() {
 
   }
 
-  function viewArtist(n: string) { State.currentViewMode.value = 'artist'; State.filterCondition.value = n; State.searchQuery.value = ''; }
+  function viewArtist(n: string) { playerNavigation.viewArtist(n); }
 
-  function viewAlbum(n: string) { State.currentViewMode.value = 'album'; State.filterCondition.value = n; State.searchQuery.value = ''; }
+  function viewAlbum(n: string) { playerNavigation.viewAlbum(n); }
 
-  function viewGenre(n: string) { State.currentViewMode.value = 'genre'; State.filterCondition.value = n; State.searchQuery.value = ''; }
+  function viewGenre(n: string) { playerNavigation.viewGenre(n); }
 
-  function viewYear(n: string) { State.currentViewMode.value = 'year'; State.filterCondition.value = n; State.searchQuery.value = ''; }
+  function viewYear(n: string) { playerNavigation.viewYear(n); }
 
-  function switchViewToAll() { State.currentViewMode.value = 'all'; State.filterCondition.value = ''; State.searchQuery.value = ''; }
+  function switchViewToAll() { playerNavigation.switchViewToAll(); }
 
-  function switchViewToFolder(p: string) { State.currentViewMode.value = 'folder'; State.filterCondition.value = p; State.searchQuery.value = ''; }
+  function switchViewToFolder(p: string) { playerNavigation.switchViewToFolder(p); }
 
-  function switchToRecent() { State.currentViewMode.value = 'recent'; State.searchQuery.value = ''; }
+  function switchToRecent() { playerNavigation.switchToRecent(); }
 
-  function switchToFavorites() { State.currentViewMode.value = 'favorites'; State.searchQuery.value = ''; }
+  function switchToFavorites() { playerNavigation.switchToFavorites(); }
 
-  function switchToStatistics() { State.currentViewMode.value = 'statistics'; State.searchQuery.value = ''; }
+  function switchToStatistics() { playerNavigation.switchToStatistics(); }
 
-  function setSearch(q: string) { State.searchQuery.value = q; }
+  function setSearch(q: string) { playerNavigation.setSearch(q); }
 
-  function switchLocalTab(tab: 'default' | 'artist' | 'album') { State.localMusicTab.value = tab; State.currentArtistFilter.value = ''; State.currentAlbumFilter.value = ''; if (tab === 'artist' && artistList.value.length > 0) State.currentArtistFilter.value = artistList.value[0].name; if (tab === 'album' && albumList.value.length > 0) State.currentAlbumFilter.value = albumList.value[0].key; }
+  function switchLocalTab(tab: 'default' | 'artist' | 'album') { playerNavigation.switchLocalTab(tab); }
 
-  function switchFavTab(tab: 'songs' | 'artists' | 'albums') { State.favTab.value = tab; }
+  function switchFavTab(tab: 'songs' | 'artists' | 'albums') { playerNavigation.switchFavTab(tab); }
 
   function isFavorite(s: State.Song | null) { if (!s) return false; return State.favoritePaths.value.includes(s.path); }
 
@@ -2101,5 +2108,7 @@ export function usePlayer() {
     playlistSortMode: computed(() => State.playlistSortMode.value),
   };
 }
+
+
 
 

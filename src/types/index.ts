@@ -68,6 +68,11 @@ export interface SidebarSettings {
 }
 
 export interface AppSettings {
+  minimizeToTray: boolean;
+  closeToTray: boolean;
+  showQualityBadges: boolean;
+  linkFoldersToLibrary: boolean;
+  lyricsSyncOffset: number;
   organizeRoot: string;
   enableAutoOrganize: boolean;
   organizeRule: string;

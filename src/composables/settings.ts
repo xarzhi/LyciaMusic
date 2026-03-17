@@ -1,46 +1,47 @@
-import { ref, watch } from 'vue';
-import { AUDIO_DELAY } from './playerState';
+import { watch } from 'vue';
+import { AUDIO_DELAY, settings, defaultAppSettings } from './playerState';
 
-const SETTINGS_KEY = 'app_settings';
-const DEFAULT_LYRICS_SYNC_OFFSET = 0;
+const LEGACY_SETTINGS_KEY = 'app_settings';
+const PLAYER_SETTINGS_KEY = 'player_settings';
 
-interface AppSettings {
-  minimizeToTray: boolean;
-  closeToTray: boolean;
-  showQualityBadges: boolean; // v1.1.1: Audio quality badges
-  linkFoldersToLibrary: boolean;
-  lyricsSyncOffset: number;
-  // Add other settings here in the future
-}
+const migrateLegacySettings = () => {
+  const legacyRaw = localStorage.getItem(LEGACY_SETTINGS_KEY);
+  if (!legacyRaw) return;
 
-const defaultSettings: AppSettings = {
-  minimizeToTray: false,
-  closeToTray: false,
-  showQualityBadges: true,
-  linkFoldersToLibrary: false,
-  lyricsSyncOffset: DEFAULT_LYRICS_SYNC_OFFSET,
+  try {
+    const parsed = JSON.parse(legacyRaw) as Partial<typeof defaultAppSettings>;
+    settings.value = {
+      ...settings.value,
+      ...parsed,
+      theme: {
+        ...settings.value.theme,
+        ...(parsed.theme ?? {}),
+        customBackground: {
+          ...settings.value.theme.customBackground,
+          ...(parsed.theme?.customBackground ?? {}),
+        },
+      },
+      sidebar: {
+        ...settings.value.sidebar,
+        ...(parsed.sidebar ?? {}),
+      },
+    };
+
+    if (!localStorage.getItem(PLAYER_SETTINGS_KEY)) {
+      localStorage.setItem(PLAYER_SETTINGS_KEY, JSON.stringify(settings.value));
+    }
+  } catch (error) {
+    console.error('Failed to parse legacy app settings', error);
+  }
 };
 
-const settings = ref<AppSettings>({ ...defaultSettings });
-
-// Load from localStorage
-const stored = localStorage.getItem(SETTINGS_KEY);
-if (stored) {
-  try {
-    settings.value = { ...defaultSettings, ...JSON.parse(stored) };
-  } catch (e) {
-    console.error('Failed to parse settings', e);
-  }
-}
-
+migrateLegacySettings();
 AUDIO_DELAY.value = settings.value.lyricsSyncOffset;
 
-// Watch for changes and save
 watch(
   settings,
-  (newSettings) => {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
-    AUDIO_DELAY.value = newSettings.lyricsSyncOffset;
+  nextSettings => {
+    AUDIO_DELAY.value = nextSettings.lyricsSyncOffset;
   },
   { deep: true }
 );

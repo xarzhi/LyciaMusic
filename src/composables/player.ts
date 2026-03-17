@@ -1,7 +1,6 @@
 import { computed, watch, onMounted, onScopeDispose } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-dialog';
 import * as State from './playerState';
 export * from './playerState';
@@ -15,6 +14,8 @@ import { createPlayerNavigation } from './playerNavigation';
 import { createPlayerHistoryFavorites } from './playerHistoryFavorites';
 import { createPlayerFileManager } from './playerFileManager';
 import { createPlayerFolderTree } from './playerFolderTree';
+import { createPlayerFolderImport } from './playerFolderImport';
+import { createPlayerUiShell } from './playerUiShell';
 import { createPlayerPlayback } from './playerPlayback';
 import { createPlayerPersistence } from './playerPersistence';
 import { createPlayerPlaylist } from './playerPlaylist';
@@ -76,16 +77,6 @@ const isDirectParent = (parentPath: string, childPath: string) => {
 
 
 
-// 定义后端返回的结�?
-interface GeneratedFolder {
-
-  name: string;
-
-  path: string;
-
-  songs: State.Song[];
-
-}
 
 interface ArtistListItem {
   name: string;
@@ -282,6 +273,13 @@ export function usePlayer() {
     linkFolderTreeToLibrary: linkSidebarFolder,
     unlinkFolderTreeFromLibrary: unlinkSidebarFolder,
     showToast: (message, type) => useToast().showToast(message, type),
+  });
+  const playerFolderImport = createPlayerFolderImport({
+    showToast: (message, type) => useToast().showToast(message, type),
+  });
+  const playerUiShell = createPlayerUiShell({
+    addFolder,
+    removeFromHistory: (songPaths: string[]) => playerHistoryFavorites.removeFromHistory(songPaths),
   });
   libraryRuntime = createPlayerLibraryRuntime({
     fetchLibraryFolders,
@@ -516,18 +514,22 @@ export function usePlayer() {
     }
   }
 
-  // 🟢 Helper: Recursively remove node from tree for Optimistic UI
+  // 🟢 Helper: Recursively remove node from tree for Optimistic UI
+
 
   // 🟢 Physical Folder Deletion (Management Mode)
   async function deleteFolder(path: string) {
     return playerFileManager.deleteFolder(path);
   }
 
-  // 🟢 Helper: Recursively increment song count for a folder
+  // 🟢 Helper: Recursively increment song count for a folder
 
-  // 🟢 Helper: Recursively decrement song count for a folder
 
-  // 🟢 Helper: Update folder cover when first song changes
+  // 🟢 Helper: Recursively decrement song count for a folder
+
+
+  // 🟢 Helper: Update folder cover when first song changes
+
 
 
   // 🟢 Physical File Move (Management Mode)
@@ -535,7 +537,8 @@ export function usePlayer() {
     return playerFileManager.moveFilePhysical(sourcePath, targetFolderPath);
   }
 
-  // 🟢 Helper: Find a node in the tree
+  // 🟢 Helper: Find a node in the tree
+
 
   async function scanLibrary(options: ScanLibraryOptions = {}) {
     return libraryRuntime.scanLibrary(options);
@@ -555,7 +558,10 @@ export function usePlayer() {
     */
   }
 
-  // --- Sidebar Folder Management (New) ---
+  // --- Sidebar Folder Management (New) ---
+
+
+
 
   async function fetchSidebarTree() {
     return playerFolderTree.fetchFolderTree();
@@ -1146,73 +1152,7 @@ export function usePlayer() {
 
 
   async function addFoldersFromStructure() {
-
-
-
-    try {
-
-
-
-      const selectedPath = await open({ directory: true, multiple: false, title: '?????????' });
-
-
-
-      if (!selectedPath || typeof selectedPath !== 'string') return;
-
-
-
-      const newFolders = await invoke<GeneratedFolder[]>('scan_folder_as_playlists', { rootPath: selectedPath });
-
-
-
-      if (newFolders.length === 0) { useToast().showToast("未在该目录下找到包含音乐文件的文件夹", "error"); return; }
-
-
-
-      let addedCount = 0;
-
-
-
-      let allNewSongs: State.Song[] = [];
-
-
-
-      newFolders.forEach(folder => {
-
-
-
-        if (!State.watchedFolders.value.includes(folder.path)) { State.watchedFolders.value.push(folder.path); addedCount++; }
-
-
-
-        allNewSongs.push(...folder.songs);
-
-
-
-      });
-
-
-
-      const existingPaths = new Set(State.songList.value.map(s => s.path));
-
-
-
-      const uniqueNewSongs = allNewSongs.filter(s => !existingPaths.has(s.path));
-
-
-
-      State.songList.value = [...State.songList.value, ...uniqueNewSongs];
-
-
-
-      useToast().showToast(`已添�?${addedCount} 个文件夹到侧边栏`, "success");
-
-
-
-    } catch (e) { console.error("添加文件夹失�?", e); useToast().showToast("添加文件夹失�? " + e, "error"); }
-
-
-
+    return playerFolderImport.addFoldersFromStructure();
   }
 
 
@@ -1221,7 +1161,7 @@ export function usePlayer() {
 
 
 
-  function getSongsInFolder(folderPath: string) { return State.songList.value.filter(s => isDirectParent(folderPath, s.path)); }
+  function getSongsInFolder(folderPath: string) { return playerFolderImport.getSongsInFolder(folderPath); }
 
 
 
@@ -1306,79 +1246,26 @@ export function usePlayer() {
     return playerHistoryFavorites.clearHistory();
   }
 
-  function clearLocalMusic() { State.songList.value = []; State.watchedFolders.value = []; }
+  function clearLocalMusic() { playerFolderImport.clearLocalMusic(); }
 
   function clearFavorites() { playerHistoryFavorites.clearFavorites(); }
 
   async function addFolder() {
-
-    try {
-
-      const sel = await open({ directory: true, multiple: false });
-
-      if (sel && typeof sel === 'string') {
-
-        // 🟢 修改点：手动添加也使用“拆分”逻辑，将子目录识别为独立实体
-
-        const newFolders = await invoke<GeneratedFolder[]>('scan_folder_as_playlists', { rootPath: sel });
-
-        if (newFolders.length === 0) {
-
-          // 如果没有子目录有歌，或者就是单层目录，尝试作为单层目录添加
-
-          if (!State.watchedFolders.value.includes(sel)) State.watchedFolders.value.push(sel);
-
-          const newS = await invoke<State.Song[]>('scan_music_folder', { folderPath: sel });
-
-          const exist = new Set(State.songList.value.map(s => s.path));
-
-          const uniq = newS.filter(s => !exist.has(s.path));
-
-          State.songList.value = [...State.songList.value, ...uniq];
-
-        } else {
-
-          // 使用拆分后的文件�?
-          newFolders.forEach(folder => {
-
-            if (!State.watchedFolders.value.includes(folder.path)) State.watchedFolders.value.push(folder.path);
-
-          });
-
-          const allNewSongs = newFolders.flatMap(f => f.songs);
-
-          const existingPaths = new Set(State.songList.value.map(s => s.path));
-
-          const uniqueNewSongs = allNewSongs.filter(s => !existingPaths.has(s.path));
-
-          State.songList.value = [...State.songList.value, ...uniqueNewSongs];
-
-        }
-
-      }
-
-    } catch (e) { console.error(e); }
-
+    return playerFolderImport.addFolder();
   }
   function generateOrganizedPath(song: State.Song): string { return playerFileManager.generateOrganizedPath(song); }
   async function moveFile(song: State.Song, newPath: string) { return playerFileManager.moveFile(song, newPath); }
   function handleAutoNext() { if (State.playMode.value === 1 && State.currentSong.value) { playSong(State.currentSong.value); } else { nextSong(); } }
-  async function handleVolume(e: Event) { const v = parseInt((e.target as HTMLInputElement).value); State.volume.value = v; await invoke('set_volume', { volume: v / 100.0 }); }
-  async function toggleMute() { if (State.volume.value > 0) { State.volume.value = 0; await invoke('set_volume', { volume: 0.0 }); } else { State.volume.value = 100; await invoke('set_volume', { volume: 1.0 }); } }
+  async function handleVolume(e: Event) { return playerUiShell.handleVolume(e); }
+  async function toggleMute() { return playerUiShell.toggleMute(); }
   function toggleMode() { playerQueue.toggleMode(); }
-  function togglePlaylist() { State.showPlaylist.value = !State.showPlaylist.value; }
-  function toggleMiniPlaylist() { State.showMiniPlaylist.value = !State.showMiniPlaylist.value; }
-  function closeMiniPlaylist() { State.showMiniPlaylist.value = false; }
-  async function handleScan() { addFolder(); }
+  function togglePlaylist() { playerUiShell.togglePlaylist(); }
+  function toggleMiniPlaylist() { playerUiShell.toggleMiniPlaylist(); }
+  function closeMiniPlaylist() { playerUiShell.closeMiniPlaylist(); }
+  async function handleScan() { return playerUiShell.handleScan(); }
   function playNext(song: State.Song) { playerQueue.playNext(song); }
   async function removeSongFromList(song: State.Song) {
-    if (State.currentViewMode.value === 'all') {
-      State.songList.value = State.songList.value.filter(s => s.path !== song.path);
-    } else if (State.currentViewMode.value === 'favorites') {
-      State.favoritePaths.value = State.favoritePaths.value.filter(p => p !== song.path);
-    } else if (State.currentViewMode.value === 'recent') {
-      await removeFromHistory([song.path]);
-    }
+    return playerUiShell.removeSongFromList(song);
   }
   async function openInFinder(path: string) { return playerFileManager.openInFinder(path); }
   async function deleteFromDisk(song: State.Song) {
@@ -1423,9 +1310,9 @@ export function usePlayer() {
   async function stepSeek(step: number) {
     return playerPlayback.stepSeek(step);
   }
-  async function toggleAlwaysOnTop(enable: boolean) { try { await getCurrentWindow().setAlwaysOnTop(enable); } catch (e) { console.error('Failed to set always on top:', e); } }
-  function togglePlayerDetail() { State.showPlayerDetail.value = !State.showPlayerDetail.value; }
-  function toggleQueue() { State.showQueue.value = !State.showQueue.value; }
+  async function toggleAlwaysOnTop(enable: boolean) { return playerUiShell.toggleAlwaysOnTop(enable); }
+  function togglePlayerDetail() { playerUiShell.togglePlayerDetail(); }
+  function toggleQueue() { playerUiShell.toggleQueue(); }
   function openAddToPlaylistDialog(songPath: string) { playerPlaylist.openAddToPlaylistDialog(songPath); }
 
   function init() {
@@ -1739,6 +1626,8 @@ export function usePlayer() {
     playlistSortMode: computed(() => State.playlistSortMode.value),
   };
 }
+
+
 
 
 

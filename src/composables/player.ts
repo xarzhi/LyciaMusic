@@ -9,41 +9,34 @@ import { useLyrics } from './lyrics';
 import { useSettings as useAppSettings } from './settings';
 import { useToast } from './toast';
 import { extractDominantColors } from './colorExtraction';
+import { createPlayerLibraryBatch } from './playerLibraryBatch';
+import { createPlayerLibraryManager } from './playerLibraryManager';
+import { createPlayerPlayback } from './playerPlayback';
+import { createPlayerPersistence } from './playerPersistence';
+import { createPlayerLibraryRuntime } from './playerLibraryRuntime';
+import { createPlayerRestore } from './playerRestore';
+import {
+  getLibraryAddScanOptions,
+} from './playerLibraryScan';
+import type { ScanLibraryOptions } from './playerLibraryScan';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { compareByAlphabetIndex, sortItemsByAlphabetIndex } from '../utils/alphabetIndex';
 
-// 动画帧 ID
+// 动画�?ID
 
-let progressFrameId: number | null = null;
-// 校准定时器 ID
-let syncIntervalId: any = null;
+// 校准定时�?ID
 let dominantColorTaskId = 0;
-let playRequestId = 0;
-let latestSeekRequestId = 0;
 const shuffleHistory: string[] = [];
 const shuffleFuture: string[] = [];
-let hasBootstrappedLibrary = false;
-let libraryBootstrapPromise: Promise<void> | null = null;
-let libraryRefreshPromise: Promise<void> | null = null;
-let libraryRefreshIdleId: number | null = null;
-let libraryRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let playerInitDone = false;
 const PLAYER_OUTPUT_DEVICE_KEY = 'player_output_device';
 const PLAYER_OUTPUT_DEVICE_MODE_KEY = 'player_output_device_mode';
 
-// 插值锚点
+// 插值锚�?
 
-let playbackAnchorTime = 0;
 
-let playbackStartOffset = 0;
 
-// 播放时长统计状态（模块顶层，确保跨调用共享）
-let sessionStartTime: number | null = null;
-let accumulatedTime = 0;
-
-// 🟢 Seek 状态标志位（用于禁止同步期间回滚 UI）
-let isSeeking = false;
-
+// 🟢 Seek 状态标志位（用于禁止同步期间回�?UI�?
 interface SeekCompletedPayload {
   request_id: number;
   time: number;
@@ -59,15 +52,9 @@ interface LibraryScanBatchPayload {
 
 interface LibraryScanProgressPayload extends State.LibraryScanProgress {}
 
-interface ScanLibraryOptions {
-  trigger?: State.LibraryScanTrigger;
-  visibility?: State.LibraryScanVisibility;
-  sourcePath?: string;
-}
 
 
-
-// 🟢 辅助函数：判断是否为直属父目录 (非递归)
+// 🟢 辅助函数：判断是否为直属父目�?(非递归)
 
 const isDirectParent = (parentPath: string, childPath: string) => {
 
@@ -85,8 +72,7 @@ const isDirectParent = (parentPath: string, childPath: string) => {
 
 
 
-// 定义后端返回的结构
-
+// 定义后端返回的结�?
 interface GeneratedFolder {
 
   name: string;
@@ -123,16 +109,6 @@ interface HandleExternalPathsOptions {
   source?: ExternalPathSource;
 }
 
-interface RecentHistoryRecord {
-  songPath: string;
-  playedAt: number;
-}
-
-interface RecentHistoryImportRecord {
-  songPath: string;
-  playedAt: number;
-}
-
 const PLAYER_PLAYLIST_PATHS_KEY = 'player_playlist_paths';
 const PLAYER_QUEUE_PATHS_KEY = 'player_queue_paths';
 const PLAYER_LAST_SONG_PATH_KEY = 'player_last_song_path';
@@ -140,12 +116,6 @@ const LEGACY_PLAYER_PLAYLIST_KEY = 'player_playlist';
 const LEGACY_PLAYER_QUEUE_KEY = 'player_queue';
 const LEGACY_PLAYER_HISTORY_KEY = 'player_history';
 const LEGACY_PLAYER_LAST_SONG_KEY = 'player_last_song';
-const LIBRARY_SCAN_VISIBILITY_PRIORITY: Record<State.LibraryScanVisibility, number> = {
-  silent: 1,
-  inline: 2,
-  hero: 3,
-};
-
 const parseStoredJson = <T>(raw: string | null): T | null => {
   if (!raw) return null;
   try {
@@ -153,83 +123,6 @@ const parseStoredJson = <T>(raw: string | null): T | null => {
   } catch {
     return null;
   }
-};
-
-const resolveScanLibraryOptions = (
-  options: ScanLibraryOptions = {},
-): Required<ScanLibraryOptions> => ({
-  trigger: options.trigger ?? 'manual-rescan',
-  visibility: options.visibility ?? 'inline',
-  sourcePath: options.sourcePath ?? '',
-});
-
-const isLibraryScanActive = () =>
-  !!State.libraryScanProgress.value && !State.libraryScanProgress.value.done && !State.libraryScanProgress.value.failed;
-
-const shouldReplaceLibraryScanSession = (nextVisibility: State.LibraryScanVisibility) => {
-  if (!State.libraryScanSession.value) {
-    return true;
-  }
-
-  if (!isLibraryScanActive()) {
-    return true;
-  }
-
-  const currentPriority = LIBRARY_SCAN_VISIBILITY_PRIORITY[State.libraryScanSession.value.visibility];
-  const nextPriority = LIBRARY_SCAN_VISIBILITY_PRIORITY[nextVisibility];
-  return nextPriority > currentPriority;
-};
-
-const startLibraryScanSession = (options: Required<ScanLibraryOptions>) => {
-  const nextSession: State.LibraryScanSession = {
-    trigger: options.trigger,
-    visibility: options.visibility,
-    startedAt: Date.now(),
-    hadLibraryFoldersAtStart: State.libraryFolders.value.length > 0,
-    hadSongsAtStart: State.librarySongs.value.length > 0,
-    sourcePath: options.sourcePath || undefined,
-  };
-
-  if (shouldReplaceLibraryScanSession(options.visibility)) {
-    State.libraryScanSession.value = nextSession;
-    return nextSession;
-  }
-
-  if (
-    State.libraryScanSession.value &&
-    !State.libraryScanSession.value.sourcePath &&
-    nextSession.sourcePath
-  ) {
-    State.libraryScanSession.value = {
-      ...State.libraryScanSession.value,
-      sourcePath: nextSession.sourcePath,
-    };
-  }
-
-  return State.libraryScanSession.value!;
-};
-
-const beginLibraryScanProgress = (session: State.LibraryScanSession) => {
-  State.libraryScanProgress.value = {
-    phase: 'collecting',
-    current: 0,
-    total: 0,
-    folder_path: session.sourcePath ?? '',
-    folder_index: session.sourcePath ? 1 : 0,
-    folder_total: Math.max(1, State.libraryFolders.value.length),
-    message: null,
-    done: false,
-    failed: false,
-  };
-};
-
-const getLibraryAddScanOptions = (path: string): Required<ScanLibraryOptions> => {
-  const isFirstImport = State.libraryFolders.value.length === 0 && State.librarySongs.value.length === 0;
-  return {
-    trigger: isFirstImport ? 'first-import' : 'folder-add',
-    visibility: isFirstImport ? 'hero' : 'silent',
-    sourcePath: path,
-  };
 };
 
 const finalizeLibraryScanProgress = (songs: State.Song[], failed = false, message?: string) => {
@@ -241,7 +134,7 @@ const finalizeLibraryScanProgress = (songs: State.Song[], failed = false, messag
     folder_path: existing?.folder_path ?? State.libraryScanSession.value?.sourcePath ?? '',
     folder_index: existing?.folder_index ?? 0,
     folder_total: existing?.folder_total ?? Math.max(1, State.libraryFolders.value.length),
-    message: message ?? (failed ? '扫描音乐库时出现问题' : `已完成扫描，共 ${songs.length} 首歌曲`),
+    message: message ?? (failed ? '扫描音乐库时出现问题' : `已完成扫描，�?${songs.length} 首歌曲`),
     done: true,
     failed,
   };
@@ -332,120 +225,90 @@ const resolveSongsFromPaths = (paths: string[], fallbackSongs: State.Song[] = []
     .filter((song): song is State.Song => !!song);
 };
 
-const LIBRARY_SCAN_BATCH_FLUSH_MS = 120;
-let libraryScanBatchFlushTimer: ReturnType<typeof setTimeout> | null = null;
-const pendingLibraryScanSongs = new Map<string, State.Song>();
-const pendingLibraryScanDeletedPaths = new Set<string>();
-const pendingLibraryScanFallbackSongs = new Map<string, State.Song>();
-
-const flushBufferedLibraryScanBatch = () => {
-  if (libraryScanBatchFlushTimer) {
-    clearTimeout(libraryScanBatchFlushTimer);
-    libraryScanBatchFlushTimer = null;
-  }
-
-  if (pendingLibraryScanSongs.size === 0 && pendingLibraryScanDeletedPaths.size === 0) {
-    pendingLibraryScanFallbackSongs.clear();
-    return;
-  }
-
-  const merged = new Map<string, State.Song>();
-  for (const song of State.librarySongs.value) {
-    if (!pendingLibraryScanDeletedPaths.has(song.path)) {
-      merged.set(song.path, song);
-    }
-  }
-
-  for (const [path, song] of pendingLibraryScanSongs) {
-    if (!pendingLibraryScanDeletedPaths.has(path)) {
-      merged.set(path, song);
-    }
-  }
-
-  State.librarySongs.value = Array.from(merged.values());
-  refreshStateSongReferences(Array.from(pendingLibraryScanFallbackSongs.values()));
-
-  pendingLibraryScanSongs.clear();
-  pendingLibraryScanDeletedPaths.clear();
-  pendingLibraryScanFallbackSongs.clear();
-};
-
-const scheduleLibraryScanBatchFlush = () => {
-  if (libraryScanBatchFlushTimer) return;
-  libraryScanBatchFlushTimer = setTimeout(() => {
-    flushBufferedLibraryScanBatch();
-  }, LIBRARY_SCAN_BATCH_FLUSH_MS);
-};
-
-const applyLibraryScanBatch = (payload: LibraryScanBatchPayload) => {
-  const incomingSongs = Array.isArray(payload.songs) ? payload.songs : [];
-
-  for (const deletedPath of payload.deleted_paths ?? []) {
-    pendingLibraryScanDeletedPaths.add(deletedPath);
-    pendingLibraryScanSongs.delete(deletedPath);
-    pendingLibraryScanFallbackSongs.delete(deletedPath);
-  }
-
-  for (const song of incomingSongs) {
-    if (!song?.path) continue;
-    pendingLibraryScanDeletedPaths.delete(song.path);
-    pendingLibraryScanSongs.set(song.path, song);
-    pendingLibraryScanFallbackSongs.set(song.path, song);
-  }
-
-  scheduleLibraryScanBatchFlush();
-};
-
-const refreshStateSongReferences = (fallbackSongs: State.Song[] = []) => {
-  const lookup = createSongLookup([
-    ...fallbackSongs,
-    ...State.songList.value,
-    ...State.playQueue.value,
-    ...State.recentSongs.value.map(item => item.song),
-    ...(State.currentSong.value ? [State.currentSong.value] : []),
-  ]);
-
-  State.songList.value = State.songList.value
-    .map(song => lookup.get(song.path) ?? song)
-    .filter((song): song is State.Song => !!song);
-  State.playQueue.value = State.playQueue.value
-    .map(song => lookup.get(song.path) ?? song)
-    .filter((song): song is State.Song => !!song);
-  State.recentSongs.value = State.recentSongs.value
-    .map(item => {
-      const song = lookup.get(item.song.path) ?? item.song;
-      return song ? { ...item, song } : null;
-    })
-    .filter((item): item is State.HistoryItem => !!item);
-
-  if (State.currentSong.value?.path) {
-    State.currentSong.value = lookup.get(State.currentSong.value.path) ?? State.currentSong.value;
-  }
-};
-
-const cancelScheduledLibraryRefresh = () => {
-  if (libraryRefreshTimer) {
-    clearTimeout(libraryRefreshTimer);
-    libraryRefreshTimer = null;
-  }
-  if (libraryRefreshIdleId !== null && 'cancelIdleCallback' in window) {
-    window.cancelIdleCallback(libraryRefreshIdleId);
-    libraryRefreshIdleId = null;
-  }
-};
-
-
-
 export function usePlayer() {
 
 
 
   const { loadLyrics } = useLyrics();
   const { settings: appSettings } = useAppSettings();
+  const {
+    applyLibraryScanBatch,
+    flushBufferedLibraryScanBatch,
+    refreshStateSongReferences,
+    dispose: disposeLibraryBatch,
+  } = createPlayerLibraryBatch({
+    createSongLookup,
+  });
+  const resetShuffleState = () => {
+    shuffleHistory.length = 0;
+    shuffleFuture.length = 0;
+  };
+  let playerPlayback: ReturnType<typeof createPlayerPlayback>;
+  let libraryRuntime: ReturnType<typeof createPlayerLibraryRuntime>;
+  const {
+    fetchLibraryFolders,
+    addLibraryFolderRecord,
+    linkLibraryFolder,
+    unlinkLibraryFolder,
+    linkSidebarFolder,
+    unlinkSidebarFolder,
+    processExternalPaths,
+  } = createPlayerLibraryManager({
+    appSettings,
+    fetchSidebarTree,
+    scanLibrary,
+    playSong,
+    dedupePaths,
+    dedupeSongs,
+    resetShuffleState,
+  });
+  libraryRuntime = createPlayerLibraryRuntime({
+    fetchLibraryFolders,
+    flushBufferedLibraryScanBatch,
+    refreshStateSongReferences,
+    finalizeLibraryScanProgress,
+    onSilentScanError: () => {
+      useToast().showToast("?????????????????", "error");
+    },
+  });
 
 
 
-  // ... (格式化函数保持不变) ...
+  // ... (格式化函数保持不�? ...
+
+  const {
+    restoreRecentHistory,
+    restorePathBackedState,
+  } = createPlayerRestore({
+    keys: {
+      playerPlaylistPaths: PLAYER_PLAYLIST_PATHS_KEY,
+      playerQueuePaths: PLAYER_QUEUE_PATHS_KEY,
+      playerLastSongPath: PLAYER_LAST_SONG_PATH_KEY,
+      legacyPlayerPlaylist: LEGACY_PLAYER_PLAYLIST_KEY,
+      legacyPlayerQueue: LEGACY_PLAYER_QUEUE_KEY,
+      legacyPlayerHistory: LEGACY_PLAYER_HISTORY_KEY,
+      legacyPlayerLastSong: LEGACY_PLAYER_LAST_SONG_KEY,
+    },
+    createSongLookup,
+    resolveSongsFromPaths,
+    readStoredHistory,
+    readStoredSongArray,
+    readStoredSong,
+    readStoredStringArray,
+    loadLibrarySongsFromCache: () => libraryRuntime.loadLibrarySongsFromCache(),
+  });
+  const {
+    flushPersistedState,
+    schedulePersistedState,
+    dispose: disposePlayerPersistence,
+  } = createPlayerPersistence({
+    keys: {
+      playerPlaylistPaths: PLAYER_PLAYLIST_PATHS_KEY,
+      playerQueuePaths: PLAYER_QUEUE_PATHS_KEY,
+      legacyPlayerPlaylist: LEGACY_PLAYER_PLAYLIST_KEY,
+      legacyPlayerQueue: LEGACY_PLAYER_QUEUE_KEY,
+    },
+  });
 
   function formatDuration(seconds: number) { if (!seconds) return "00:00"; const mins = Math.floor(seconds / 60); const secs = Math.floor(seconds % 60); return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`; }
 
@@ -453,7 +316,7 @@ export function usePlayer() {
 
 
 
-  // ... (计算属性保持不变) ...
+  // ... (计算属性保持不�? ...
 
   const isLocalMusic = computed(() => State.currentViewMode.value === 'all' || State.currentViewMode.value === 'artist' || State.currentViewMode.value === 'album');
 
@@ -462,199 +325,62 @@ export function usePlayer() {
 
 
 
-  // 🟢 核心：定义“库内歌曲”
-  // 使用新的 librarySongs 状态 (由 scanLibrary populates)
+  // 🟢 核心：定义“库内歌曲�?  // 使用新的 librarySongs 状�?(�?scanLibrary populates)
   const librarySongs = computed(() => {
     return State.librarySongs.value;
   });
 
   onMounted(async () => {
-    if (hasBootstrappedLibrary) return;
-    hasBootstrappedLibrary = true;
-
-    if (!libraryBootstrapPromise) {
-      libraryBootstrapPromise = (async () => {
-        await Promise.all([
-          loadLibrarySongsFromCache(),
-          fetchLibraryFolders(),
-        ]);
-        scheduleLibraryRefresh();
-      })();
-    }
-
-    await libraryBootstrapPromise;
+    await libraryRuntime.bootstrapLibrary();
   });
 
   // --- Library Management ---
-  async function fetchLibraryFolders() {
-    try {
-      const folders = await invoke<State.LibraryFolder[]>('get_library_folders');
-      State.libraryFolders.value = folders;
-    } catch (e) {
-      console.error("Failed to fetch library folders:", e);
-    }
-  }
-
-  async function loadLibrarySongsFromCache() {
-    try {
-      flushBufferedLibraryScanBatch();
-      const songs = await invoke<State.Song[]>('get_library_songs_cached');
-      State.librarySongs.value = songs;
-      refreshStateSongReferences(songs);
-    } catch (e) {
-      console.error("Failed to load cached library songs:", e);
-    }
-  }
-
-  function scheduleLibraryRefresh() {
-    if (libraryRefreshPromise || libraryRefreshIdleId !== null || libraryRefreshTimer) {
-      return;
-    }
-
-    if (State.libraryFolders.value.length === 0) {
-      return;
-    }
-
-    const scheduledSession = startLibraryScanSession({
-      trigger: 'bootstrap',
-      visibility: 'silent',
-      sourcePath: '',
-    });
-    beginLibraryScanProgress(scheduledSession);
-
-    const runRefresh = () => {
-      libraryRefreshIdleId = null;
-      libraryRefreshTimer = null;
-      void scanLibrary({ trigger: 'bootstrap', visibility: 'silent' });
-    };
-
-    if ('requestIdleCallback' in window) {
-      libraryRefreshIdleId = window.requestIdleCallback(runRefresh, { timeout: 400 });
-      return;
-    }
-
-    libraryRefreshTimer = setTimeout(runRefresh, 220);
-  }
-
-  async function addLibraryFolderRecord(path: string, scanOptions?: ScanLibraryOptions) {
-    await invoke('add_library_folder', { path });
-    await fetchLibraryFolders();
-    await scanLibrary(scanOptions ?? getLibraryAddScanOptions(path));
-  }
-
-  async function addSidebarFolderRecord(path: string) {
-    await invoke('add_sidebar_folder', { path });
-    await invoke('scan_music_folder', { folderPath: path });
-    await fetchSidebarTree();
-  }
-
-  async function removeLibraryFolderRecord(path: string) {
-    await invoke('remove_library_folder', { path });
-    await fetchLibraryFolders();
-    await scanLibrary({ trigger: 'manual-rescan', visibility: 'inline' });
-  }
-
-  async function removeSidebarFolderRecord(path: string) {
-    await invoke('remove_sidebar_folder', { path });
-    await fetchSidebarTree();
-  }
-
   async function addLibraryFolderLinked(
     path: string,
     options: { syncLinked?: boolean; showToast?: boolean; scanOptions?: ScanLibraryOptions } = {}
   ) {
     const { syncLinked = true, showToast = false, scanOptions } = options;
-    const resolvedScanOptions = resolveScanLibraryOptions(scanOptions ?? getLibraryAddScanOptions(path));
-
-    await addLibraryFolderRecord(path, resolvedScanOptions);
-
-    if (syncLinked && appSettings.value.linkFoldersToLibrary) {
-      await addSidebarFolderRecord(path);
-    }
+    const { linkedSidebar, resolvedScanOptions } = await linkLibraryFolder(path, {
+      syncLinked,
+      scanOptions,
+    });
 
     if (showToast) {
       const toastText = resolvedScanOptions.visibility === 'silent'
-        ? "已添加文件夹，正在后台扫描"
-        : syncLinked && appSettings.value.linkFoldersToLibrary
-          ? "已将文件夹同时添加到本地音乐库和侧边栏"
-          : "已添加文件夹到音乐库";
+        ? "?????????????"
+        : linkedSidebar
+          ? "???????????????????"
+          : "??????????";
       useToast().showToast(toastText, "success");
       return;
       useToast().showToast(
-        syncLinked && appSettings.value.linkFoldersToLibrary
-          ? "已将文件夹同时添加到本地音乐库和侧边栏"
-          : "已添加文件夹到音乐库",
+        linkedSidebar
+          ? "???????????????????"
+          : "??????????",
         "success"
       );
     }
-  }
-
-  async function playExternalSongs(songs: State.Song[]) {
-    const queue = dedupeSongs(songs);
-    if (queue.length === 0) return;
-
-    State.playQueue.value = [...queue];
-    State.tempQueue.value = [];
-    shuffleHistory.length = 0;
-    shuffleFuture.length = 0;
-
-    await playSong(queue[0], { preserveQueue: true });
   }
 
   async function handleExternalPaths(
     paths: string[],
     options: HandleExternalPathsOptions = {}
   ) {
-    const source = options.source ?? 'drop';
-    const uniquePaths = dedupePaths(paths);
-    if (uniquePaths.length === 0) return;
-
-    const pathKinds = await Promise.all(uniquePaths.map(async (path) => ({
-      path,
-      isDirectory: await invoke<boolean>('is_directory', { path }).catch(() => false)
-    })));
-
-    const directoryPaths = pathKinds.filter(item => item.isDirectory).map(item => item.path);
-    const filePaths = pathKinds.filter(item => !item.isDirectory).map(item => item.path);
-
-    const existingLibraryPaths = new Set(State.libraryFolders.value.map(folder => folder.path));
-    let importedFolderCount = 0;
-    let skippedFolderCount = 0;
-    for (const directoryPath of directoryPaths) {
-      if (existingLibraryPaths.has(directoryPath)) {
-        skippedFolderCount += 1;
-        continue;
-      }
-
-      try {
-        await addLibraryFolderLinked(directoryPath);
-        importedFolderCount += 1;
-      } catch (error) {
-        console.error('Failed to import external folder:', directoryPath, error);
-      }
-    }
-
-    const parsedSongs = filePaths.length > 0
-      ? await invoke<State.Song[]>('parse_audio_files', { paths: filePaths }).catch((error) => {
-        console.error('Failed to parse external audio files:', error);
-        return [];
-      })
-      : [];
-
-    const playableSongs = dedupeSongs(parsedSongs);
-    if (playableSongs.length > 0) {
-      await playExternalSongs(playableSongs);
-    }
-
-    const ignoredFileCount = Math.max(0, filePaths.length - playableSongs.length);
+    const {
+      source,
+      importedFolderCount,
+      skippedFolderCount,
+      playableSongs,
+      ignoredFileCount,
+    } = await processExternalPaths(paths, options);
 
     if (importedFolderCount > 0 && playableSongs.length > 0) {
       useToast().showToast(
-        `已导入 ${importedFolderCount} 个文件夹，并开始播放 ${getSongTitleLabel(playableSongs[0])}`,
+        `已导�?${importedFolderCount} 个文件夹，并开始播�?${getSongTitleLabel(playableSongs[0])}`,
         'success'
       );
       if (ignoredFileCount > 0) {
-        useToast().showToast(`已忽略 ${ignoredFileCount} 个不支持的文件`, 'info');
+        useToast().showToast(`已忽�?${ignoredFileCount} 个不支持的文件`, 'info');
       }
       if (skippedFolderCount > 0) {
         useToast().showToast(`${skippedFolderCount} 个文件夹已在音乐库中，已跳过`, 'info');
@@ -663,9 +389,9 @@ export function usePlayer() {
     }
 
     if (importedFolderCount > 0) {
-      useToast().showToast(`已导入 ${importedFolderCount} 个文件夹`, 'success');
+      useToast().showToast(`已导�?${importedFolderCount} 个文件夹`, 'success');
       if (ignoredFileCount > 0) {
-        useToast().showToast(`已忽略 ${ignoredFileCount} 个不支持的文件`, 'info');
+        useToast().showToast(`已忽�?${ignoredFileCount} 个不支持的文件`, 'info');
       }
       if (skippedFolderCount > 0) {
         useToast().showToast(`${skippedFolderCount} 个文件夹已在音乐库中，已跳过`, 'info');
@@ -674,9 +400,9 @@ export function usePlayer() {
     }
 
     if (playableSongs.length > 1) {
-      useToast().showToast(`已载入 ${playableSongs.length} 首歌曲并开始播放`, 'success');
+      useToast().showToast(`已载�?${playableSongs.length} 首歌曲并开始播放`, 'success');
       if (ignoredFileCount > 0) {
-        useToast().showToast(`已忽略 ${ignoredFileCount} 个不支持的文件`, 'info');
+        useToast().showToast(`已忽�?${ignoredFileCount} 个不支持的文件`, 'info');
       }
       if (skippedFolderCount > 0) {
         useToast().showToast(`${skippedFolderCount} 个文件夹已在音乐库中，已跳过`, 'info');
@@ -699,8 +425,8 @@ export function usePlayer() {
 
     useToast().showToast(
       source === 'open'
-        ? '未找到可播放的音频文件或可导入的文件夹'
-        : '拖入内容中没有可播放的音频文件或可导入的文件夹',
+        ? '???????????????????'
+        : '???????????????????????',
       'error'
     );
   }
@@ -711,15 +437,11 @@ export function usePlayer() {
   ) {
     const { syncLinked = true, showToast = true } = options;
 
-    await removeLibraryFolderRecord(path);
-
-    if (syncLinked && appSettings.value.linkFoldersToLibrary) {
-      await removeSidebarFolderRecord(path);
-    }
+    const { removedSidebar } = await unlinkLibraryFolder(path, { syncLinked });
 
     if (showToast) {
       useToast().showToast(
-        syncLinked && appSettings.value.linkFoldersToLibrary
+        removedSidebar
           ? "已从本地音乐库和侧边栏同步移除文件夹"
           : "已从音乐库移除文件夹",
         "success"
@@ -733,17 +455,13 @@ export function usePlayer() {
   ) {
     const { syncLinked = true, showToast = true } = options;
 
-    await addSidebarFolderRecord(path);
-
-    if (syncLinked && appSettings.value.linkFoldersToLibrary) {
-      await addLibraryFolderRecord(path);
-    }
+    const { linkedLibrary } = await linkSidebarFolder(path, { syncLinked });
 
     if (showToast) {
       useToast().showToast(
-        syncLinked && appSettings.value.linkFoldersToLibrary
-          ? "已将文件夹同时添加到侧边栏和本地音乐库"
-          : "已添加文件夹到侧边栏",
+        linkedLibrary
+          ? "???????????????????"
+          : "??????????",
         "success"
       );
     }
@@ -755,15 +473,11 @@ export function usePlayer() {
   ) {
     const { syncLinked = true, showToast = true } = options;
 
-    await removeSidebarFolderRecord(path);
-
-    if (syncLinked && appSettings.value.linkFoldersToLibrary) {
-      await removeLibraryFolderRecord(path);
-    }
+    const { removedLibrary } = await unlinkSidebarFolder(path, { syncLinked });
 
     if (showToast) {
       useToast().showToast(
-        syncLinked && appSettings.value.linkFoldersToLibrary
+        removedLibrary
           ? "已从侧边栏和本地音乐库同步移除文件夹"
           : "已从侧边栏移除文件夹",
         "success"
@@ -773,7 +487,7 @@ export function usePlayer() {
 
   async function addLibraryFolder() {
     try {
-      const selected = await open({ directory: true, multiple: false, title: '选择音乐文件夹' });
+      const selected = await open({ directory: true, multiple: false, title: '???????' });
       if (selected && typeof selected === 'string') {
         const scanOptions = getLibraryAddScanOptions(selected);
         await addLibraryFolderLinked(selected, {
@@ -783,15 +497,13 @@ export function usePlayer() {
       }
     } catch (e) {
       console.error("Failed to add library folder:", e);
-      useToast().showToast("添加文件夹失败: " + e, "error");
+      useToast().showToast("???????: " + e, "error");
     }
   }
 
   async function addLibraryFolderPath(path: string) {
     try {
-      await invoke('add_library_folder', { path });
-      await fetchLibraryFolders();
-      await scanLibrary(getLibraryAddScanOptions(path));
+      await addLibraryFolderRecord(path, getLibraryAddScanOptions(path));
     } catch (e) {
       console.error("Failed to add library folder path:", e);
     }
@@ -965,44 +677,13 @@ export function usePlayer() {
   };
 
   async function scanLibrary(options: ScanLibraryOptions = {}) {
-    const resolvedOptions = resolveScanLibraryOptions(options);
+    return libraryRuntime.scanLibrary(options);
+    /*
 
-    if (libraryRefreshPromise) {
-      startLibraryScanSession(resolvedOptions);
-      return libraryRefreshPromise;
-    }
-
-    cancelScheduledLibraryRefresh();
-
-    if (State.libraryFolders.value.length === 0) {
-      State.libraryScanSession.value = null;
-      State.libraryScanProgress.value = null;
-      State.lastLibraryScanError.value = null;
-      return Promise.resolve();
-    }
-
-    const session = startLibraryScanSession(resolvedOptions);
-    beginLibraryScanProgress(session);
-    State.lastLibraryScanError.value = null;
-
-    libraryRefreshPromise = (async () => {
-      try {
-        flushBufferedLibraryScanBatch();
-        const songs = await invoke<State.Song[]>('scan_library');
-        State.librarySongs.value = songs;
-        refreshStateSongReferences(songs);
-        await fetchLibraryFolders();
-
-        if (!State.libraryScanProgress.value?.done) {
-          finalizeLibraryScanProgress(songs);
-        }
-      } catch (e) {
-        console.error("Library scan failed:", e);
-        const errorMessage = e instanceof Error ? e.message : String(e);
         State.lastLibraryScanError.value = errorMessage;
         finalizeLibraryScanProgress([], true, errorMessage || '扫描音乐库时出现问题');
         if (session.visibility === 'silent') {
-          useToast().showToast("后台扫描失败，请在音乐库设置中重试", "error");
+          useToast().showToast("后台扫描失败，请在音乐库设置中重�?, "error");
         }
       } finally {
         libraryRefreshPromise = null;
@@ -1010,6 +691,7 @@ export function usePlayer() {
     })();
 
     return libraryRefreshPromise;
+    */
   }
 
   // --- Sidebar Folder Management (New) ---
@@ -1066,7 +748,7 @@ export function usePlayer() {
 
   async function addSidebarFolder() {
     try {
-      const selected = await open({ directory: true, multiple: false, title: '添加文件夹到侧边栏' });
+      const selected = await open({ directory: true, multiple: false, title: '?????????' });
       if (selected && typeof selected === 'string') {
         const shouldLinkToLibrary = appSettings.value.linkFoldersToLibrary;
         await invoke('add_sidebar_folder', { path: selected });
@@ -1090,7 +772,7 @@ export function usePlayer() {
     try {
       await invoke('remove_sidebar_folder', { path });
       await fetchSidebarTree();
-      useToast().showToast("已移除侧边栏文件夹", "success");
+      useToast().showToast("?????????", "success");
     } catch (e) {
       console.error("Failed to remove sidebar folder:", e);
     }
@@ -1316,8 +998,7 @@ export function usePlayer() {
 
 
 
-    // folderList 顺序直接由 watchedFolders 数组顺序决定，因此支持手动排序
-
+    // folderList 顺序直接�?watchedFolders 数组顺序决定，因此支持手动排�?
 
 
     return State.watchedFolders.value.map(folderPath => {
@@ -1519,7 +1200,7 @@ export function usePlayer() {
       return base;
     }
 
-    // 🟢 关键修改:文件夹视图只显示直属子歌曲,不递归,并支持排序
+    // ???????????????????????
     if (State.currentViewMode.value === 'folder') {
       if (State.currentFolderFilter.value) {
         let songs = State.songList.value.filter(s => isDirectParent(State.currentFolderFilter.value, s.path));
@@ -1536,7 +1217,7 @@ export function usePlayer() {
           // 🟢 添加时间排序 (降序)
           songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
         } else if (State.folderSortMode.value === 'custom') {
-          // 自定义排序(拖拽后的顺序)
+          // 自定义排�?拖拽后的顺序)
           const customOrder = State.folderCustomOrder.value[State.currentFolderFilter.value] || [];
           if (customOrder.length > 0) {
             const orderMap = new Map(customOrder.map((path, i) => [path, i]));
@@ -1559,7 +1240,7 @@ export function usePlayer() {
     if (State.currentViewMode.value === 'recent') {
       let songs = State.recentSongs.value.map(h => h.song);
 
-      // 🟢 应用排序 (与本地音乐共享模式)
+      // 🟢 应用排序 (与本地音乐共享模�?
       if (State.localSortMode.value === 'title') {
         songs.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'zh-CN'));
       } else if (State.localSortMode.value === 'name') {
@@ -1567,8 +1248,7 @@ export function usePlayer() {
       } else if (State.localSortMode.value === 'artist') {
         songs.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
       } else if (State.localSortMode.value === 'added_at') {
-        // 最近播放本身就是按时间排的,但如果用户选了添加时间,则按扫描入库时间排
-        songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
+        // 最近播放本身就是按时间排的,但如果用户选了添加时间,则按扫描入库时间�?        songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
       }
 
       return songs;
@@ -1624,8 +1304,7 @@ export function usePlayer() {
       } else if (State.playlistSortMode.value === 'added_at') {
         songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
       }
-      // 'custom' 模式不需要排序,因为它已经通过 map(path => ...) 维持了 songPaths 的顺序
-
+      // 'custom' 模式不需要排�?因为它已经通过 map(path => ...) 维持�?songPaths 的顺�?
       return songs;
     }
 
@@ -1639,6 +1318,30 @@ export function usePlayer() {
   });
 
 
+
+  playerPlayback = createPlayerPlayback({
+    getDisplaySongList: () => displaySongList.value,
+    addToHistory,
+    loadLyrics,
+    handleAutoNext,
+    onBeforePlay: (song, options) => {
+      const shouldUpdateShuffleHistory = options.updateShuffleHistory ?? true;
+      const shouldClearShuffleFuture = options.clearShuffleFuture ?? true;
+      const previousSong = State.currentSong.value;
+
+      if (
+        State.playMode.value === 2 &&
+        shouldUpdateShuffleHistory &&
+        previousSong &&
+        previousSong.path !== song.path
+      ) {
+        shuffleHistory.push(previousSong.path);
+        if (shouldClearShuffleFuture) {
+          shuffleFuture.length = 0;
+        }
+      }
+    },
+  });
 
   watch(displaySongList, async (newList) => {
 
@@ -1658,7 +1361,7 @@ export function usePlayer() {
 
 
 
-      const selectedPath = await open({ directory: true, multiple: false, title: '选择要扫描的根目录' });
+      const selectedPath = await open({ directory: true, multiple: false, title: '?????????' });
 
 
 
@@ -1710,11 +1413,11 @@ export function usePlayer() {
 
 
 
-      useToast().showToast(`已添加 ${addedCount} 个文件夹到侧边栏`, "success");
+      useToast().showToast(`已添�?${addedCount} 个文件夹到侧边栏`, "success");
 
 
 
-    } catch (e) { console.error("添加文件夹失败:", e); useToast().showToast("添加文件夹失败: " + e, "error"); }
+    } catch (e) { console.error("添加文件夹失�?", e); useToast().showToast("添加文件夹失�? " + e, "error"); }
 
 
 
@@ -1734,8 +1437,7 @@ export function usePlayer() {
 
 
 
-  // 🟢 重点：创建歌单时，记录当前日期
-
+  // 🟢 重点：创建歌单时，记录当前日�?
   function createPlaylist(n: string, initialSongs: string[] = []) {
 
     if (n.trim()) {
@@ -1880,8 +1582,7 @@ export function usePlayer() {
 
     State.watchedFolders.value = State.watchedFolders.value.filter(p => p !== folderPath);
 
-    // 🟢 关键：移除文件夹不再从全局 songList 中删除歌曲数据
-
+    // 🟢 关键：移除文件夹不再从全局 songList 中删除歌曲数�?
     // 这样已生成的歌单依然可以正常引用这些歌曲路径
 
     if (State.currentFolderFilter.value === folderPath) State.currentFolderFilter.value = State.watchedFolders.value.length > 0 ? State.watchedFolders.value[0] : '';
@@ -1986,8 +1687,7 @@ export function usePlayer() {
 
         } else {
 
-          // 使用拆分后的文件夹
-
+          // 使用拆分后的文件�?
           newFolders.forEach(folder => {
 
             if (!State.watchedFolders.value.includes(folder.path)) State.watchedFolders.value.push(folder.path);
@@ -2047,69 +1747,8 @@ export function usePlayer() {
   }
 
   function stopTimer() {
-    if (progressFrameId !== null) { cancelAnimationFrame(progressFrameId); progressFrameId = null; }
-    if (syncIntervalId !== null) { clearInterval(syncIntervalId); syncIntervalId = null; }
+    playerPlayback.stopPlaybackRuntime();
   }
-
-  function reanchorPlaybackClock(time: number) {
-    playbackAnchorTime = performance.now();
-    playbackStartOffset = time;
-    State.currentTime.value = time;
-  }
-
-  function startTimer() {
-    stopTimer();
-    reanchorPlaybackClock(State.currentTime.value);
-    const update = () => {
-      if (!State.currentSong.value || !State.isPlaying.value) return;
-      const now = performance.now();
-      const delta = (now - playbackAnchorTime) / 1000.0;
-      State.currentTime.value = playbackStartOffset + delta;
-      if (State.currentTime.value >= State.currentSong.value.duration) { handleAutoNext(); return; }
-      progressFrameId = requestAnimationFrame(update);
-    };
-    progressFrameId = requestAnimationFrame(update);
-    syncIntervalId = setInterval(async () => {
-      if (!State.isPlaying.value) return;
-      if (isSeeking) return; // 🟢 正在 seek 时跳过同步，避免回滚 UI
-      try {
-        const realTime = await invoke<number>('get_playback_progress');
-        const uiTime = State.currentTime.value;
-        if (Math.abs(realTime - uiTime) > 0.05) {
-          reanchorPlaybackClock(realTime);
-        }
-      } catch (e) { }
-    }, 1000);
-  }
-
-
-  // 🟢 播放时长统计状态（已移到模块顶层）
-
-  // 🟢 辅助：结算并记录播放时长
-  const flushPlaySession = () => {
-    const song = State.currentSong.value;
-    if (!song) return;
-
-    let currentSession = 0;
-    // 如果正在播放，加上当前这段时间
-    if (State.isPlaying.value && sessionStartTime) {
-      currentSession = (Date.now() - sessionStartTime) / 1000;
-    }
-
-    const totalDuration = accumulatedTime + currentSession;
-
-    // Anti-cheat: 只有超过 10 秒才记录
-    if (totalDuration >= 10) {
-      invoke('record_play', {
-        songPath: song.path,
-        duration: Math.floor(totalDuration)
-      }).catch(e => console.warn('record_play failed:', e));
-    }
-
-    // Reset
-    accumulatedTime = 0;
-    sessionStartTime = null;
-  };
 
   function getNavigationList() {
     return State.playQueue.value.length ? State.playQueue.value : State.songList.value;
@@ -2149,129 +1788,21 @@ export function usePlayer() {
   }
 
   async function playSong(song: State.Song, options: PlaySongOptions = {}) {
-    const requestId = ++playRequestId;
-    // 🟢 切歌前：结算上一首
-    flushPlaySession();
-
-    const shouldUpdateShuffleHistory = options.updateShuffleHistory ?? true;
-    const shouldClearShuffleFuture = options.clearShuffleFuture ?? true;
-    const preserveQueue = options.preserveQueue ?? false;
-    const previousSong = State.currentSong.value;
-
-    if (
-      State.playMode.value === 2 &&
-      shouldUpdateShuffleHistory &&
-      previousSong &&
-      previousSong.path !== song.path
-    ) {
-      shuffleHistory.push(previousSong.path);
-      if (shouldClearShuffleFuture) shuffleFuture.length = 0;
-    }
-
-    State.currentSong.value = song;
-
-    // 🟢 核心逻辑：播放时更新播放队列
-    // 如果当前展示的列表包含这首歌，则把播放队列设置为当前展示列表
-    // 这样保证了 "接着放下一首" 的逻辑是正确的
-    if (!preserveQueue && displaySongList.value.some(s => s.path === song.path)) {
-      State.playQueue.value = [...displaySongList.value];
-    } else if (!preserveQueue) {
-      // 如果不在当前列表（比如来自搜索结果，或者历史记录），
-      // 且队列里也没有这首歌，则把它加入队列（或者重置队列？）
-      // 策略：如果队列里没有，就把它加进去；如果队列为空，就只放它
-      if (!State.playQueue.value.some(s => s.path === song.path)) {
-        if (State.playQueue.value.length === 0) State.playQueue.value = [song];
-        else State.playQueue.value.push(song);
-      }
-    }
-
-    State.isPlaying.value = true;
-    State.isSongLoaded.value = false;
-    stopTimer();
-    reanchorPlaybackClock(0);
-    // Keep previous cover until the next one is ready to avoid visual flash.
-
-    // 🟢 开始新会话计时
-    accumulatedTime = 0;
-    sessionStartTime = null;
-
-    addToHistory(song);
-
-    // 🟢 移除旧的 record_play (改为在结束/切歌时记录)
-    // invoke('record_play', { songPath: song.path }).catch(e => console.warn('record_play failed:', e));
-
-    try {
-      // 先尝试获取封面，为了 metadata 完整
-      const cover = await invoke<string>('get_song_cover', { path: song.path }).catch(() => "");
-      if (requestId !== playRequestId || State.currentSong.value?.path !== song.path) return;
-      State.currentCover.value = cover;
-
-      await invoke('play_audio', {
-        path: song.path,
-        title: song.name,
-        artist: song.artist || "Unknown Artist",
-        album: song.album || "Unknown Album",
-        cover: cover,
-        duration: Math.floor(song.duration)
-      });
-      if (requestId !== playRequestId || State.currentSong.value?.path !== song.path) return;
-
-      State.isSongLoaded.value = true;
-      sessionStartTime = Date.now();
-      loadLyrics();
-      startTimer();
-    } catch (e) {
-      if (requestId !== playRequestId || State.currentSong.value?.path !== song.path) return;
-      State.isPlaying.value = false;
-      State.isSongLoaded.value = false;
-      sessionStartTime = null;
-      stopTimer();
-    }
+    return playerPlayback.playSong(song, options);
   }
 
   async function pauseSong() {
-    // 🟢 暂停：累计时间，清除 sessionStart
-    if (State.isPlaying.value && sessionStartTime) {
-      accumulatedTime += (Date.now() - sessionStartTime) / 1000;
-      sessionStartTime = null;
-    }
-
-    State.isPlaying.value = false;
-    await invoke('pause_audio');
-    stopTimer();
+    return playerPlayback.pauseSong();
   }
 
   async function togglePlay() {
-    if (!State.currentSong.value) return;
-
-    if (State.isPlaying.value) {
-      // Pausing
-      if (sessionStartTime) {
-        accumulatedTime += (Date.now() - sessionStartTime) / 1000;
-        sessionStartTime = null;
-      }
-
-      await invoke('pause_audio');
-      State.isPlaying.value = false;
-      stopTimer();
-    } else {
-      // Playing
-      if (!State.isSongLoaded.value) {
-        await playSong(State.currentSong.value);
-      } else {
-        await invoke('resume_audio');
-        // Resuming: start session
-        sessionStartTime = Date.now();
-      }
-      State.isPlaying.value = true;
-      startTimer();
-    }
+    return playerPlayback.togglePlay();
   }
 
   function nextSong() {
     if (State.tempQueue.value.length > 0) { const next = State.tempQueue.value.shift(); if (next) { playSong(next); return; } }
 
-    // 🟢 核心逻辑：使用 playQueue
+    // 🟢 核心逻辑：使�?playQueue
     const l = getNavigationList();
     if (!l.length) return;
 
@@ -2293,7 +1824,7 @@ export function usePlayer() {
   }
 
   function prevSong() {
-    // 🟢 核心逻辑：使用 playQueue
+    // 🟢 核心逻辑：使�?playQueue
     const l = getNavigationList();
     if (!l.length) return;
 
@@ -2319,12 +1850,12 @@ export function usePlayer() {
     playSong(l[i]);
   }
 
-  // 🟢 新增：清空播放队列 (仅内存)
+  // 🟢 新增：清空播放队�?(仅内�?
   async function clearQueue() {
     State.playQueue.value = [];
     shuffleHistory.length = 0;
     shuffleFuture.length = 0;
-    State.tempQueue.value = []; // 也清空插队队列
+    State.tempQueue.value = []; // ???????
     if (State.isPlaying.value) {
       await invoke('pause_audio');
       State.isPlaying.value = false;
@@ -2349,7 +1880,7 @@ export function usePlayer() {
   function addSongsToQueue(songs: State.Song[]) {
     if (songs.length === 0) return;
     State.playQueue.value.push(...songs);
-    useToast().showToast(`已添加 ${songs.length} 首歌曲到队列`, 'success');
+    useToast().showToast(`已添�?${songs.length} 首歌曲到队列`, 'success');
   }
 
   function getSongsFromPlaylist(playlistId: string): State.Song[] {
@@ -2359,40 +1890,17 @@ export function usePlayer() {
     return pl.songPaths.map(path => songMap.get(path)).filter((s): s is State.Song => !!s);
   }
   async function seekTo(newTime: number) {
-    if (!State.currentSong.value) return;
-
-    if (State.isPlaying.value && sessionStartTime) {
-      accumulatedTime += (Date.now() - sessionStartTime) / 1000;
-      sessionStartTime = Date.now();
-    }
-
-    isSeeking = true;
-    stopTimer();
-    const targetTime = Math.max(0, Math.min(newTime, State.currentSong.value.duration));
-    const requestId = ++latestSeekRequestId;
-    reanchorPlaybackClock(targetTime);
-
-    try {
-      await invoke('seek_audio', {
-        time: targetTime,
-        isPlaying: State.isPlaying.value,
-        requestId
-      });
-      reanchorPlaybackClock(targetTime);
-      if (State.isPlaying.value) {
-        startTimer();
-      }
-    } catch (error) {
-      isSeeking = false;
-      if (State.isPlaying.value) {
-        startTimer();
-      }
-      throw error;
-    }
+    return playerPlayback.seekTo(newTime);
   }
-  async function playAt(time: number) { await seekTo(time); if (!State.isPlaying.value) { setTimeout(async () => { if (!State.isPlaying.value) await togglePlay(); }, 150); } }
-  async function handleSeek(e: MouseEvent) { if (!State.currentSong.value) return; const t = e.currentTarget as HTMLElement; const r = t.getBoundingClientRect(); const p = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); const tm = p * State.currentSong.value.duration; await seekTo(tm); }
-  async function stepSeek(step: number) { if (!State.currentSong.value) return; await seekTo(State.currentTime.value + step); }
+  async function playAt(time: number) {
+    return playerPlayback.playAt(time);
+  }
+  async function handleSeek(e: MouseEvent) {
+    return playerPlayback.handleSeek(e);
+  }
+  async function stepSeek(step: number) {
+    return playerPlayback.stepSeek(step);
+  }
   async function toggleAlwaysOnTop(enable: boolean) { try { await getCurrentWindow().setAlwaysOnTop(enable); } catch (e) { console.error('Failed to set always on top:', e); } }
   function togglePlayerDetail() { State.showPlayerDetail.value = !State.showPlayerDetail.value; }
   function toggleQueue() { State.showQueue.value = !State.showQueue.value; }
@@ -2403,48 +1911,6 @@ export function usePlayer() {
       return;
     }
     playerInitDone = true;
-
-    let persistTimer: ReturnType<typeof setTimeout> | null = null;
-    let restoreTimer: ReturnType<typeof setTimeout> | null = null;
-    let restoreIdleId: number | null = null;
-
-    const flushPersistedState = () => {
-      if (persistTimer) {
-        clearTimeout(persistTimer);
-        persistTimer = null;
-      }
-
-      localStorage.setItem(PLAYER_PLAYLIST_PATHS_KEY, JSON.stringify(State.songList.value.map(song => song.path)));
-      localStorage.setItem('player_watched_folders', JSON.stringify(State.watchedFolders.value));
-      localStorage.setItem('player_favorites', JSON.stringify(State.favoritePaths.value));
-      localStorage.setItem('player_custom_playlists', JSON.stringify(State.playlists.value));
-      localStorage.setItem('player_settings', JSON.stringify(State.settings.value));
-      localStorage.setItem(PLAYER_QUEUE_PATHS_KEY, JSON.stringify(State.playQueue.value.map(song => song.path)));
-      localStorage.setItem('player_artist_custom_order', JSON.stringify(State.artistCustomOrder.value));
-      localStorage.setItem('player_album_custom_order', JSON.stringify(State.albumCustomOrder.value));
-      localStorage.setItem('player_folder_custom_order', JSON.stringify(State.folderCustomOrder.value));
-      localStorage.setItem('player_local_custom_order', JSON.stringify(State.localCustomOrder.value));
-      localStorage.removeItem(LEGACY_PLAYER_PLAYLIST_KEY);
-      localStorage.removeItem(LEGACY_PLAYER_QUEUE_KEY);
-    };
-
-    const schedulePersistedState = () => {
-      if (persistTimer) clearTimeout(persistTimer);
-      persistTimer = setTimeout(() => {
-        flushPersistedState();
-      }, 200);
-    };
-
-    const cancelRestoreState = () => {
-      if (restoreTimer) {
-        clearTimeout(restoreTimer);
-        restoreTimer = null;
-      }
-      if (restoreIdleId !== null && 'cancelIdleCallback' in window) {
-        window.cancelIdleCallback(restoreIdleId);
-        restoreIdleId = null;
-      }
-    };
     // 注册系统媒体控制事件监听
     listen('player:play', () => { if (!State.isPlaying.value) togglePlay(); });
     listen('player:pause', () => { if (State.isPlaying.value) togglePlay(); });
@@ -2467,12 +1933,9 @@ export function usePlayer() {
         flushBufferedLibraryScanBatch();
       }
     });
-
-    // 🟢 监听 seek_completed 事件，恢复同步
+    // ?? seek_completed ???????
     listen<SeekCompletedPayload>('seek_completed', (e) => {
-      if (e.payload.request_id !== latestSeekRequestId) return;
-      isSeeking = false;
-      reanchorPlaybackClock(e.payload.time);
+      playerPlayback.handleSeekCompleted(e.payload);
     });
 
     watch(State.volume, (v) => localStorage.setItem('player_volume', v.toString()));
@@ -2496,8 +1959,7 @@ export function usePlayer() {
       { deep: true }
     );
 
-    // 🟢 持久化排序状态
-    watch(State.artistSortMode, (v) => localStorage.setItem('player_artist_sort_mode', v));
+    // 🟢 持久化排序状�?    watch(State.artistSortMode, (v) => localStorage.setItem('player_artist_sort_mode', v));
     watch(State.albumSortMode, (v) => localStorage.setItem('player_album_sort_mode', v));
     watch(State.folderSortMode, (v) => localStorage.setItem('player_folder_sort_mode', v));
     watch(State.localSortMode, (v) => localStorage.setItem('player_local_sort_mode', v));
@@ -2533,91 +1995,6 @@ export function usePlayer() {
       }
     });
 
-    const restoreRecentHistory = async () => {
-      const legacyHistory = readStoredHistory(LEGACY_PLAYER_HISTORY_KEY);
-      const legacyHistorySongs = legacyHistory.map(item => item.song);
-
-      try {
-        const records = await invoke<RecentHistoryRecord[]>('get_recent_history', { limit: 1000 });
-        if (records.length > 0) {
-          const lookup = createSongLookup(legacyHistorySongs);
-          State.recentSongs.value = records
-            .map(record => {
-              const song = lookup.get(record.songPath);
-              return song ? { song, playedAt: record.playedAt } : null;
-            })
-            .filter((item): item is State.HistoryItem => !!item);
-
-          if (State.recentSongs.value.length > 0) {
-            localStorage.removeItem(LEGACY_PLAYER_HISTORY_KEY);
-            return;
-          }
-        }
-      } catch (e) {
-        console.warn('get_recent_history failed:', e);
-      }
-
-      if (legacyHistory.length === 0) {
-        State.recentSongs.value = [];
-        return;
-      }
-
-      const lookup = createSongLookup(legacyHistorySongs);
-      State.recentSongs.value = legacyHistory.map(item => ({
-        song: lookup.get(item.song.path) ?? item.song,
-        playedAt: item.playedAt,
-      }));
-
-      const importedEntries: RecentHistoryImportRecord[] = legacyHistory.map(item => ({
-        songPath: item.song.path,
-        playedAt: Math.floor(item.playedAt / 1000),
-      }));
-
-      try {
-        await invoke('import_recent_history', { entries: importedEntries });
-        localStorage.removeItem(LEGACY_PLAYER_HISTORY_KEY);
-      } catch (e) {
-        console.warn('import_recent_history failed:', e);
-      }
-    };
-
-    const restorePathBackedState = async () => {
-      const legacySongList = readStoredSongArray(LEGACY_PLAYER_PLAYLIST_KEY);
-      const legacyQueue = readStoredSongArray(LEGACY_PLAYER_QUEUE_KEY);
-      const legacyLastSong = readStoredSong(LEGACY_PLAYER_LAST_SONG_KEY);
-      const fallbackSongs = [
-        ...legacySongList,
-        ...legacyQueue,
-        ...(legacyLastSong ? [legacyLastSong] : []),
-      ];
-
-      if (State.librarySongs.value.length === 0) {
-        await loadLibrarySongsFromCache();
-      }
-
-      const storedSongListPaths = readStoredStringArray(PLAYER_PLAYLIST_PATHS_KEY)
-        ?? legacySongList.map(song => song.path);
-      const storedQueuePaths = readStoredStringArray(PLAYER_QUEUE_PATHS_KEY)
-        ?? legacyQueue.map(song => song.path);
-      const storedLastSongPath = localStorage.getItem(PLAYER_LAST_SONG_PATH_KEY)
-        ?? legacyLastSong?.path
-        ?? null;
-
-      State.songList.value = resolveSongsFromPaths(storedSongListPaths, fallbackSongs);
-      State.playQueue.value = resolveSongsFromPaths(storedQueuePaths, fallbackSongs);
-
-      if (storedLastSongPath) {
-        State.currentSong.value = createSongLookup(fallbackSongs).get(storedLastSongPath) ?? legacyLastSong;
-      }
-
-      if (State.currentSong.value?.path) {
-        invoke<string>('get_song_cover', { path: State.currentSong.value.path })
-          .then(cover => State.currentCover.value = cover)
-          .catch(() => { });
-        State.isSongLoaded.value = false;
-      }
-    };
-
     onMounted(async () => {
       // 🟢 性能优化：同步恢复持久化数据，避免空状态渲染后再次闪烁
       const restoreState = async () => {
@@ -2637,8 +2014,7 @@ export function usePlayer() {
         const sFavs = localStorage.getItem('player_favorites'); if (sFavs) try { State.favoritePaths.value = JSON.parse(sFavs); } catch (e) { }
         const sPlaylists = localStorage.getItem('player_custom_playlists'); if (sPlaylists) try { State.playlists.value = JSON.parse(sPlaylists); } catch (e) { }
 
-        // 🟢 读取排序状态
-        const sArtistSort = localStorage.getItem('player_artist_sort_mode'); if (sArtistSort) State.artistSortMode.value = sArtistSort as any;
+        // 🟢 读取排序状�?        const sArtistSort = localStorage.getItem('player_artist_sort_mode'); if (sArtistSort) State.artistSortMode.value = sArtistSort as any;
         const sAlbumSort = localStorage.getItem('player_album_sort_mode'); if (sAlbumSort && ['count', 'name', 'artist', 'custom'].includes(sAlbumSort)) State.albumSortMode.value = sAlbumSort as any;
         const sArtistOrder = localStorage.getItem('player_artist_custom_order'); if (sArtistOrder) try { State.artistCustomOrder.value = JSON.parse(sArtistOrder); } catch (e) { }
         const sAlbumOrder = localStorage.getItem('player_album_custom_order'); if (sAlbumOrder) try { State.albumCustomOrder.value = JSON.parse(sAlbumOrder); } catch (e) { }
@@ -2683,7 +2059,7 @@ export function usePlayer() {
               const savedSidebar = (saved.sidebar && typeof saved.sidebar === 'object') ? saved.sidebar : {};
               const savedCustomBg = (savedTheme.customBackground && typeof savedTheme.customBackground === 'object') ? savedTheme.customBackground : {};
 
-              // 迁移逻辑：将旧的 enableDynamicBg 转换为新的 dynamicBgType
+              // 迁移逻辑：将旧的 enableDynamicBg 转换为新�?dynamicBgType
               let dynamicBgType = savedTheme.dynamicBgType;
               if (dynamicBgType === undefined && savedTheme.enableDynamicBg !== undefined) {
                 dynamicBgType = savedTheme.enableDynamicBg ? 'flow' : 'none';
@@ -2742,43 +2118,36 @@ export function usePlayer() {
     });
 
     onScopeDispose(() => {
-      cancelRestoreState();
-      if (persistTimer) clearTimeout(persistTimer);
-      if (libraryScanBatchFlushTimer) {
-        clearTimeout(libraryScanBatchFlushTimer);
-        libraryScanBatchFlushTimer = null;
-      }
-      pendingLibraryScanSongs.clear();
-      pendingLibraryScanDeletedPaths.clear();
-      pendingLibraryScanFallbackSongs.clear();
+      playerPlayback.dispose();
+      libraryRuntime.dispose();
+      disposePlayerPersistence();
+      disposeLibraryBatch();
     });
   }
 
   async function refreshAllFolders() {
     try {
-      // 🟢 自动恢复逻辑：如果监控列表为空但有歌曲，尝试从现有歌曲中重建文件夹列表
       if (State.watchedFolders.value.length === 0 && State.songList.value.length > 0) {
         const potentialFolders = new Set<string>();
         State.songList.value.forEach(s => {
-          // 简易逻辑：取父目录 (支持 Windows/Unix 分隔符)
-          const parent = s.path.replace(/[/\\][^/\\]+$/, '');
+          const parent = s.path.replace(/[/\\][^/\\]+$/, "");
           if (parent) potentialFolders.add(parent);
         });
 
         if (potentialFolders.size > 0) {
           State.watchedFolders.value = Array.from(potentialFolders);
-          useToast().showToast(`已自动识别 ${potentialFolders.size} 个文件夹`, "success");
+          useToast().showToast(`????? ${potentialFolders.size} ????`, "success");
         }
       }
 
       if (State.watchedFolders.value.length === 0) {
-        useToast().showToast("没有可刷新的文件夹", "info");
+        useToast().showToast("?????????", "info");
         return;
       }
 
       let allNewSongs: State.Song[] = [];
       for (const folder of State.watchedFolders.value) {
-        const songs = await invoke<State.Song[]>('scan_music_folder', { folderPath: folder });
+        const songs = await invoke<State.Song[]>("scan_music_folder", { folderPath: folder });
         allNewSongs.push(...songs);
       }
 
@@ -2786,12 +2155,11 @@ export function usePlayer() {
         return !State.watchedFolders.value.some(f => s.path.startsWith(f));
       });
 
-      // 保持引用更新，Vue 的 computed 会自动重新计算排序
       State.songList.value = [...keptSongs, ...allNewSongs];
-      useToast().showToast("所有歌曲已刷新", "success");
+      useToast().showToast("???????", "success");
     } catch (e) {
-      console.error("刷新失败:", e);
-      useToast().showToast("刷新失败: " + e, "error");
+      console.error("????:", e);
+      useToast().showToast("????: " + e, "error");
     }
   }
 
@@ -2820,12 +2188,11 @@ export function usePlayer() {
     moveFilesToFolder,
     refreshFolder,
     refreshAllFolders,
-    // 🟢 导出新函数
-    clearQueue, removeSongFromQueue, addSongToQueue, toggleQueue,
+    // 🟢 导出新函�?    clearQueue, removeSongFromQueue, addSongToQueue, toggleQueue,
     addSongsToQueue, getSongsFromPlaylist,
     // Mini 模式
     isMiniMode: State.isMiniMode,
-    showVolumePopover: State.showVolumePopover,
+    clearQueue, removeSongFromQueue, addSongToQueue, toggleQueue,
     reorderWatchedFolders: (from: number, to: number) => {
       const list = [...State.watchedFolders.value];
       const [removed] = list.splice(from, 1);
@@ -2845,8 +2212,7 @@ export function usePlayer() {
     updateAlbumOrder: (newOrder: string[]) => {
       State.albumCustomOrder.value = newOrder;
       if (State.albumSortMode.value !== 'custom') State.albumSortMode.value = 'custom';
-    }, // 🟢 comma added
-    // 🟢 文件夹排序相关
+    },
     updateFolderOrder: (folderPath: string, newOrder: string[]) => {
       State.folderCustomOrder.value[folderPath] = newOrder;
       if (State.folderSortMode.value !== 'custom') State.folderSortMode.value = 'custom';
@@ -2869,7 +2235,7 @@ export function usePlayer() {
     folderTree: State.folderTree,
     activeRootPath: State.activeRootPath,
     deleteFolder,
-    moveFilePhysical, // 🟢 Export
+    moveFilePhysical,
     fetchFolderTree: fetchSidebarTree,
     addSidebarFolder,
     addSidebarFolderLinked,
@@ -2880,10 +2246,10 @@ export function usePlayer() {
       expandTreeToPath(State.folderTree.value, targetPath);
     },
 
-    // 🟢 导出排序状态
     folderSortMode: computed(() => State.folderSortMode.value),
     folderCustomOrder: computed(() => State.folderCustomOrder.value),
     localSortMode: computed(() => State.localSortMode.value),
     playlistSortMode: computed(() => State.playlistSortMode.value),
   };
 }
+

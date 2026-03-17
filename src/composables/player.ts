@@ -14,6 +14,7 @@ import { createPlayerLibraryManager } from './playerLibraryManager';
 import { createPlayerNavigation } from './playerNavigation';
 import { createPlayerHistoryFavorites } from './playerHistoryFavorites';
 import { createPlayerFileManager } from './playerFileManager';
+import { createPlayerFolderTree } from './playerFolderTree';
 import { createPlayerPlayback } from './playerPlayback';
 import { createPlayerPersistence } from './playerPersistence';
 import { createPlayerPlaylist } from './playerPlaylist';
@@ -275,6 +276,13 @@ export function usePlayer() {
     dedupeSongs,
     resetShuffleState,
   });
+  const playerFolderTree = createPlayerFolderTree({
+    appSettings,
+    addLibraryFolderPath,
+    linkFolderTreeToLibrary: linkSidebarFolder,
+    unlinkFolderTreeFromLibrary: unlinkSidebarFolder,
+    showToast: (message, type) => useToast().showToast(message, type),
+  });
   libraryRuntime = createPlayerLibraryRuntime({
     fetchLibraryFolders,
     flushBufferedLibraryScanBatch,
@@ -466,36 +474,14 @@ export function usePlayer() {
     path: string,
     options: { syncLinked?: boolean; showToast?: boolean } = {}
   ) {
-    const { syncLinked = true, showToast = true } = options;
-
-    const { linkedLibrary } = await linkSidebarFolder(path, { syncLinked });
-
-    if (showToast) {
-      useToast().showToast(
-        linkedLibrary
-          ? "???????????????????"
-          : "??????????",
-        "success"
-      );
-    }
+    return playerFolderTree.addFolderTreeFolderLinked(path, options);
   }
 
   async function removeSidebarFolderLinked(
     path: string,
     options: { syncLinked?: boolean; showToast?: boolean } = {}
   ) {
-    const { syncLinked = true, showToast = true } = options;
-
-    const { removedLibrary } = await unlinkSidebarFolder(path, { syncLinked });
-
-    if (showToast) {
-      useToast().showToast(
-        removedLibrary
-          ? "已从侧边栏和本地音乐库同步移除文件夹"
-          : "已从侧边栏移除文件夹",
-        "success"
-      );
-    }
+    return playerFolderTree.removeFolderTreeFolderLinked(path, options);
   }
 
   async function addLibraryFolder() {
@@ -530,74 +516,18 @@ export function usePlayer() {
     }
   }
 
-  // 🟢 Helper: Recursively remove node from tree for Optimistic UI
-  const removeNodeFromTree = (nodes: State.FolderNode[], targetPath: string): boolean => {
-    for (let i = 0; i < nodes.length; i++) {
-      if (nodes[i].path === targetPath) {
-        nodes.splice(i, 1);
-        return true;
-      }
-      if (nodes[i].children && nodes[i].children.length > 0) {
-        if (removeNodeFromTree(nodes[i].children, targetPath)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
+  // 🟢 Helper: Recursively remove node from tree for Optimistic UI
 
   // 🟢 Physical Folder Deletion (Management Mode)
   async function deleteFolder(path: string) {
     return playerFileManager.deleteFolder(path);
   }
 
-  // 🟢 Helper: Recursively increment song count for a folder
-  const incrementNodeCount = (nodes: State.FolderNode[], targetPath: string): boolean => {
-    for (let i = 0; i < nodes.length; i++) {
-      if (nodes[i].path === targetPath) {
-        nodes[i].song_count++;
-        return true;
-      }
-      if (nodes[i].children && nodes[i].children.length > 0) {
-        if (incrementNodeCount(nodes[i].children, targetPath)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
+  // 🟢 Helper: Recursively increment song count for a folder
 
-  // 🟢 Helper: Recursively decrement song count for a folder
-  const decrementNodeCount = (nodes: State.FolderNode[], targetPath: string): boolean => {
-    for (let i = 0; i < nodes.length; i++) {
-      if (nodes[i].path === targetPath) {
-        if (nodes[i].song_count > 0) nodes[i].song_count--;
-        return true;
-      }
-      if (nodes[i].children && nodes[i].children.length > 0) {
-        if (decrementNodeCount(nodes[i].children, targetPath)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
+  // 🟢 Helper: Recursively decrement song count for a folder
 
-  // 🟢 Helper: Update folder cover when first song changes
-  const updateFolderCover = (nodes: State.FolderNode[], folderPath: string, newCoverSongPath: string | null): boolean => {
-    for (let i = 0; i < nodes.length; i++) {
-      if (nodes[i].path === folderPath) {
-        nodes[i].cover_song_path = newCoverSongPath;
-        return true;
-      }
-      if (nodes[i].children && nodes[i].children.length > 0) {
-        if (updateFolderCover(nodes[i].children, folderPath, newCoverSongPath)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
+  // 🟢 Helper: Update folder cover when first song changes
 
 
   // 🟢 Physical File Move (Management Mode)
@@ -605,17 +535,7 @@ export function usePlayer() {
     return playerFileManager.moveFilePhysical(sourcePath, targetFolderPath);
   }
 
-  // 🟢 Helper: Find a node in the tree
-  const findNode = (nodes: State.FolderNode[], targetPath: string): State.FolderNode | null => {
-    for (const node of nodes) {
-      if (node.path === targetPath) return node;
-      if (node.children && node.children.length > 0) {
-        const found = findNode(node.children, targetPath);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
+  // 🟢 Helper: Find a node in the tree
 
   async function scanLibrary(options: ScanLibraryOptions = {}) {
     return libraryRuntime.scanLibrary(options);
@@ -635,88 +555,22 @@ export function usePlayer() {
     */
   }
 
-  // --- Sidebar Folder Management (New) ---
-
-  const collectExpandedPaths = (nodes: State.FolderNode[], expanded = new Set<string>()) => {
-    for (const node of nodes) {
-      if (node.is_expanded) {
-        expanded.add(node.path);
-      }
-      if (node.children.length > 0) {
-        collectExpandedPaths(node.children, expanded);
-      }
-    }
-    return expanded;
-  };
-
-  const applyExpandedPaths = (nodes: State.FolderNode[], expandedPaths: Set<string>) => {
-    for (const node of nodes) {
-      node.is_expanded = expandedPaths.has(node.path);
-      if (node.children.length > 0) {
-        applyExpandedPaths(node.children, expandedPaths);
-      }
-    }
-  };
-
-  const expandTreeToPath = (nodes: State.FolderNode[], targetPath: string): boolean => {
-    for (const node of nodes) {
-      if (node.path === targetPath) {
-        return true;
-      }
-      if (node.children.length > 0 && expandTreeToPath(node.children, targetPath)) {
-        node.is_expanded = true;
-        return true;
-      }
-    }
-    return false;
-  };
+  // --- Sidebar Folder Management (New) ---
 
   async function fetchSidebarTree() {
-    try {
-      const expandedPaths = collectExpandedPaths(State.folderTree.value);
-      // Use NEW command for independent sidebar
-      const tree = await invoke<State.FolderNode[]>('get_sidebar_hierarchy');
-      applyExpandedPaths(tree, expandedPaths);
-      State.folderTree.value = tree;
-    } catch (e) {
-      console.error("Failed to fetch sidebar tree:", e);
-    }
+    return playerFolderTree.fetchFolderTree();
   }
 
   async function createFolder(parentPath: string, folderName: string) {
-    return invoke<string>('create_folder', { parentPath, folderName });
+    return playerFolderTree.createFolder(parentPath, folderName);
   }
 
   async function addSidebarFolder() {
-    try {
-      const selected = await open({ directory: true, multiple: false, title: '?????????' });
-      if (selected && typeof selected === 'string') {
-        const shouldLinkToLibrary = appSettings.value.linkFoldersToLibrary;
-        await invoke('add_sidebar_folder', { path: selected });
-        // 🟢 扫描歌曲到数据库，确保封面可被查询到
-        await invoke('scan_music_folder', { folderPath: selected });
-        await fetchSidebarTree();
-        if (shouldLinkToLibrary) {
-          await addLibraryFolderPath(selected);
-          useToast().showToast("已添加文件夹到侧边栏，并关联到本地音乐库", "success");
-          return;
-        }
-        useToast().showToast("已添加文件夹到侧边栏", "success");
-      }
-    } catch (e) {
-      console.error("Failed to add sidebar folder:", e);
-      useToast().showToast("添加失败: " + e, "error");
-    }
+    return playerFolderTree.addFolderTreeFolder();
   }
 
   async function removeSidebarFolder(path: string) {
-    try {
-      await invoke('remove_sidebar_folder', { path });
-      await fetchSidebarTree();
-      useToast().showToast("?????????", "success");
-    } catch (e) {
-      console.error("Failed to remove sidebar folder:", e);
-    }
+    return playerFolderTree.removeFolderTreeFolder(path);
   }
 
 
@@ -1876,7 +1730,7 @@ export function usePlayer() {
     removeSidebarFolderLinked,
     createFolder,
     expandFolderPath: (targetPath: string) => {
-      expandTreeToPath(State.folderTree.value, targetPath);
+      playerFolderTree.expandFolderPath(targetPath);
     },
 
     folderSortMode: computed(() => State.folderSortMode.value),
@@ -1885,6 +1739,7 @@ export function usePlayer() {
     playlistSortMode: computed(() => State.playlistSortMode.value),
   };
 }
+
 
 
 

@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { watch, computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { listen } from '@tauri-apps/api/event';
-import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window';
-import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
-import { invoke } from '@tauri-apps/api/core';
+import { computed, defineAsyncComponent } from 'vue';
 import { usePlayer } from './composables/player';
-import { useWindowMaterial } from './composables/windowMaterial';
+import { useAppThemeSync } from './composables/useAppThemeSync';
+import { useExternalPathBridge } from './composables/useExternalPathBridge';
+import { useMiniModeWindow } from './composables/useMiniModeWindow';
 import Sidebar from './components/layout/Sidebar.vue';
 import TitleBar from './components/layout/TitleBar.vue';
 import PlayerFooter from './components/layout/PlayerFooter.vue';
@@ -31,35 +29,24 @@ const {
   closeMiniPlaylist,
   showVolumePopover,
   handleExternalPaths,
-  libraryScanProgress
+  libraryScanProgress,
 } = usePlayer();
-const { activeWindowMaterial, applyWindowMaterial, loadWindowMaterialCapabilities } = useWindowMaterial();
+
+const { hasWindowMaterial, isMicaWindowMaterial, syncWindowMaterial } = useAppThemeSync({ settings });
+const { isExternalDragActive } = useExternalPathBridge({ handleExternalPaths });
+
+useMiniModeWindow({
+  isMiniMode,
+  showMiniPlaylist,
+  showVolumePopover,
+  showPlaylist,
+  closeMiniPlaylist,
+  syncWindowMaterial,
+});
 
 init();
 
-const isExternalDragActive = ref(false);
-let externalPathTask: Promise<void> = Promise.resolve();
-
-const enqueueExternalPaths = (paths: string[], source: 'drop' | 'open') => {
-  externalPathTask = externalPathTask
-    .then(() => handleExternalPaths(paths, { source }))
-    .catch((error) => {
-      console.error('Failed to process external paths:', error);
-    });
-
-  return externalPathTask;
-};
-
-const consumePendingOpenPaths = async () => {
-  const paths = await invoke<string[]>('consume_pending_open_paths');
-  if (paths.length > 0) {
-    await enqueueExternalPaths(paths, 'open');
-  }
-};
-
 const isFooterVisible = computed(() => playQueue.value.length > 0);
-const hasWindowMaterial = computed(() => activeWindowMaterial.value !== 'none');
-const isMicaWindowMaterial = computed(() => activeWindowMaterial.value === 'mica');
 const libraryScanPercent = computed(() => {
   if (!libraryScanProgress.value) return 0;
   if (libraryScanProgress.value.total <= 0) return 8;
@@ -89,52 +76,6 @@ const libraryScanFolderLabel = computed(() => {
 
   return `文件夹 ${libraryScanProgress.value.folder_index}/${libraryScanProgress.value.folder_total}`;
 });
-
-const applyTheme = async () => {
-  const theme = settings.value.theme;
-  const isDarkSystem = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  let isDarkMode = false;
-
-  if (theme.mode === 'custom') {
-    const style = theme.customBackground.foregroundStyle || 'auto';
-    if (style === 'light') {
-      isDarkMode = true;
-    } else if (style === 'dark') {
-      isDarkMode = false;
-    } else if (isDarkSystem) {
-      isDarkMode = true;
-    } else {
-      isDarkMode = false;
-    }
-  } else if (theme.mode === 'dark') {
-    isDarkMode = true;
-  } else {
-    isDarkMode = false;
-  }
-
-  if (isDarkMode) {
-    document.documentElement.classList.add('dark');
-    try { await getCurrentWindow().setTheme('dark'); } catch (e) { console.warn('Failed to set window theme:', e); }
-  } else {
-    document.documentElement.classList.remove('dark');
-    try { await getCurrentWindow().setTheme('light'); } catch (e) { console.warn('Failed to set window theme:', e); }
-  }
-};
-
-const syncWindowMaterial = async () => {
-  await nextTick();
-  await applyWindowMaterial(
-    settings.value.theme.windowMaterial,
-    document.documentElement.classList.contains('dark'),
-  );
-};
-
-void loadWindowMaterialCapabilities();
-
-watch(settings, async () => {
-  applyTheme();
-  await syncWindowMaterial();
-}, { deep: true, immediate: true });
 
 const handleGlobalAdd = (playlistId: string) => {
   addSongsToPlaylist(playlistId, playlistAddTargetSongs.value);
@@ -167,187 +108,12 @@ const mainBlurStyle = computed(() => {
   }
 
   if (mode === 'custom') {
-    const b = hasWindowMaterial.value ? Math.min(customBackground.blur, 16) : customBackground.blur;
-    return b <= 0 ? 'none' : `blur(${b}px)`;
+    const blur = hasWindowMaterial.value ? Math.min(customBackground.blur, 16) : customBackground.blur;
+    return blur <= 0 ? 'none' : `blur(${blur}px)`;
   }
 
   return 'none';
 });
-
-const MINI_WIDTH = 300;
-const MINI_BASE_HEIGHT = 75;
-const MINI_EXPANDED_HEIGHT = 420;
-
-const appWindow = getCurrentWindow();
-let normalSize = { width: 960, height: 600 };
-let normalPosition: { x: number; y: number } | null = null;
-let miniPosition: { x: number; y: number } | null = null;
-let wasMaximized = false;
-let isResizing = false;
-
-const getWindowLogicalPosition = async () => {
-  const factor = await appWindow.scaleFactor();
-  const physicalPosition = await appWindow.outerPosition();
-  const logicalPosition = physicalPosition.toLogical(factor);
-  return { x: logicalPosition.x, y: logicalPosition.y };
-};
-
-const setWindowLogicalPosition = async (position: { x: number; y: number }) => {
-  await appWindow.setPosition(new LogicalPosition(position.x, position.y));
-};
-
-const getCurrentMonitorLogicalBounds = async () => {
-  const monitor = await currentMonitor();
-  if (!monitor) return null;
-
-  const scaleFactor = monitor.scaleFactor || await appWindow.scaleFactor();
-  const monitorPosition = monitor.position.toLogical(scaleFactor);
-  const monitorSize = monitor.size.toLogical(scaleFactor);
-
-  return {
-    left: monitorPosition.x,
-    top: monitorPosition.y,
-    right: monitorPosition.x + monitorSize.width,
-    bottom: monitorPosition.y + monitorSize.height,
-    width: monitorSize.width,
-    height: monitorSize.height
-  };
-};
-
-const applyMiniWindowHeight = async (height: number) => {
-  const monitorBounds = await getCurrentMonitorLogicalBounds();
-  const width = monitorBounds ? Math.min(MINI_WIDTH, monitorBounds.width) : MINI_WIDTH;
-  const clampedHeight = monitorBounds ? Math.min(height, monitorBounds.height) : height;
-
-  await appWindow.setMinSize(new LogicalSize(width, clampedHeight));
-  await appWindow.setMaxSize(new LogicalSize(width, clampedHeight));
-  await appWindow.setSize(new LogicalSize(width, clampedHeight));
-};
-
-watch([isMiniMode, showMiniPlaylist, showVolumePopover], async ([miniMode, miniQueueVisible, volumeVisible], [prevMiniMode]) => {
-  if (isResizing) return;
-  if (!miniMode && !prevMiniMode) return;
-
-  isResizing = true;
-  try {
-    if (miniMode) {
-      if (!prevMiniMode) {
-        await appWindow.hide(); // 隐藏窗口，避免过度帧闪现
-
-        wasMaximized = await appWindow.isMaximized();
-        if (wasMaximized) await appWindow.unmaximize();
-
-        const factor = await appWindow.scaleFactor();
-        const size = await appWindow.innerSize();
-        if (size.width / factor > 600) {
-          normalSize = { width: size.width / factor, height: size.height / factor };
-        }
-        normalPosition = await getWindowLogicalPosition();
-
-        showPlaylist.value = false;
-        await appWindow.setResizable(false);
-        await appWindow.setAlwaysOnTop(true);
-        if (appWindow.setShadow) await appWindow.setShadow(false);
-
-        document.body.classList.add('mini-mode-active');
-        document.documentElement.classList.add('mini-mode-active');
-        const appEl = document.getElementById('app');
-        if (appEl) appEl.classList.add('mini-mode-active');
-
-        await invoke('set_mini_boundary_enabled', { enabled: true });
-      }
-
-      let height = MINI_BASE_HEIGHT;
-      if (miniQueueVisible) {
-        height = MINI_EXPANDED_HEIGHT;
-      } else if (volumeVisible) {
-        height = MINI_BASE_HEIGHT + 60; // 容纳音量弹窗的高度
-      }
-      
-      await applyMiniWindowHeight(height);
-      if (!prevMiniMode && miniPosition) {
-        await setWindowLogicalPosition(miniPosition);
-      }
-
-      if (!prevMiniMode) {
-        await appWindow.show();
-      }
-    } else {
-      await appWindow.hide(); // 隐藏窗口，避免过度帧闪现
-      
-      miniPosition = await getWindowLogicalPosition();
-      closeMiniPlaylist();
-      await invoke('set_mini_boundary_enabled', { enabled: false });
-      await appWindow.setResizable(true);
-      await appWindow.setMaxSize(null);
-      await appWindow.setMinSize(new LogicalSize(960, 600));
-      await appWindow.setSize(new LogicalSize(normalSize.width, normalSize.height));
-      if (normalPosition) {
-        await setWindowLogicalPosition(normalPosition);
-      }
-      await appWindow.setAlwaysOnTop(false);
-      if (appWindow.setShadow) await appWindow.setShadow(true);
-
-      document.body.classList.remove('mini-mode-active');
-      document.documentElement.classList.remove('mini-mode-active');
-      const appEl = document.getElementById('app');
-      if (appEl) appEl.classList.remove('mini-mode-active');
-
-      if (wasMaximized) await appWindow.maximize();
-      
-      await appWindow.show();
-      await syncWindowMaterial();
-    }
-  } catch (error: any) {
-    console.error('Mini Mode Resize Error:', error);
-  } finally {
-    isResizing = false;
-  }
-});
-
-let unlistenDragDrop: (() => void) | null = null;
-let unlistenDragOver: (() => void) | null = null;
-let unlistenDragLeave: (() => void) | null = null;
-let unlistenOpenPaths: (() => void) | null = null;
-
-onMounted(async () => {
-  unlistenDragDrop = await listen<{ paths: string[] }>('tauri://drag-drop', async (event) => {
-    isExternalDragActive.value = false;
-    await enqueueExternalPaths(event.payload?.paths ?? [], 'drop');
-  });
-
-  unlistenDragOver = await listen('tauri://drag-over', () => {
-    isExternalDragActive.value = true;
-  });
-
-  unlistenDragLeave = await listen('tauri://drag-leave', () => {
-    isExternalDragActive.value = false;
-  });
-
-  unlistenOpenPaths = await listen('app:open-paths', async () => {
-    await consumePendingOpenPaths();
-  });
-
-  await consumePendingOpenPaths();
-  
-  // 🟢 在所有初次资源或状态加载完毕后，平滑显示主窗口
-  try {
-    const window = getCurrentWindow();
-    await window.show();
-    await window.setFocus();
-  } catch (error) {
-    console.error('Failed to show window on startup:', error);
-  }
-});
-
-onUnmounted(() => {
-  unlistenDragDrop?.();
-  unlistenDragOver?.();
-  unlistenDragLeave?.();
-  unlistenOpenPaths?.();
-});
-
-
 </script>
 
 <template>
@@ -366,8 +132,8 @@ onUnmounted(() => {
         class="absolute inset-0 z-[140] pointer-events-none flex items-center justify-center bg-black/15 backdrop-blur-sm"
       >
         <div class="rounded-[28px] border border-white/35 bg-white/75 px-8 py-6 text-center shadow-[0_24px_60px_rgba(0,0,0,0.2)] dark:border-white/10 dark:bg-black/65">
-          <div class="text-lg font-semibold text-gray-900 dark:text-white">松开即可导入或播放</div>
-          <div class="mt-2 text-sm text-gray-600 dark:text-white/70">音频文件将直接播放，文件夹将导入音乐库</div>
+          <div class="text-lg font-semibold text-gray-900 dark:text-white">鏉惧紑鍗冲彲瀵煎叆鎴栨挱鏀?/div>
+          <div class="mt-2 text-sm text-gray-600 dark:text-white/70">闊抽鏂囦欢灏嗙洿鎺ユ挱鏀撅紝鏂囦欢澶瑰皢瀵煎叆闊充箰搴?/div>
         </div>
       </div>
     </transition>
@@ -383,7 +149,7 @@ onUnmounted(() => {
               {{ libraryScanPhaseLabel }}
             </div>
             <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-              {{ libraryScanProgress.message || '正在处理音乐库' }}
+              {{ libraryScanProgress.message || '姝ｅ湪澶勭悊闊充箰搴? }}
             </div>
             <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500 dark:text-white/55">
               <span v-if="libraryScanFolderLabel">{{ libraryScanFolderLabel }}</span>
@@ -450,10 +216,10 @@ onUnmounted(() => {
     </transition>
 
     <div v-if="!isMiniMode && isFooterVisible" class="relative z-[60]">
-      <!-- Player Detail (垫底滑动层) -->
+      <!-- Player Detail (鍨簳婊戝姩灞? -->
       <PlayerDetail />
       
-      <!-- Player Footer (悬浮覆盖层) -->
+      <!-- Player Footer (鎮诞瑕嗙洊灞? -->
       <transition name="footer-slide">
         <PlayerFooter />
       </transition>
@@ -526,7 +292,7 @@ html.mini-mode-active,
   opacity: 1;
 }
 
-/* 窗口还原过渡动画 */
+/* 绐楀彛杩樺師杩囨浮鍔ㄧ敾 */
 .window-restore-enter-active {
   transition: opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }

@@ -3,16 +3,15 @@ import { listen } from '@tauri-apps/api/event';
 import { onMounted, onScopeDispose, watch } from 'vue';
 import * as State from './playerState';
 import { extractDominantColors } from './colorExtraction';
-
-const PLAYER_OUTPUT_DEVICE_KEY = 'player_output_device';
-const PLAYER_OUTPUT_DEVICE_MODE_KEY = 'player_output_device_mode';
-const PLAYER_LAST_TIME_KEY = 'player_last_time';
-
-type ArtistSortMode = 'count' | 'name' | 'custom';
-type AlbumSortMode = 'count' | 'name' | 'artist' | 'custom';
-type FolderSortMode = 'title' | 'name' | 'artist' | 'added_at' | 'custom';
-type LocalSortMode = 'title' | 'name' | 'artist' | 'added_at' | 'custom' | 'default';
-type PlaylistSortMode = 'title' | 'name' | 'artist' | 'added_at' | 'custom';
+import {
+  playerStorage,
+  playerStorageKeys,
+  type AlbumSortMode,
+  type ArtistSortMode,
+  type FolderSortMode,
+  type LocalSortMode,
+  type PlaylistSortMode,
+} from '../services/storage/playerStorage';
 
 interface SeekCompletedPayload {
   request_id: number;
@@ -54,8 +53,8 @@ let lifecycleInitDone = false;
 let dominantColorTaskId = 0;
 
 const restoreOutputDevice = async () => {
-  const storedOutputDevice = localStorage.getItem(PLAYER_OUTPUT_DEVICE_KEY);
-  const storedOutputMode = localStorage.getItem(PLAYER_OUTPUT_DEVICE_MODE_KEY);
+  const storedOutputDevice = playerStorage.getString(playerStorageKeys.outputDevice);
+  const storedOutputMode = playerStorage.getString(playerStorageKeys.outputDeviceMode);
 
   if ((storedOutputMode === 'manual' || (!storedOutputMode && storedOutputDevice)) && storedOutputDevice) {
     await invoke('set_output_device', { deviceId: storedOutputDevice }).catch(error => {
@@ -70,90 +69,82 @@ const restoreOutputDevice = async () => {
 };
 
 const restoreSortSettings = () => {
-  const storedArtistSort = localStorage.getItem('player_artist_sort_mode');
+  const storedArtistSort = playerStorage.getString(playerStorageKeys.artistSortMode);
   if (storedArtistSort) {
     State.artistSortMode.value = storedArtistSort as ArtistSortMode;
   }
 
-  const storedAlbumSort = localStorage.getItem('player_album_sort_mode');
+  const storedAlbumSort = playerStorage.getString(playerStorageKeys.albumSortMode);
   if (storedAlbumSort && ['count', 'name', 'artist', 'custom'].includes(storedAlbumSort)) {
     State.albumSortMode.value = storedAlbumSort as AlbumSortMode;
   }
 
-  const storedArtistOrder = localStorage.getItem('player_artist_custom_order');
+  const storedArtistOrder = playerStorage.readStringArray(playerStorageKeys.artistCustomOrder);
   if (storedArtistOrder) {
-    try {
-      State.artistCustomOrder.value = JSON.parse(storedArtistOrder);
-    } catch {}
+    State.artistCustomOrder.value = storedArtistOrder;
   }
 
-  const storedAlbumOrder = localStorage.getItem('player_album_custom_order');
+  const storedAlbumOrder = playerStorage.readStringArray(playerStorageKeys.albumCustomOrder);
   if (storedAlbumOrder) {
-    try {
-      State.albumCustomOrder.value = JSON.parse(storedAlbumOrder);
-    } catch {}
+    State.albumCustomOrder.value = storedAlbumOrder;
   }
 
-  const storedFolderSort = localStorage.getItem('player_folder_sort_mode');
+  const storedFolderSort = playerStorage.getString(playerStorageKeys.folderSortMode);
   if (storedFolderSort && ['title', 'name', 'artist', 'added_at', 'custom'].includes(storedFolderSort)) {
     State.folderSortMode.value = storedFolderSort as FolderSortMode;
   }
 
-  const storedLocalSort = localStorage.getItem('player_local_sort_mode');
+  const storedLocalSort = playerStorage.getString(playerStorageKeys.localSortMode);
   if (storedLocalSort && ['title', 'name', 'artist', 'added_at', 'custom', 'default'].includes(storedLocalSort)) {
     State.localSortMode.value = storedLocalSort as LocalSortMode;
   }
 
-  const storedPlaylistSort = localStorage.getItem('player_playlist_sort_mode');
+  const storedPlaylistSort = playerStorage.getString(playerStorageKeys.playlistSortMode);
   if (storedPlaylistSort && ['title', 'name', 'artist', 'added_at', 'custom'].includes(storedPlaylistSort)) {
     State.playlistSortMode.value = storedPlaylistSort as PlaylistSortMode;
   }
 
-  const storedFolderOrder = localStorage.getItem('player_folder_custom_order');
+  const storedFolderOrder = playerStorage.readObject<Record<string, string[]>>(playerStorageKeys.folderCustomOrder);
   if (storedFolderOrder) {
-    try {
-      const parsedOrder = JSON.parse(storedFolderOrder);
-      if (parsedOrder && typeof parsedOrder === 'object' && !Array.isArray(parsedOrder)) {
-        State.folderCustomOrder.value = parsedOrder;
-      }
-    } catch {}
+    State.folderCustomOrder.value = storedFolderOrder;
   }
 
-  const storedLocalOrder = localStorage.getItem('player_local_custom_order');
+  const storedLocalOrder = playerStorage.readStringArray(playerStorageKeys.localCustomOrder);
   if (storedLocalOrder) {
-    try {
-      const parsedOrder = JSON.parse(storedLocalOrder);
-      if (Array.isArray(parsedOrder)) {
-        State.localCustomOrder.value = parsedOrder;
-      }
-    } catch {}
+    State.localCustomOrder.value = storedLocalOrder;
   }
 };
 
 const restoreAppSettings = () => {
-  const storedSettings = localStorage.getItem('player_settings');
+  const storedSettings = playerStorage.readSettings();
   if (!storedSettings) return;
 
   try {
-    const saved = JSON.parse(storedSettings);
+    const saved = storedSettings as Partial<typeof State.settings.value>;
     if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
+    type SavedThemeShape = Partial<typeof State.settings.value.theme> & {
+      enableDynamicBg?: boolean;
+      dynamicBgType?: string;
+      windowMaterial?: string;
+    };
 
     const savedTheme =
-      saved.theme && typeof saved.theme === 'object' ? saved.theme : {};
+      (saved.theme && typeof saved.theme === 'object' ? saved.theme : {}) as SavedThemeShape;
     const savedSidebar =
-      saved.sidebar && typeof saved.sidebar === 'object' ? saved.sidebar : {};
+      (saved.sidebar && typeof saved.sidebar === 'object' ? saved.sidebar : {}) as Partial<typeof State.settings.value.sidebar>;
     const savedCustomBackground =
       savedTheme.customBackground && typeof savedTheme.customBackground === 'object'
         ? savedTheme.customBackground
-        : {};
+        : {} as Partial<typeof State.settings.value.theme.customBackground>;
 
     let dynamicBgType = savedTheme.dynamicBgType;
     if (dynamicBgType === undefined && savedTheme.enableDynamicBg !== undefined) {
       dynamicBgType = savedTheme.enableDynamicBg ? 'flow' : 'none';
     }
 
-    const savedWindowMaterial = ['none', 'mica', 'acrylic'].includes(savedTheme.windowMaterial)
-      ? savedTheme.windowMaterial
+    const savedWindowMaterial = typeof savedTheme.windowMaterial === 'string'
+      && ['none', 'mica', 'acrylic'].includes(savedTheme.windowMaterial)
+      ? savedTheme.windowMaterial as typeof State.settings.value.theme.windowMaterial
       : State.settings.value.theme.windowMaterial;
 
     State.settings.value = {
@@ -252,11 +243,11 @@ export const createPlayerLifecycle = ({
     ];
 
     watch(State.volume, value => {
-      localStorage.setItem('player_volume', value.toString());
+      playerStorage.writeNumber(playerStorageKeys.volume, value);
     });
 
     watch(State.playMode, value => {
-      localStorage.setItem('player_mode', value.toString());
+      playerStorage.writeNumber(playerStorageKeys.playMode, value);
     });
 
     watch(
@@ -279,30 +270,30 @@ export const createPlayerLifecycle = ({
     );
 
     watch(State.artistSortMode, value => {
-      localStorage.setItem('player_artist_sort_mode', value);
+      playerStorage.setString(playerStorageKeys.artistSortMode, value);
     });
     watch(State.albumSortMode, value => {
-      localStorage.setItem('player_album_sort_mode', value);
+      playerStorage.setString(playerStorageKeys.albumSortMode, value);
     });
     watch(State.folderSortMode, value => {
-      localStorage.setItem('player_folder_sort_mode', value);
+      playerStorage.setString(playerStorageKeys.folderSortMode, value);
     });
     watch(State.localSortMode, value => {
-      localStorage.setItem('player_local_sort_mode', value);
+      playerStorage.setString(playerStorageKeys.localSortMode, value);
     });
     watch(State.playlistSortMode, value => {
-      localStorage.setItem('player_playlist_sort_mode', value);
+      playerStorage.setString(playerStorageKeys.playlistSortMode, value);
     });
 
     watch(State.currentSong, song => {
       if (song?.path) {
-        localStorage.setItem(lastSongPathKey, song.path);
-        localStorage.removeItem(legacyLastSongKey);
+        playerStorage.setString(lastSongPathKey, song.path);
+        playerStorage.remove(legacyLastSongKey);
         return;
       }
 
-      localStorage.removeItem(lastSongPathKey);
-      localStorage.removeItem(legacyLastSongKey);
+      playerStorage.remove(lastSongPathKey);
+      playerStorage.remove(legacyLastSongKey);
     });
 
     watch(State.currentCover, async currentCover => {
@@ -321,44 +312,29 @@ export const createPlayerLifecycle = ({
 
     watch(State.isPlaying, playing => {
       if (!playing) {
-        localStorage.setItem(PLAYER_LAST_TIME_KEY, State.currentTime.value.toString());
+        playerStorage.writeNumber(playerStorageKeys.lastTime, State.currentTime.value);
       }
     });
 
     const beforeUnloadHandler = () => {
       flushPersistedState();
-      localStorage.setItem(PLAYER_LAST_TIME_KEY, State.currentTime.value.toString());
+      playerStorage.writeNumber(playerStorageKeys.lastTime, State.currentTime.value);
     };
 
     onMounted(async () => {
-      const storedVolume = localStorage.getItem('player_volume');
-      if (storedVolume) {
-        State.volume.value = parseInt(storedVolume, 10);
+      const storedVolume = playerStorage.readNumber(playerStorageKeys.volume);
+      if (storedVolume !== null) {
+        State.volume.value = storedVolume;
         await invoke('set_volume', { volume: State.volume.value / 100 });
       }
 
       await restoreOutputDevice();
 
-      const storedFolders = localStorage.getItem('player_watched_folders');
-      if (storedFolders) {
-        try {
-          State.watchedFolders.value = JSON.parse(storedFolders);
-        } catch {}
-      }
+      State.watchedFolders.value = playerStorage.readStringArray(playerStorageKeys.watchedFolders) ?? [];
 
-      const storedFavorites = localStorage.getItem('player_favorites');
-      if (storedFavorites) {
-        try {
-          State.favoritePaths.value = JSON.parse(storedFavorites);
-        } catch {}
-      }
+      State.favoritePaths.value = playerStorage.readStringArray(playerStorageKeys.favorites) ?? [];
 
-      const storedPlaylists = localStorage.getItem('player_custom_playlists');
-      if (storedPlaylists) {
-        try {
-          State.playlists.value = JSON.parse(storedPlaylists);
-        } catch {}
-      }
+      State.playlists.value = playerStorage.readPlaylists();
 
       restoreSortSettings();
       restoreAppSettings();
@@ -367,9 +343,9 @@ export const createPlayerLifecycle = ({
       await restoreRecentHistory();
       refreshStateSongReferences();
 
-      const storedLastTime = localStorage.getItem(PLAYER_LAST_TIME_KEY);
-      if (storedLastTime) {
-        State.currentTime.value = parseFloat(storedLastTime);
+      const storedLastTime = playerStorage.readNumber(playerStorageKeys.lastTime);
+      if (storedLastTime !== null) {
+        State.currentTime.value = storedLastTime;
       }
 
       window.addEventListener('beforeunload', beforeUnloadHandler);

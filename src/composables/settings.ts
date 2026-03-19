@@ -1,11 +1,9 @@
 import { watch } from 'vue';
 import { AUDIO_DELAY, settings, defaultAppSettings } from './playerState';
-
-const LEGACY_SETTINGS_KEY = 'app_settings';
-const PLAYER_SETTINGS_KEY = 'player_settings';
+import { playerStorage, playerStorageKeys } from '../services/storage/playerStorage';
 
 const migrateLegacySettings = () => {
-  const legacyRaw = localStorage.getItem(LEGACY_SETTINGS_KEY);
+  const legacyRaw = playerStorage.getString(playerStorageKeys.legacyAppSettings);
   if (!legacyRaw) return;
 
   try {
@@ -27,8 +25,8 @@ const migrateLegacySettings = () => {
       },
     };
 
-    if (!localStorage.getItem(PLAYER_SETTINGS_KEY)) {
-      localStorage.setItem(PLAYER_SETTINGS_KEY, JSON.stringify(settings.value));
+    if (!playerStorage.getString(playerStorageKeys.settings)) {
+      playerStorage.writeSettings(settings.value);
     }
   } catch (error) {
     console.error('Failed to parse legacy app settings', error);

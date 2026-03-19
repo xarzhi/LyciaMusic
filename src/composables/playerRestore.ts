@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import * as State from './playerState';
+import { playerStorage } from '../services/storage/playerStorage';
 
 interface RecentHistoryRecord {
   songPath: string;
@@ -58,7 +59,7 @@ export const createPlayerRestore = ({
           .filter((item): item is State.HistoryItem => !!item);
 
         if (State.recentSongs.value.length > 0) {
-          localStorage.removeItem(keys.legacyPlayerHistory);
+          playerStorage.remove(keys.legacyPlayerHistory);
           return;
         }
       }
@@ -84,7 +85,7 @@ export const createPlayerRestore = ({
 
     try {
       await invoke('import_recent_history', { entries: importedEntries });
-      localStorage.removeItem(keys.legacyPlayerHistory);
+      playerStorage.remove(keys.legacyPlayerHistory);
     } catch (error) {
       console.warn('import_recent_history failed:', error);
     }
@@ -108,7 +109,7 @@ export const createPlayerRestore = ({
       ?? legacySongList.map(song => song.path);
     const storedQueuePaths = readStoredStringArray(keys.playerQueuePaths)
       ?? legacyQueue.map(song => song.path);
-    const storedLastSongPath = localStorage.getItem(keys.playerLastSongPath)
+    const storedLastSongPath = playerStorage.getString(keys.playerLastSongPath)
       ?? legacyLastSong?.path
       ?? null;
 

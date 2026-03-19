@@ -1,4 +1,5 @@
 import * as State from './playerState';
+import { playerStorage } from '../services/storage/playerStorage';
 
 interface PlayerPersistenceKeys {
   playerPlaylistPaths: string;
@@ -16,18 +17,22 @@ export const createPlayerPersistence = ({ keys }: { keys: PlayerPersistenceKeys 
       persistTimer = null;
     }
 
-    localStorage.setItem(keys.playerPlaylistPaths, JSON.stringify(State.songList.value.map(song => song.path)));
-    localStorage.setItem('player_watched_folders', JSON.stringify(State.watchedFolders.value));
-    localStorage.setItem('player_favorites', JSON.stringify(State.favoritePaths.value));
-    localStorage.setItem('player_custom_playlists', JSON.stringify(State.playlists.value));
-    localStorage.setItem('player_settings', JSON.stringify(State.settings.value));
-    localStorage.setItem(keys.playerQueuePaths, JSON.stringify(State.playQueue.value.map(song => song.path)));
-    localStorage.setItem('player_artist_custom_order', JSON.stringify(State.artistCustomOrder.value));
-    localStorage.setItem('player_album_custom_order', JSON.stringify(State.albumCustomOrder.value));
-    localStorage.setItem('player_folder_custom_order', JSON.stringify(State.folderCustomOrder.value));
-    localStorage.setItem('player_local_custom_order', JSON.stringify(State.localCustomOrder.value));
-    localStorage.removeItem(keys.legacyPlayerPlaylist);
-    localStorage.removeItem(keys.legacyPlayerQueue);
+    playerStorage.writePlayerState({
+      playlistPathKey: keys.playerPlaylistPaths,
+      queuePathKey: keys.playerQueuePaths,
+      legacyPlaylistKey: keys.legacyPlayerPlaylist,
+      legacyQueueKey: keys.legacyPlayerQueue,
+      songList: State.songList.value,
+      watchedFolders: State.watchedFolders.value,
+      favoritePaths: State.favoritePaths.value,
+      playlists: State.playlists.value,
+      settings: State.settings.value,
+      playQueue: State.playQueue.value,
+      artistCustomOrder: State.artistCustomOrder.value,
+      albumCustomOrder: State.albumCustomOrder.value,
+      folderCustomOrder: State.folderCustomOrder.value,
+      localCustomOrder: State.localCustomOrder.value,
+    });
   };
 
   const schedulePersistedState = () => {

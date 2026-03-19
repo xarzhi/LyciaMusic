@@ -26,6 +26,7 @@ import {
 } from './playerLibraryScan';
 import type { ScanLibraryOptions } from './playerLibraryScan';
 import { compareByAlphabetIndex, sortItemsByAlphabetIndex } from '../utils/alphabetIndex';
+import { playerStorage } from '../services/storage/playerStorage';
 
 
 
@@ -82,14 +83,6 @@ const LEGACY_PLAYER_PLAYLIST_KEY = 'player_playlist';
 const LEGACY_PLAYER_QUEUE_KEY = 'player_queue';
 const LEGACY_PLAYER_HISTORY_KEY = 'player_history';
 const LEGACY_PLAYER_LAST_SONG_KEY = 'player_last_song';
-const parseStoredJson = <T>(raw: string | null): T | null => {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-};
 
 const finalizeLibraryScanProgress = (songs: State.Song[], failed = false, message?: string) => {
   const existing = State.libraryScanProgress.value;
@@ -107,31 +100,19 @@ const finalizeLibraryScanProgress = (songs: State.Song[], failed = false, messag
 };
 
 const readStoredStringArray = (key: string): string[] | null => {
-  const parsed = parseStoredJson<unknown>(localStorage.getItem(key));
-  if (!Array.isArray(parsed)) return null;
-  return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  return playerStorage.readStringArray(key);
 };
 
 const readStoredSongArray = (key: string): State.Song[] => {
-  const parsed = parseStoredJson<unknown>(localStorage.getItem(key));
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter((item): item is State.Song => !!item && typeof item === 'object' && typeof (item as State.Song).path === 'string');
+  return playerStorage.readSongArray(key);
 };
 
 const readStoredSong = (key: string): State.Song | null => {
-  const parsed = parseStoredJson<unknown>(localStorage.getItem(key));
-  if (!parsed || typeof parsed !== 'object') return null;
-  return typeof (parsed as State.Song).path === 'string' ? parsed as State.Song : null;
+  return playerStorage.readSong(key);
 };
 
 const readStoredHistory = (key: string): State.HistoryItem[] => {
-  const parsed = parseStoredJson<unknown>(localStorage.getItem(key));
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter((item): item is State.HistoryItem => {
-    if (!item || typeof item !== 'object') return false;
-    const historyItem = item as State.HistoryItem;
-    return !!historyItem.song && typeof historyItem.song.path === 'string' && typeof historyItem.playedAt === 'number';
-  });
+  return playerStorage.readHistory(key);
 };
 
 const getSongArtistNames = (song: State.Song) => {

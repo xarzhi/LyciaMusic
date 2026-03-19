@@ -1,52 +1,45 @@
 import * as State from './playerState';
-import { useLibraryStore } from '../stores/library';
-import { useNavigationStore } from '../stores/navigation';
+import { useLibraryCollections } from './useLibraryCollections';
 
 interface CreatePlayerPlaylistDeps {
   switchViewToAll: () => void;
 }
 
 export const createPlayerPlaylist = ({
-  switchViewToAll,
+  switchViewToAll: _switchViewToAll,
 }: CreatePlayerPlaylistDeps) => {
-  const libraryStore = useLibraryStore();
-  const navigationStore = useNavigationStore();
+  const libraryCollections = useLibraryCollections();
 
   const createPlaylist = (name: string, initialSongs: string[] = []) => {
-    libraryStore.createPlaylist(name, initialSongs);
+    libraryCollections.createPlaylist(name, initialSongs);
   };
 
   const deletePlaylist = (id: string) => {
-    const deleted = libraryStore.deletePlaylist(id);
-
-    if (deleted && navigationStore.currentViewMode === 'playlist' && navigationStore.filterCondition === id) {
-      switchViewToAll();
-    }
+    libraryCollections.deletePlaylist(id);
   };
 
   const addToPlaylist = (playlistId: string, path: string) => {
-    libraryStore.addToPlaylist(playlistId, path);
+    libraryCollections.addToPlaylist(playlistId, path);
   };
 
   const removeFromPlaylist = (playlistId: string, path: string) => {
-    libraryStore.removeFromPlaylist(playlistId, path);
+    libraryCollections.removeFromPlaylist(playlistId, path);
   };
 
   const addSongsToPlaylist = (playlistId: string, songPaths: string[]): number => {
-    return libraryStore.addSongsToPlaylist(playlistId, songPaths);
+    return libraryCollections.addSongsToPlaylist(playlistId, songPaths);
   };
 
   const viewPlaylist = (id: string) => {
-    navigationStore.viewPlaylist(id);
+    libraryCollections.viewPlaylist(id);
   };
 
   const getSongsFromPlaylist = (playlistId: string): State.Song[] => {
-    return libraryStore.getSongsFromPlaylist(playlistId);
+    return libraryCollections.getSongsFromPlaylist(playlistId);
   };
 
   const openAddToPlaylistDialog = (songPath: string) => {
-    State.playlistAddTargetSongs.value = [songPath];
-    State.showAddToPlaylistModal.value = true;
+    libraryCollections.openAddToPlaylistDialog(songPath);
   };
 
   return {

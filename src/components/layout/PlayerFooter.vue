@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { usePlayer } from '../../composables/player';
+import { useLibraryCollections } from '../../composables/useLibraryCollections';
 import { useLyrics } from '../../composables/lyrics';
 import DesktopLyrics from "../player/DesktopLyrics.vue";
 import FooterContextMenu from "../overlays/FooterContextMenu.vue";
@@ -9,9 +10,9 @@ const {
   currentSong,
   isPlaying, volume, currentTime, playMode, showPlaylist, showPlayerDetail,
   togglePlay, nextSong, prevSong, handleVolume, toggleMute, toggleMode, togglePlaylist,
-  isFavorite, toggleFavorite,
   togglePlayerDetail, seekTo, formatDuration
 } = usePlayer();
+const { isFavorite, toggleFavorite } = useLibraryCollections();
 
 const handleOpenDetail = () => {
   togglePlayerDetail();

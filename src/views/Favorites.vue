@@ -63,6 +63,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { usePlayer, Song } from '../composables/player';
+import { useLibraryCollections } from '../composables/useLibraryCollections';
 import { useToast } from '../composables/toast';
 
 // 组件导入
@@ -79,11 +80,13 @@ const route = useRoute();
 const { 
   displaySongList, 
   playSong, 
-  addSongsToPlaylist, 
-  favoritePaths,
   switchToFavorites,
-  clearFavorites
 } = usePlayer();
+const {
+  addSongsToPlaylist,
+  favoritePaths,
+  clearFavorites,
+} = useLibraryCollections();
 
 const localSongList = computed(() => displaySongList.value);
 

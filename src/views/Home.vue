@@ -254,6 +254,7 @@ import { useHomeBatchActions } from '../composables/useHomeBatchActions';
 import { useHomeFolderManagement } from '../composables/useHomeFolderManagement';
 import { useHomeNavigation } from '../composables/useHomeNavigation';
 import { useHomeRouteSync } from '../composables/useHomeRouteSync';
+import { useLibraryCollections } from '../composables/useLibraryCollections';
 import LocalMusicHeader from '../components/headers/LocalMusicHeader.vue';
 import FoldersHeader from '../components/headers/FoldersHeader.vue';
 import DetailHeader from '../components/headers/DetailHeader.vue';
@@ -281,8 +282,6 @@ const {
   displaySongList,
   currentViewMode,
   playSong,
-  addSongsToPlaylist,
-  favoritePaths,
   moveFilesToFolder,
   refreshAllFolders,
   deleteFromDisk,
@@ -296,14 +295,18 @@ const {
   folderTree,
   activeRootPath,
   currentFolderFilter,
-  removeFromHistory,
-  playlists,
   filterCondition,
   searchQuery,
   librarySongs,
   albumSortMode,
   albumCustomOrder,
 } = usePlayer();
+const {
+  addSongsToPlaylist,
+  favoritePaths,
+  removeFromHistory,
+  playlists,
+} = useLibraryCollections();
 
 const { coverCache, loadingSet, preloadCovers } = useCoverCache();
 

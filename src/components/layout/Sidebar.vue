@@ -2,6 +2,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { usePlayer, dragSession } from '../../composables/player';
+import { useLibraryCollections } from '../../composables/useLibraryCollections';
 import { useCoverCache } from '../../composables/useCoverCache';
 import { useHomeNavigation } from '../../composables/useHomeNavigation';
 
@@ -10,22 +11,24 @@ import ModernInputModal from '../common/ModernInputModal.vue';
 import PlaylistContextMenu from '../overlays/PlaylistContextMenu.vue';
 
 const {
-  playlists,
   artistList,
   albumList,
-  createPlaylist,
-  deletePlaylist,
-  viewPlaylist,
   currentViewMode,
   filterCondition,
   currentFolderFilter,
   playSong,
   addSongsToQueue,
-  getSongsFromPlaylist,
   clearQueue,
   settings,
-  reorderPlaylists,
 } = usePlayer();
+const {
+  playlists,
+  createPlaylist,
+  deletePlaylist,
+  viewPlaylist,
+  reorderPlaylists,
+  getSongsFromPlaylist,
+} = useLibraryCollections();
 
 const router = useRouter();
 const {

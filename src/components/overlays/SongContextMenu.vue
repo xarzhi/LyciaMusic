@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue';
 import { usePlayer, Song } from '../../composables/player';
+import { useLibraryCollections } from '../../composables/useLibraryCollections';
 
 const props = defineProps<{
   visible: boolean,
@@ -14,7 +15,8 @@ const props = defineProps<{
 const emit = defineEmits(['close', 'addToPlaylist', 'delete-disk']);
 
 // 引入需要的操作
-const { playSong, playNext, addSongToQueue, removeSongFromList, removeFromPlaylist, openInFinder, filterCondition } = usePlayer();
+const { playSong, playNext, addSongToQueue, removeSongFromList, openInFinder, filterCondition } = usePlayer();
+const { removeFromPlaylist } = useLibraryCollections();
 
 const menuRef = ref<HTMLElement | null>(null);
 

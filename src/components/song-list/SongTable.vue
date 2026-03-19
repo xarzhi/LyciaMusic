@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { Song, usePlayer, dragSession } from '../../composables/player';
+import { useLibraryCollections } from '../../composables/useLibraryCollections';
 import { currentSong, isPlaying, libraryScanProgress, lastLibraryScanError } from '../../composables/playerState';
 import { useSettings } from '../../composables/settings';
 import { useRoute, useRouter } from 'vue-router';
@@ -27,8 +28,6 @@ const emit = defineEmits<{
 }>();
 
 const {
-  isFavorite,
-  toggleFavorite,
   formatDuration,
   currentViewMode,
   addLibraryFolder,
@@ -43,6 +42,7 @@ const {
   refreshFolder,
   expandFolderPath,
 } = usePlayer();
+const { isFavorite, toggleFavorite } = useLibraryCollections();
 const router = useRouter();
 const route = useRoute();
 const { openHomeArtist } = useHomeNavigation(router);

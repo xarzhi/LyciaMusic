@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent } from 'vue';
 import { usePlayer } from './composables/player';
+import { useLibraryCollections } from './composables/useLibraryCollections';
 import { useAppThemeSync } from './composables/useAppThemeSync';
 import { useExternalPathBridge } from './composables/useExternalPathBridge';
 import { useMiniModeWindow } from './composables/useMiniModeWindow';
@@ -17,9 +18,6 @@ const MiniPlayer = defineAsyncComponent(() => import('./components/layout/MiniPl
 
 const {
   init,
-  showAddToPlaylistModal,
-  playlistAddTargetSongs,
-  addSongsToPlaylist,
   settings,
   playQueue,
   isMiniMode,
@@ -31,6 +29,11 @@ const {
   handleExternalPaths,
   libraryScanProgress,
 } = usePlayer();
+const {
+  showAddToPlaylistModal,
+  playlistAddTargetSongs,
+  addSongsToPlaylist,
+} = useLibraryCollections();
 
 const { hasWindowMaterial, isMicaWindowMaterial, syncWindowMaterial } = useAppThemeSync({ settings });
 const { isExternalDragActive } = useExternalPathBridge({ handleExternalPaths });

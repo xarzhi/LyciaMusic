@@ -246,12 +246,13 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { usePlayer, Song } from '../composables/player';
 import { useToast } from '../composables/toast';
 import { useCoverCache } from '../composables/useCoverCache';
 import { useHomeBatchActions } from '../composables/useHomeBatchActions';
 import { useHomeFolderManagement } from '../composables/useHomeFolderManagement';
+import { useHomeRouteSync } from '../composables/useHomeRouteSync';
 import LocalMusicHeader from '../components/headers/LocalMusicHeader.vue';
 import FoldersHeader from '../components/headers/FoldersHeader.vue';
 import DetailHeader from '../components/headers/DetailHeader.vue';
@@ -270,6 +271,7 @@ import { useSongDrag } from '../composables/useSongDrag';
 import { compareByAlphabetIndex } from '../utils/alphabetIndex';
 
 const route = useRoute();
+const router = useRouter();
 const { showToast } = useToast();
 
 const {
@@ -280,8 +282,6 @@ const {
   addSongsToPlaylist,
   favoritePaths,
   moveFilesToFolder,
-  switchViewToAll,
-  switchToRecent,
   refreshAllFolders,
   deleteFromDisk,
   addSidebarFolder,
@@ -297,6 +297,7 @@ const {
   removeFromHistory,
   playlists,
   filterCondition,
+  searchQuery,
   librarySongs,
   albumSortMode,
   albumCustomOrder,
@@ -394,6 +395,17 @@ const {
   removeSidebarFolderLinked,
   showToast,
   openConfirm,
+});
+
+useHomeRouteSync({
+  route,
+  router,
+  currentViewMode,
+  filterCondition,
+  currentFolderFilter,
+  activeRootPath,
+  folderTree,
+  searchQuery,
 });
 
 const playlistDetail = computed(() => {
@@ -549,16 +561,6 @@ watch(currentViewMode, (newMode) => {
 
 watch(filterCondition, (newFilter) => {
   localFilterCondition.value = newFilter;
-}, { immediate: true });
-
-watch(() => route.path, (path) => {
-  if (path === '/recent') {
-    switchToRecent();
-  } else if (path === '/') {
-    if (!['folder', 'playlist', 'artist', 'album', 'statistics'].includes(currentViewMode.value)) {
-      switchViewToAll();
-    }
-  }
 }, { immediate: true });
 
 watch(currentViewMode, (newMode) => {

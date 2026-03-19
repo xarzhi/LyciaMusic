@@ -191,7 +191,7 @@ const resolveSongsFromPaths = (paths: string[], fallbackSongs: State.Song[] = []
     .filter((song): song is State.Song => !!song);
 };
 
-export function usePlayer() {
+function createPlayerService() {
 
 
 
@@ -1398,6 +1398,16 @@ export function usePlayer() {
     localSortMode: computed(() => State.localSortMode.value),
     playlistSortMode: computed(() => State.playlistSortMode.value),
   };
+}
+
+let playerService: ReturnType<typeof createPlayerService> | null = null;
+
+export function usePlayer() {
+  if (!playerService) {
+    playerService = createPlayerService();
+  }
+
+  return playerService;
 }
 
 

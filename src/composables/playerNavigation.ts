@@ -1,4 +1,4 @@
-import * as State from './playerState';
+import { useNavigationStore } from '../stores/navigation';
 
 interface ArtistListItem {
   name: string;
@@ -13,92 +13,65 @@ interface CreatePlayerNavigationDeps {
   getAlbumList: () => AlbumListItem[];
 }
 
-type NavigationViewMode = 'all' | 'folder' | 'artist' | 'album' | 'genre' | 'year' | 'playlist' | 'recent' | 'favorites' | 'statistics';
-
-const resetViewFilter = (mode: NavigationViewMode, filter = '') => {
-  State.currentViewMode.value = mode;
-  State.filterCondition.value = filter;
-  State.searchQuery.value = '';
-};
-
 export const createPlayerNavigation = ({
   getArtistList,
   getAlbumList,
 }: CreatePlayerNavigationDeps) => {
-  const switchToFolderView = () => {
-    State.currentViewMode.value = 'folder';
-    State.searchQuery.value = '';
+  const navigationStore = useNavigationStore();
 
-    if (!State.currentFolderFilter.value && State.watchedFolders.value.length > 0) {
-      State.currentFolderFilter.value = State.watchedFolders.value[0];
-    }
+  const switchToFolderView = () => {
+    navigationStore.switchToFolderView();
   };
 
   const viewArtist = (name: string) => {
-    resetViewFilter('artist', name);
+    navigationStore.viewArtist(name);
   };
 
   const viewAlbum = (name: string) => {
-    resetViewFilter('album', name);
+    navigationStore.viewAlbum(name);
   };
 
   const viewGenre = (name: string) => {
-    resetViewFilter('genre', name);
+    navigationStore.viewGenre(name);
   };
 
   const viewYear = (name: string) => {
-    resetViewFilter('year', name);
+    navigationStore.viewYear(name);
   };
 
   const switchViewToAll = () => {
-    resetViewFilter('all');
+    navigationStore.switchViewToAll();
   };
 
   const switchViewToFolder = (path: string) => {
-    resetViewFilter('folder', path);
+    navigationStore.switchViewToFolder(path);
   };
 
   const switchToRecent = () => {
-    State.currentViewMode.value = 'recent';
-    State.searchQuery.value = '';
+    navigationStore.switchToRecent();
   };
 
   const switchToFavorites = () => {
-    State.currentViewMode.value = 'favorites';
-    State.searchQuery.value = '';
+    navigationStore.switchToFavorites();
   };
 
   const switchToStatistics = () => {
-    State.currentViewMode.value = 'statistics';
-    State.searchQuery.value = '';
+    navigationStore.switchToStatistics();
   };
 
   const setSearch = (query: string) => {
-    State.searchQuery.value = query;
+    navigationStore.setSearch(query);
   };
 
   const switchLocalTab = (tab: 'default' | 'artist' | 'album') => {
-    State.localMusicTab.value = tab;
-    State.currentArtistFilter.value = '';
-    State.currentAlbumFilter.value = '';
-
-    if (tab === 'artist') {
-      const firstArtist = getArtistList()[0];
-      if (firstArtist) {
-        State.currentArtistFilter.value = firstArtist.name;
-      }
-    }
-
-    if (tab === 'album') {
-      const firstAlbum = getAlbumList()[0];
-      if (firstAlbum) {
-        State.currentAlbumFilter.value = firstAlbum.key;
-      }
-    }
+    navigationStore.switchLocalTab(tab, {
+      firstArtistName: getArtistList()[0]?.name,
+      firstAlbumKey: getAlbumList()[0]?.key,
+    });
   };
 
   const switchFavTab = (tab: 'songs' | 'artists' | 'albums') => {
-    State.favTab.value = tab;
+    navigationStore.switchFavTab(tab);
   };
 
   return {

@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import * as State from './playerState';
+import { playerStorage } from '../services/storage/playerStorage';
+import { useLibraryStore } from '../stores/library';
 
 interface CreatePlayerHistoryFavoritesDeps {
   legacyPlayerHistoryKey: string;
@@ -8,29 +10,20 @@ interface CreatePlayerHistoryFavoritesDeps {
 export const createPlayerHistoryFavorites = ({
   legacyPlayerHistoryKey,
 }: CreatePlayerHistoryFavoritesDeps) => {
+  const libraryStore = useLibraryStore();
+
   const isFavorite = (song: State.Song | null) => {
     if (!song) return false;
-    return State.favoritePaths.value.includes(song.path);
+    return libraryStore.isFavoritePath(song.path);
   };
 
   const toggleFavorite = (song: State.Song) => {
-    if (isFavorite(song)) {
-      State.favoritePaths.value = State.favoritePaths.value.filter(path => path !== song.path);
-      return;
-    }
-
-    State.favoritePaths.value.push(song.path);
+    libraryStore.toggleFavoritePath(song.path);
   };
 
   const addToHistory = async (song: State.Song) => {
-    State.recentSongs.value = State.recentSongs.value.filter(item => item.song.path !== song.path);
-    State.recentSongs.value.unshift({ song, playedAt: Date.now() });
-
-    if (State.recentSongs.value.length > 1000) {
-      State.recentSongs.value = State.recentSongs.value.slice(0, 1000);
-    }
-
-    localStorage.removeItem(legacyPlayerHistoryKey);
+    libraryStore.addRecentSong(song);
+    playerStorage.remove(legacyPlayerHistoryKey);
 
     invoke('add_to_history', { songPath: song.path }).catch(error => {
       console.warn('add_to_history failed:', error);
@@ -40,9 +33,8 @@ export const createPlayerHistoryFavorites = ({
   const removeFromHistory = async (songPaths: string[]) => {
     if (songPaths.length === 0) return;
 
-    const pathSet = new Set(songPaths);
-    State.recentSongs.value = State.recentSongs.value.filter(item => !pathSet.has(item.song.path));
-    localStorage.removeItem(legacyPlayerHistoryKey);
+    libraryStore.removeRecentSongs(songPaths);
+    playerStorage.remove(legacyPlayerHistoryKey);
 
     try {
       await invoke('remove_from_recent_history', { songPaths });
@@ -52,8 +44,8 @@ export const createPlayerHistoryFavorites = ({
   };
 
   const clearHistory = async () => {
-    State.recentSongs.value = [];
-    localStorage.removeItem(legacyPlayerHistoryKey);
+    libraryStore.clearRecentSongs();
+    playerStorage.remove(legacyPlayerHistoryKey);
 
     try {
       await invoke('clear_recent_history');
@@ -63,7 +55,7 @@ export const createPlayerHistoryFavorites = ({
   };
 
   const clearFavorites = () => {
-    State.favoritePaths.value = [];
+    libraryStore.clearFavorites();
   };
 
   return {

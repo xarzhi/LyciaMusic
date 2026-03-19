@@ -1,5 +1,6 @@
 ﻿import { computed, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { storeToRefs } from 'pinia';
 import { open } from '@tauri-apps/plugin-dialog';
 import * as State from './playerState';
 export * from './playerState';
@@ -8,7 +9,6 @@ import { useSettings as useAppSettings } from './settings';
 import { useToast } from './toast';
 import { createPlayerLibraryBatch } from './playerLibraryBatch';
 import { createPlayerLibraryManager } from './playerLibraryManager';
-import { createPlayerNavigation } from './playerNavigation';
 import { createPlayerHistoryFavorites } from './playerHistoryFavorites';
 import { createPlayerFileManager } from './playerFileManager';
 import { createPlayerFolderTree } from './playerFolderTree';
@@ -27,6 +27,8 @@ import {
 import type { ScanLibraryOptions } from './playerLibraryScan';
 import { compareByAlphabetIndex, sortItemsByAlphabetIndex } from '../utils/alphabetIndex';
 import { playerStorage } from '../services/storage/playerStorage';
+import { useLibraryStore } from '../stores/library';
+import { useNavigationStore } from '../stores/navigation';
 
 
 
@@ -178,6 +180,10 @@ function createPlayerService() {
 
   const { loadLyrics } = useLyrics();
   const { settings: appSettings } = useAppSettings();
+  const libraryStore = useLibraryStore();
+  const navigationStore = useNavigationStore();
+  const libraryRefs = storeToRefs(libraryStore);
+  const navigationRefs = storeToRefs(navigationStore);
   const {
     applyLibraryScanBatch,
     flushBufferedLibraryScanBatch,
@@ -188,7 +194,6 @@ function createPlayerService() {
   });
   let playerQueue: ReturnType<typeof createPlayerQueue>;
   const resetShuffleState = () => playerQueue.resetShuffleState();
-  let playerNavigation: ReturnType<typeof createPlayerNavigation>;
   let playerPlayback: ReturnType<typeof createPlayerPlayback>;
   const playerPlaylist = createPlayerPlaylist({
     switchViewToAll,
@@ -743,11 +748,6 @@ function createPlayerService() {
 
   });
 
-  playerNavigation = createPlayerNavigation({
-    getArtistList: () => artistList.value,
-    getAlbumList: () => albumList.value,
-  });
-
   const filteredArtistList = computed(() => {
     const query = State.searchQuery.value.trim().toLowerCase();
     if (!query) return artistList.value;
@@ -1169,35 +1169,40 @@ function createPlayerService() {
 
   function viewPlaylist(id: string) { playerPlaylist.viewPlaylist(id); }
 
-  function switchToFolderView() { playerNavigation.switchToFolderView(); }
+  function switchToFolderView() { navigationStore.switchToFolderView(); }
 
   function removeFolder(folderPath: string) {
     playerFileManager.removeFolder(folderPath);
   }
 
-  function viewArtist(n: string) { playerNavigation.viewArtist(n); }
+  function viewArtist(n: string) { navigationStore.viewArtist(n); }
 
-  function viewAlbum(n: string) { playerNavigation.viewAlbum(n); }
+  function viewAlbum(n: string) { navigationStore.viewAlbum(n); }
 
-  function viewGenre(n: string) { playerNavigation.viewGenre(n); }
+  function viewGenre(n: string) { navigationStore.viewGenre(n); }
 
-  function viewYear(n: string) { playerNavigation.viewYear(n); }
+  function viewYear(n: string) { navigationStore.viewYear(n); }
 
-  function switchViewToAll() { playerNavigation.switchViewToAll(); }
+  function switchViewToAll() { navigationStore.switchViewToAll(); }
 
-  function switchViewToFolder(p: string) { playerNavigation.switchViewToFolder(p); }
+  function switchViewToFolder(p: string) { navigationStore.switchViewToFolder(p); }
 
-  function switchToRecent() { playerNavigation.switchToRecent(); }
+  function switchToRecent() { navigationStore.switchToRecent(); }
 
-  function switchToFavorites() { playerNavigation.switchToFavorites(); }
+  function switchToFavorites() { navigationStore.switchToFavorites(); }
 
-  function switchToStatistics() { playerNavigation.switchToStatistics(); }
+  function switchToStatistics() { navigationStore.switchToStatistics(); }
 
-  function setSearch(q: string) { playerNavigation.setSearch(q); }
+  function setSearch(q: string) { navigationStore.setSearch(q); }
 
-  function switchLocalTab(tab: 'default' | 'artist' | 'album') { playerNavigation.switchLocalTab(tab); }
+  function switchLocalTab(tab: 'default' | 'artist' | 'album') {
+    navigationStore.switchLocalTab(tab, {
+      firstArtistName: artistList.value[0]?.name,
+      firstAlbumKey: albumList.value[0]?.key,
+    });
+  }
 
-  function switchFavTab(tab: 'songs' | 'artists' | 'albums') { playerNavigation.switchFavTab(tab); }
+  function switchFavTab(tab: 'songs' | 'artists' | 'albums') { navigationStore.switchFavTab(tab); }
 
   function isFavorite(s: State.Song | null) { return playerHistoryFavorites.isFavorite(s); }
 
@@ -1294,6 +1299,8 @@ function createPlayerService() {
 
   return {
     ...State,
+    ...libraryRefs,
+    ...navigationRefs,
     artistList, albumList, filteredArtistList, filteredAlbumList, genreList, yearList, folderList, favoriteSongList, favArtistList, favAlbumList, recentAlbumList, recentPlaylistList, displaySongList, isLocalMusic, isFolderMode,
     init, formatDuration, formatTimeAgo,
     // Library
@@ -1321,18 +1328,8 @@ function createPlayerService() {
     addSongsToQueue, getSongsFromPlaylist,
     // Mini 妯″紡
     isMiniMode: State.isMiniMode,
-    reorderWatchedFolders: (from: number, to: number) => {
-      const list = [...State.watchedFolders.value];
-      const [removed] = list.splice(from, 1);
-      list.splice(to, 0, removed);
-      State.watchedFolders.value = list;
-    },
-    reorderPlaylists: (from: number, to: number) => {
-      const list = [...State.playlists.value];
-      const [removed] = list.splice(from, 1);
-      list.splice(to, 0, removed);
-      State.playlists.value = list;
-    },
+    reorderWatchedFolders: (from: number, to: number) => libraryStore.reorderWatchedFolders(from, to),
+    reorderPlaylists: (from: number, to: number) => libraryStore.reorderPlaylists(from, to),
     updateArtistOrder: (newOrder: string[]) => {
       State.artistCustomOrder.value = newOrder;
       if (State.artistSortMode.value !== 'custom') State.artistSortMode.value = 'custom';

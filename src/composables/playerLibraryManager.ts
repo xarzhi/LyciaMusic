@@ -3,6 +3,7 @@ import { getLibraryAddScanOptions, resolveScanLibraryOptions } from './playerLib
 import type { ScanLibraryOptions } from './playerLibraryScan';
 import { fileApi } from '../services/tauri/fileApi';
 import { libraryApi } from '../services/tauri/libraryApi';
+import { useLibraryStore } from '../stores/library';
 
 interface AppSettingsRef {
   value: {
@@ -79,10 +80,12 @@ export const createPlayerLibraryManager = ({
   dedupeSongs,
   resetShuffleState,
 }: CreatePlayerLibraryManagerDeps) => {
+  const libraryStore = useLibraryStore();
+
   const fetchLibraryFolders = async () => {
     try {
       const folders = await libraryApi.getLibraryFolders();
-      State.libraryFolders.value = folders;
+      libraryStore.setLibraryFolders(folders);
     } catch (error) {
       console.error('Failed to fetch library folders:', error);
     }
@@ -216,7 +219,7 @@ export const createPlayerLibraryManager = ({
     const directoryPaths = pathKinds.filter(item => item.isDirectory).map(item => item.path);
     const filePaths = pathKinds.filter(item => !item.isDirectory).map(item => item.path);
 
-    const existingLibraryPaths = new Set(State.libraryFolders.value.map(folder => folder.path));
+    const existingLibraryPaths = new Set(libraryStore.libraryFolders.map(folder => folder.path));
     let importedFolderCount = 0;
     let skippedFolderCount = 0;
 

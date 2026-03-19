@@ -6,6 +6,7 @@ import {
   startLibraryScanSession,
 } from './playerLibraryScan';
 import type { ScanLibraryOptions } from './playerLibraryScan';
+import { useLibraryStore } from '../stores/library';
 
 let hasBootstrappedLibrary = false;
 let libraryBootstrapPromise: Promise<void> | null = null;
@@ -32,6 +33,8 @@ export const createPlayerLibraryRuntime = ({
   finalizeLibraryScanProgress,
   onSilentScanError,
 }: CreatePlayerLibraryRuntimeDeps) => {
+  const libraryStore = useLibraryStore();
+
   const cancelScheduledLibraryRefresh = () => {
     if (libraryRefreshTimer) {
       clearTimeout(libraryRefreshTimer);
@@ -47,7 +50,7 @@ export const createPlayerLibraryRuntime = ({
     try {
       flushBufferedLibraryScanBatch();
       const songs = await invoke<State.Song[]>('get_library_songs_cached');
-      State.librarySongs.value = songs;
+      libraryStore.setLibrarySongs(songs);
       refreshStateSongReferences(songs);
     } catch (error) {
       console.error('Failed to load cached library songs:', error);
@@ -64,32 +67,32 @@ export const createPlayerLibraryRuntime = ({
 
     cancelScheduledLibraryRefresh();
 
-    if (State.libraryFolders.value.length === 0) {
-      State.libraryScanSession.value = null;
-      State.libraryScanProgress.value = null;
-      State.lastLibraryScanError.value = null;
+    if (libraryStore.libraryFolders.length === 0) {
+      libraryStore.setLibraryScanSession(null);
+      libraryStore.setLibraryScanProgress(null);
+      libraryStore.setLastLibraryScanError(null);
       return Promise.resolve();
     }
 
     const session = startLibraryScanSession(resolvedOptions);
     beginLibraryScanProgress(session);
-    State.lastLibraryScanError.value = null;
+    libraryStore.setLastLibraryScanError(null);
 
     libraryRefreshPromise = (async () => {
       try {
         flushBufferedLibraryScanBatch();
         const songs = await invoke<State.Song[]>('scan_library');
-        State.librarySongs.value = songs;
+        libraryStore.setLibrarySongs(songs);
         refreshStateSongReferences(songs);
         await fetchLibraryFolders();
 
-        if (!State.libraryScanProgress.value?.done) {
+        if (!libraryStore.libraryScanProgress?.done) {
           finalizeLibraryScanProgress(songs);
         }
       } catch (error) {
         console.error('Library scan failed:', error);
         const errorMessage = error instanceof Error ? error.message : String(error);
-        State.lastLibraryScanError.value = errorMessage;
+        libraryStore.setLastLibraryScanError(errorMessage);
         finalizeLibraryScanProgress([], true, errorMessage || '扫描音乐库时出现问题');
         if (session.visibility === 'silent') {
           onSilentScanError(errorMessage);
@@ -107,7 +110,7 @@ export const createPlayerLibraryRuntime = ({
       return;
     }
 
-    if (State.libraryFolders.value.length === 0) {
+    if (libraryStore.libraryFolders.length === 0) {
       return;
     }
 

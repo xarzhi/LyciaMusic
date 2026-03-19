@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { Song, usePlayer, dragSession } from '../../composables/player';
-import { currentSong, isPlaying, libraryFolders, libraryScanProgress, libraryScanSession, lastLibraryScanError } from '../../composables/playerState';
+import { currentSong, isPlaying, libraryScanProgress, lastLibraryScanError } from '../../composables/playerState';
 import { useSettings } from '../../composables/settings';
 import { useRoute, useRouter } from 'vue-router';
 import QualityBadge from '../common/QualityBadge.vue';
-import { INDEX_KEYS, getAlphabetIndexKey, type AlphabetIndexKey } from '../../utils/alphabetIndex';
+import { INDEX_KEYS } from '../../utils/alphabetIndex';
 import { useCoverCache } from '../../composables/useCoverCache';
+import { useSongTableAlphabetIndex } from '../../composables/useSongTableAlphabetIndex';
+import { useSongTableLibraryState } from '../../composables/useSongTableLibraryState';
 
 const { settings } = useSettings();
 
@@ -47,15 +49,10 @@ const { coverCache, preloadCovers } = useCoverCache();
 
 const ROW_HEIGHT = 72;
 const OVERSCAN = 20;
-const INDEX_PROXIMITY_PX = 72;
-const HERO_MIN_VISIBLE_MS = 700;
-const HERO_SUCCESS_DWELL_MS = 900;
 const rootRef = ref<HTMLElement | null>(null);
 const containerRef = ref<HTMLElement | null>(null);
 const scrollTop = ref(0);
 const containerHeight = ref(600);
-const showHeroScanCard = ref(false);
-let heroScanHideTimer: ReturnType<typeof setTimeout> | null = null;
 
 const updateContainerHeight = () => {
   if (containerRef.value) {
@@ -84,354 +81,42 @@ const onScroll = (event: Event) => {
   scrollTop.value = (event.target as HTMLElement).scrollTop;
 };
 
-const indexLabelGetter = computed<((song: Song) => string) | null>(() => {
-  if (currentViewMode.value === 'all' && ['default', 'title', 'name'].includes(localSortMode.value)) {
-    return localSortMode.value === 'name'
-      ? (song: Song) => song.name
-      : (song: Song) => song.title || song.name;
-  }
-
-  if (currentViewMode.value === 'folder' && ['title', 'name'].includes(folderSortMode.value)) {
-    return folderSortMode.value === 'name'
-      ? (song: Song) => song.name
-      : (song: Song) => song.title || song.name;
-  }
-
-  return null;
+const {
+  showAlphabetIndex,
+  activeIndexKey,
+  indexBarRef,
+  isIndexDragging,
+  dragIndexKey,
+  hoverIndexKey,
+  isIndexBarVisible,
+  canLocateCurrentSong,
+  handleIndexHotspotEnter,
+  handleIndexHotspotMove,
+  handleIndexHotspotLeave,
+  handleRootMouseMove,
+  handleRootMouseLeave,
+  handleIndexPointerDown,
+  showIndexBar,
+  scrollToCurrentSong,
+} = useSongTableAlphabetIndex({
+  songs: computed(() => props.songs),
+  scrollTop,
+  containerRef,
+  rootRef,
+  routePath: computed(() => route.path),
+  currentViewMode,
+  localSortMode,
+  folderSortMode,
+  activeRootPath,
+  currentFolderFilter,
+  folderTree,
+  refreshFolder,
+  expandFolderPath,
 });
-
-const showAlphabetIndex = computed(() => {
-  const isHomeRoute = route.path === '/';
-  return isHomeRoute && !!indexLabelGetter.value && props.songs.length > 0;
-});
-
-const firstSongIndexByKey = computed(() => {
-  const keyMap = new Map<AlphabetIndexKey, number>();
-
-  if (!indexLabelGetter.value) {
-    return keyMap;
-  }
-
-  props.songs.forEach((song, index) => {
-    const key = getAlphabetIndexKey(indexLabelGetter.value!(song));
-    if (!keyMap.has(key)) {
-      keyMap.set(key, index);
-    }
-  });
-
-  return keyMap;
-});
-
-const activeIndexKey = computed<AlphabetIndexKey | null>(() => {
-  if (!indexLabelGetter.value || props.songs.length === 0) {
-    return null;
-  }
-
-  const visibleIndex = Math.min(
-    props.songs.length - 1,
-    Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT)),
-  );
-
-  return getAlphabetIndexKey(indexLabelGetter.value(props.songs[visibleIndex]));
-});
-
-const indexBarRef = ref<HTMLElement | null>(null);
-const isIndexDragging = ref(false);
-const dragIndexKey = ref<AlphabetIndexKey | null>(null);
-const hoverIndexKey = ref<AlphabetIndexKey | null>(null);
-const isIndexBarVisible = ref(false);
-const INDEX_AUTO_HIDE_MS = 500;
-let hideIndexBarTimer: ReturnType<typeof setTimeout> | null = null;
-
-const currentSongIndex = computed(() => {
-  if (!currentSong?.value?.path) {
-    return -1;
-  }
-
-  return props.songs.findIndex(song => song.path === currentSong.value?.path);
-});
-
-const normalizePath = (path: string | null | undefined) =>
-  (path || '').replace(/\\/g, '/').replace(/\/+$/, '');
-
-const getParentFolderPath = (path: string) => path.replace(/[\\/][^\\/]+$/, '');
-
-const findOwningRootPath = (targetPath: string) => {
-  const normalizedTarget = normalizePath(targetPath);
-  const rootPaths = folderTree.value
-    .map(node => node.path)
-    .filter(rootPath => {
-      const normalizedRoot = normalizePath(rootPath);
-      return (
-        normalizedTarget === normalizedRoot ||
-        normalizedTarget.startsWith(`${normalizedRoot}/`)
-      );
-    })
-    .sort((left, right) => normalizePath(right).length - normalizePath(left).length);
-
-  return rootPaths[0] || null;
-};
-
-const canLocateCurrentSong = computed(() => {
-  if (!currentSong?.value?.path) {
-    return false;
-  }
-
-  if (currentSongIndex.value >= 0) {
-    return true;
-  }
-
-  if (currentViewMode.value !== 'folder') {
-    return false;
-  }
-
-  const currentSongFolderPath = getParentFolderPath(currentSong.value.path);
-  return !!findOwningRootPath(currentSongFolderPath);
-});
-
-const clearHideIndexBarTimer = () => {
-  if (hideIndexBarTimer) {
-    clearTimeout(hideIndexBarTimer);
-    hideIndexBarTimer = null;
-  }
-};
-
-const showIndexBar = () => {
-  if (!showAlphabetIndex.value) {
-    return;
-  }
-
-  clearHideIndexBarTimer();
-  isIndexBarVisible.value = true;
-};
-
-const scheduleHideIndexBar = () => {
-  clearHideIndexBarTimer();
-
-  if (!showAlphabetIndex.value || isIndexDragging.value) {
-    return;
-  }
-
-  hideIndexBarTimer = setTimeout(() => {
-    if (!isIndexDragging.value) {
-      isIndexBarVisible.value = false;
-    }
-  }, INDEX_AUTO_HIDE_MS);
-};
-
-const revealIndexBarTemporarily = () => {
-  showIndexBar();
-  scheduleHideIndexBar();
-};
-
-const scrollFolderTargetsIntoView = (folderPath: string, rootPath: string | null) => {
-  const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-folder-path]')).filter(
-    element =>
-      element.dataset.folderPath === folderPath ||
-      (!!rootPath && element.dataset.folderPath === rootPath),
-  );
-
-  targets.forEach(element => {
-    element.scrollIntoView({
-      block: 'nearest',
-      inline: 'nearest',
-      behavior: 'smooth',
-    });
-  });
-};
-
-const scrollToCurrentSong = async () => {
-  if (!currentSong?.value?.path) {
-    return;
-  }
-
-  showIndexBar();
-
-  if (currentSongIndex.value >= 0) {
-    if (currentViewMode.value === 'folder' && currentFolderFilter.value) {
-      scrollFolderTargetsIntoView(currentFolderFilter.value, activeRootPath.value);
-    }
-    jumpToSongIndex(currentSongIndex.value);
-    scheduleHideIndexBar();
-    return;
-  }
-
-  if (currentViewMode.value !== 'folder') {
-    scheduleHideIndexBar();
-    return;
-  }
-
-  const targetFolderPath = getParentFolderPath(currentSong.value.path);
-  const targetRootPath = findOwningRootPath(targetFolderPath);
-
-  if (!targetRootPath) {
-    scheduleHideIndexBar();
-    return;
-  }
-
-  activeRootPath.value = targetRootPath;
-  currentFolderFilter.value = targetFolderPath;
-  expandFolderPath(targetFolderPath);
-  await refreshFolder(targetFolderPath);
-  await nextTick();
-  requestAnimationFrame(() => {
-    scrollFolderTargetsIntoView(targetFolderPath, targetRootPath);
-  });
-
-  const refreshedSongIndex = props.songs.findIndex(song => song.path === currentSong.value?.path);
-  if (refreshedSongIndex >= 0) {
-    jumpToSongIndex(refreshedSongIndex);
-  }
-
-  scheduleHideIndexBar();
-};
-
-const handleIndexHotspotEnter = () => {
-  showIndexBar();
-};
-
-const handleIndexHotspotMove = () => {
-  showIndexBar();
-};
-
-const handleIndexHotspotLeave = () => {
-  scheduleHideIndexBar();
-};
-
-const handleRootMouseMove = (event: MouseEvent) => {
-  if (!showAlphabetIndex.value || !rootRef.value) {
-    return;
-  }
-
-  const rect = rootRef.value.getBoundingClientRect();
-  const distanceToRight = rect.right - event.clientX;
-
-  if (distanceToRight <= INDEX_PROXIMITY_PX) {
-    revealIndexBarTemporarily();
-  }
-};
-
-const handleRootMouseLeave = () => {
-  scheduleHideIndexBar();
-};
-
-const jumpToSongIndex = (songIndex: number) => {
-  if (!containerRef.value) {
-    return;
-  }
-
-  const targetTop = songIndex * ROW_HEIGHT;
-  containerRef.value.scrollTo({ top: targetTop, behavior: 'auto' });
-  scrollTop.value = targetTop;
-};
-
-const resolveNearestIndexKey = (targetKey: AlphabetIndexKey) => {
-  if (firstSongIndexByKey.value.has(targetKey)) {
-    return targetKey;
-  }
-
-  const targetIndex = INDEX_KEYS.indexOf(targetKey);
-  for (let offset = 1; offset < INDEX_KEYS.length; offset += 1) {
-    const forwardKey = INDEX_KEYS[targetIndex + offset];
-    if (forwardKey && firstSongIndexByKey.value.has(forwardKey)) {
-      return forwardKey;
-    }
-
-    const backwardKey = INDEX_KEYS[targetIndex - offset];
-    if (backwardKey && firstSongIndexByKey.value.has(backwardKey)) {
-      return backwardKey;
-    }
-  }
-
-  return null;
-};
-
-const navigateToIndexKey = (targetKey: AlphabetIndexKey) => {
-  const resolvedKey = resolveNearestIndexKey(targetKey);
-  if (!resolvedKey) {
-    return;
-  }
-
-  const songIndex = firstSongIndexByKey.value.get(resolvedKey);
-  if (songIndex === undefined) {
-    return;
-  }
-
-  jumpToSongIndex(songIndex);
-};
-
-const updateDragIndexFromPoint = (clientY: number) => {
-  if (!indexBarRef.value) {
-    return;
-  }
-
-  const rect = indexBarRef.value.getBoundingClientRect();
-  const relativeY = Math.min(Math.max(clientY - rect.top, 0), rect.height);
-  const slotHeight = rect.height / INDEX_KEYS.length;
-  const slotIndex = Math.min(
-    INDEX_KEYS.length - 1,
-    Math.max(0, Math.floor(relativeY / Math.max(slotHeight, 1))),
-  );
-
-  const targetKey = INDEX_KEYS[slotIndex];
-  dragIndexKey.value = targetKey;
-  navigateToIndexKey(targetKey);
-};
-
-const handleGlobalIndexPointerMove = (event: PointerEvent) => {
-  if (!isIndexDragging.value) {
-    return;
-  }
-
-  updateDragIndexFromPoint(event.clientY);
-};
-
-const stopIndexDrag = () => {
-  if (!isIndexDragging.value) {
-    return;
-  }
-
-  isIndexDragging.value = false;
-  dragIndexKey.value = null;
-  window.removeEventListener('pointermove', handleGlobalIndexPointerMove);
-  window.removeEventListener('pointerup', stopIndexDrag);
-  window.removeEventListener('pointercancel', stopIndexDrag);
-  scheduleHideIndexBar();
-};
-
-const handleIndexPointerDown = (event: PointerEvent, key: AlphabetIndexKey) => {
-  if (!showAlphabetIndex.value) {
-    return;
-  }
-
-  isIndexDragging.value = true;
-  showIndexBar();
-  dragIndexKey.value = key;
-  navigateToIndexKey(key);
-  window.addEventListener('pointermove', handleGlobalIndexPointerMove);
-  window.addEventListener('pointerup', stopIndexDrag);
-  window.addEventListener('pointercancel', stopIndexDrag);
-  (event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
-  event.preventDefault();
-};
 
 watch(
   () => virtualData.value.items,
   newItems => preloadCovers(newItems.map(song => song.path)),
-  { immediate: true },
-);
-
-watch(
-  showAlphabetIndex,
-  visible => {
-    clearHideIndexBarTimer();
-    if (visible) {
-      revealIndexBarTemporarily();
-    } else {
-      isIndexBarVisible.value = false;
-      hoverIndexKey.value = null;
-    }
-  },
   { immediate: true },
 );
 
@@ -445,97 +130,25 @@ const handleMouseDown = (event: MouseEvent, song: Song, index: number) => {
 const showDragIcon = computed(() =>
   ['folder', 'playlist', 'all', 'artist', 'album', 'genre', 'year'].includes(currentViewMode.value),
 );
-const hasSearchQuery = computed(() => searchQuery.value.trim().length > 0);
-const isLibraryEmpty = computed(() => librarySongs.value.length === 0);
-const isLibraryScanRunning = computed(() =>
-  !!libraryScanProgress.value && !libraryScanProgress.value.done && !libraryScanProgress.value.failed,
-);
-const hasHeroLibrarySession = computed(() =>
-  libraryScanSession.value?.trigger === 'first-import'
-  && libraryScanSession.value?.visibility === 'hero',
-);
-const isHeroLibraryScan = computed(() =>
-  currentViewMode.value === 'all'
-  && hasHeroLibrarySession.value,
-);
-const isSilentBootstrapScan = computed(() =>
-  currentViewMode.value === 'all'
-  && libraryScanSession.value?.trigger === 'bootstrap'
-  && libraryScanSession.value?.visibility === 'silent'
-  && isLibraryScanRunning.value,
-);
-const showLibraryOnboarding = computed(
-  () =>
-    currentViewMode.value === 'all'
-    && !hasSearchQuery.value
-    && isLibraryEmpty.value
-    && libraryFolders.value.length === 0
-    && !showHeroScanCard.value,
-);
-const showFolderEmpty = computed(() => currentViewMode.value === 'folder' && !hasSearchQuery.value);
-const showLibraryChecking = computed(
-  () =>
-    currentViewMode.value === 'all'
-    && !hasSearchQuery.value
-    && isLibraryEmpty.value
-    && libraryFolders.value.length > 0
-    && isSilentBootstrapScan.value
-    && !showHeroScanCard.value,
-);
-const showLibraryEmptyResult = computed(
-  () =>
-    currentViewMode.value === 'all'
-    && !hasSearchQuery.value
-    && isLibraryEmpty.value
-    && libraryFolders.value.length > 0
-    && !showLibraryChecking.value
-    && !showHeroScanCard.value,
-);
-const libraryScanPercent = computed(() => {
-  if (!libraryScanProgress.value) return 0;
-  if (libraryScanProgress.value.total <= 0) return 12;
-  const percent = (libraryScanProgress.value.current / libraryScanProgress.value.total) * 100;
-  return Math.min(100, Math.max(8, percent));
-});
-const libraryScanPhaseLabel = computed(() => {
-  switch (libraryScanProgress.value?.phase) {
-    case 'collecting':
-      return '扫描文件';
-    case 'parsing':
-      return '解析信息';
-    case 'writing':
-      return '写入音乐库';
-    case 'complete':
-      return '导入完成';
-    case 'error':
-      return '导入失败';
-    default:
-      return '准备导入';
-  }
-});
-const libraryScanFolderLabel = computed(() => {
-  if (!libraryScanProgress.value || libraryScanProgress.value.folder_total <= 1) {
-    return '';
-  }
-
-  return `文件夹 ${libraryScanProgress.value.folder_index}/${libraryScanProgress.value.folder_total}`;
-});
-const heroScanStatus = computed<'scanning' | 'success' | 'error'>(() => {
-  if (libraryScanProgress.value?.failed) {
-    return 'error';
-  }
-
-  if (libraryScanProgress.value?.done) {
-    return 'success';
-  }
-
-  return 'scanning';
-});
-const emptyStateMessage = computed(() => {
-  if (hasSearchQuery.value) return '未找到匹配的歌曲';
-  if (showFolderEmpty.value) return '该文件夹内暂无歌曲';
-  if (currentViewMode.value === 'playlist') return '歌单暂无歌曲';
-  return '列表为空';
+const {
+  showHeroScanCard,
+  hasSearchQuery,
+  showLibraryOnboarding,
+  showFolderEmpty,
+  showLibraryChecking,
+  showLibraryEmptyResult,
+  libraryScanPercent,
+  libraryScanPhaseLabel,
+  libraryScanFolderLabel,
+  heroScanStatus,
+  emptyStateMessage,
+  retryHeroLibraryScan,
+} = useSongTableLibraryState({
+  currentViewMode,
+  searchQuery,
+  librarySongs,
+  addLibraryFolder,
+  scanLibrary,
 });
 
 const getClickableArtistNames = (song: Song) =>
@@ -546,56 +159,6 @@ const handleArtistClick = (artistName: string) => {
   router.push('/');
 };
 
-const clearHeroScanHideTimer = () => {
-  if (heroScanHideTimer) {
-    clearTimeout(heroScanHideTimer);
-    heroScanHideTimer = null;
-  }
-};
-
-const retryHeroLibraryScan = async () => {
-  const sourcePath = libraryScanSession.value?.sourcePath;
-  if (!sourcePath) {
-    await addLibraryFolder();
-    return;
-  }
-
-  await scanLibrary({
-    trigger: 'first-import',
-    visibility: 'hero',
-    sourcePath,
-  });
-};
-
-watch(
-  [hasHeroLibrarySession, isHeroLibraryScan, () => libraryScanProgress.value?.done, () => libraryScanProgress.value?.failed],
-  ([hasHeroSession, isHeroVisible, done, failed]) => {
-    clearHeroScanHideTimer();
-
-    if (!hasHeroSession) {
-      showHeroScanCard.value = false;
-      return;
-    }
-
-    showHeroScanCard.value = !!isHeroVisible;
-
-    if (failed || !done) {
-      return;
-    }
-
-    const startedAt = libraryScanSession.value?.startedAt ?? Date.now();
-    const waitMs = Math.max(0, HERO_MIN_VISIBLE_MS - (Date.now() - startedAt)) + HERO_SUCCESS_DWELL_MS;
-    heroScanHideTimer = setTimeout(() => {
-      showHeroScanCard.value = false;
-      if (libraryScanSession.value?.trigger === 'first-import' && libraryScanSession.value?.visibility === 'hero') {
-        libraryScanSession.value = null;
-      }
-      heroScanHideTimer = null;
-    }, waitMs);
-  },
-  { immediate: true },
-);
-
 onMounted(() => {
   window.addEventListener('resize', updateContainerHeight);
   if (containerRef.value) {
@@ -605,9 +168,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', updateContainerHeight);
-  stopIndexDrag();
-  clearHideIndexBarTimer();
-  clearHeroScanHideTimer();
 });
 
 defineExpose({ containerRef });

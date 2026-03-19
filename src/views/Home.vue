@@ -252,6 +252,7 @@ import { useToast } from '../composables/toast';
 import { useCoverCache } from '../composables/useCoverCache';
 import { useHomeBatchActions } from '../composables/useHomeBatchActions';
 import { useHomeFolderManagement } from '../composables/useHomeFolderManagement';
+import { useHomeNavigation } from '../composables/useHomeNavigation';
 import { useHomeRouteSync } from '../composables/useHomeRouteSync';
 import LocalMusicHeader from '../components/headers/LocalMusicHeader.vue';
 import FoldersHeader from '../components/headers/FoldersHeader.vue';
@@ -272,6 +273,7 @@ import { compareByAlphabetIndex } from '../utils/alphabetIndex';
 
 const route = useRoute();
 const router = useRouter();
+const { openHomeAlbum } = useHomeNavigation(router);
 const { showToast } = useToast();
 
 const {
@@ -301,7 +303,6 @@ const {
   librarySongs,
   albumSortMode,
   albumCustomOrder,
-  viewAlbum,
 } = usePlayer();
 
 const { coverCache, loadingSet, preloadCovers } = useCoverCache();
@@ -549,7 +550,7 @@ const executeSongPhysicalDelete = async () => {
 };
 
 const handleArtistAlbumClick = (albumKey: string) => {
-  viewAlbum(albumKey);
+  void openHomeAlbum(albumKey);
 };
 
 watch(currentViewMode, (newMode) => {

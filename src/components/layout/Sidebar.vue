@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { usePlayer, dragSession } from '../../composables/player';
 import { useCoverCache } from '../../composables/useCoverCache';
+import { useHomeNavigation } from '../../composables/useHomeNavigation';
 
 import ModernModal from '../common/ModernModal.vue';
 import ModernInputModal from '../common/ModernInputModal.vue';
@@ -12,14 +13,12 @@ const {
   playlists,
   artistList,
   albumList,
-  switchViewToAll,
-  switchToFolderView,
-  switchToStatistics,
   createPlaylist,
   deletePlaylist,
   viewPlaylist,
   currentViewMode,
   filterCondition,
+  currentFolderFilter,
   playSong,
   addSongsToQueue,
   getSongsFromPlaylist,
@@ -29,6 +28,12 @@ const {
 } = usePlayer();
 
 const router = useRouter();
+const {
+  openHomeAll,
+  openHomeFolder,
+  openHomePlaylist,
+  openHomeStatistics,
+} = useHomeNavigation(router);
 const { preloadCovers, loadCover } = useCoverCache();
 
 const isPlaylistOpen = ref(true);
@@ -156,8 +161,7 @@ const confirmDeletePlaylist = () => {
 
 const handlePlaylistClick = (e: MouseEvent, id: string) => {
   e.stopPropagation();
-  viewPlaylist(id);
-  router.push('/');
+  void openHomePlaylist(id);
 
   if (e.shiftKey && lastSelectedPlaylistId.value) {
     const list = playlists.value;
@@ -216,13 +220,24 @@ const handleMenuPlay = () => {
   const songs = getSongsFromPlaylist(targetPlaylist.value.id);
   if (songs.length > 0) {
     clearQueue();
-    viewPlaylist(targetPlaylist.value.id);
-    router.push('/');
+    void openHomePlaylist(targetPlaylist.value.id);
     setTimeout(() => {
       playSong(songs[0]);
     }, 50);
   }
   showContextMenu.value = false;
+};
+
+const handleOpenAllView = () => {
+  void openHomeAll();
+};
+
+const handleOpenFolderView = () => {
+  void openHomeFolder(currentFolderFilter.value || undefined);
+};
+
+const handleOpenStatisticsView = () => {
+  void openHomeStatistics();
 };
 
 const handleMenuAddToQueue = () => {
@@ -339,12 +354,12 @@ onUnmounted(() => {
 
     <nav class="flex-1 overflow-y-auto custom-scrollbar px-2 pb-4" @click="handleBackgroundClick">
       <ul class="space-y-1 transition-all duration-200" :class="{ 'opacity-30 grayscale pointer-events-none': dragSession.active }">
-        <router-link to="/" custom v-slot="{ navigate }" v-if="settings.sidebar.showLocalMusic">
-          <li @click="() => { navigate(); switchViewToAll(); }" :class="[baseNavClasses, (currentViewMode === 'all' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
+        <template v-if="settings.sidebar.showLocalMusic">
+          <li @click="handleOpenAllView" :class="[baseNavClasses, (currentViewMode === 'all' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
             <span>本地音乐</span>
           </li>
-        </router-link>
+        </template>
 
         <router-link to="/artists" custom v-slot="{ navigate, isActive }" v-if="settings.sidebar.showArtists">
           <li @click="navigate" @mouseenter="handleHoverArtists" :class="[baseNavClasses, isActive ? activeNavClasses : inactiveNavClasses]">
@@ -374,19 +389,19 @@ onUnmounted(() => {
           </li>
         </router-link>
 
-        <router-link to="/" custom v-slot="{ navigate }" v-if="settings.sidebar.showFolders">
-          <li @click="() => { navigate(); switchToFolderView(); }" :class="[baseNavClasses, (currentViewMode === 'folder' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
+        <template v-if="settings.sidebar.showFolders">
+          <li @click="handleOpenFolderView" :class="[baseNavClasses, (currentViewMode === 'folder' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
             <span>文件夹</span>
           </li>
-        </router-link>
+        </template>
 
-        <router-link to="/" custom v-slot="{ navigate }" v-if="settings.sidebar.showStatistics">
-          <li @click="() => { navigate(); switchToStatistics(); }" :class="[baseNavClasses, (currentViewMode === 'statistics' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
+        <template v-if="settings.sidebar.showStatistics">
+          <li @click="handleOpenStatisticsView" :class="[baseNavClasses, (currentViewMode === 'statistics' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
             <span>统计</span>
           </li>
-        </router-link>
+        </template>
       </ul>
 
       <div class="mt-6">

@@ -3,17 +3,18 @@ import { usePlayer, dragSession } from '../composables/player';
 import { useRouter } from 'vue-router';
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useCoverCache } from '../composables/useCoverCache';
+import { useHomeNavigation } from '../composables/useHomeNavigation';
 
-const { filteredArtistList, viewArtist, artistSortMode, updateArtistOrder, searchQuery } = usePlayer();
+const { filteredArtistList, artistSortMode, updateArtistOrder, searchQuery } = usePlayer();
 const router = useRouter();
+const { openHomeArtist } = useHomeNavigation(router);
 const isSearchActive = computed(() => searchQuery.value.trim().length > 0);
 
 const showSortMenu = ref(false);
 const dragOverName = ref<string | null>(null);
 
 const handleArtistClick = (artistName: string) => {
-  viewArtist(artistName); 
-  router.push('/');       
+  void openHomeArtist(artistName);
 };
 
 const handleSortChange = (mode: 'count' | 'name' | 'custom') => {

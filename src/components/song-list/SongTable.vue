@@ -7,6 +7,7 @@ import { useRoute, useRouter } from 'vue-router';
 import QualityBadge from '../common/QualityBadge.vue';
 import { INDEX_KEYS } from '../../utils/alphabetIndex';
 import { useCoverCache } from '../../composables/useCoverCache';
+import { useHomeNavigation } from '../../composables/useHomeNavigation';
 import { useSongTableAlphabetIndex } from '../../composables/useSongTableAlphabetIndex';
 import { useSongTableLibraryState } from '../../composables/useSongTableLibraryState';
 
@@ -30,7 +31,6 @@ const {
   toggleFavorite,
   formatDuration,
   currentViewMode,
-  viewArtist,
   addLibraryFolder,
   scanLibrary,
   searchQuery,
@@ -45,6 +45,7 @@ const {
 } = usePlayer();
 const router = useRouter();
 const route = useRoute();
+const { openHomeArtist } = useHomeNavigation(router);
 const { coverCache, preloadCovers } = useCoverCache();
 
 const ROW_HEIGHT = 72;
@@ -155,8 +156,7 @@ const getClickableArtistNames = (song: Song) =>
   (Array.isArray(song.artist_names) && song.artist_names.length > 0 ? song.artist_names : [song.artist]).filter(Boolean);
 
 const handleArtistClick = (artistName: string) => {
-  viewArtist(artistName);
-  router.push('/');
+  void openHomeArtist(artistName);
 };
 
 onMounted(() => {

@@ -133,9 +133,18 @@ export function useHomeRouteSync({
       filterCondition.value = nextState.filter;
       searchQuery.value = '';
 
-      if (nextState.viewMode === 'folder' && nextState.folder) {
-        currentFolderFilter.value = nextState.folder;
-        const rootPath = findOwningRootPath(folderTree.value, nextState.folder);
+      if (nextState.viewMode === 'folder') {
+        const resolvedFolder =
+          nextState.folder ||
+          currentFolderFilter.value ||
+          folderTree.value[0]?.path ||
+          '';
+
+        if (resolvedFolder) {
+          currentFolderFilter.value = resolvedFolder;
+        }
+
+        const rootPath = findOwningRootPath(folderTree.value, resolvedFolder);
         if (rootPath) {
           activeRootPath.value = rootPath;
         }

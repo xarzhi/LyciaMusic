@@ -2,9 +2,11 @@
 import { usePlayer, dragSession } from '../composables/player';
 import { useRouter } from 'vue-router';
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
+import { useHomeNavigation } from '../composables/useHomeNavigation';
 
-const { filteredAlbumList, viewAlbum, albumSortMode, updateAlbumOrder, searchQuery } = usePlayer();
+const { filteredAlbumList, albumSortMode, updateAlbumOrder, searchQuery } = usePlayer();
 const router = useRouter();
+const { openHomeAlbum } = useHomeNavigation(router);
 const isSearchActive = computed(() => searchQuery.value.trim().length > 0);
 
 import { useCoverCache } from '../composables/useCoverCache';
@@ -21,8 +23,7 @@ const showSortMenu = ref(false);
 const dragOverKey = ref<string | null>(null);
 
 const handleAlbumClick = (albumKey: string) => {
-  viewAlbum(albumKey);
-  router.push('/');
+  void openHomeAlbum(albumKey);
 };
 
 const handleSortChange = (mode: 'count' | 'name' | 'artist' | 'custom') => {

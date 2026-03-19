@@ -1,6 +1,6 @@
-import { invoke } from '@tauri-apps/api/core';
 import { Effect, getCurrentWindow, type Color } from '@tauri-apps/api/window';
 import { ref } from 'vue';
+import { windowApi, type WindowMaterialCapabilities as TauriWindowMaterialCapabilities } from '../services/tauri/windowApi';
 
 export type WindowMaterialMode = 'none' | 'mica' | 'acrylic';
 export type ResolvedWindowMaterial = 'none' | 'mica' | 'acrylic';
@@ -91,9 +91,9 @@ export async function loadWindowMaterialCapabilities(force = false): Promise<Win
     return loadPromise;
   }
 
-  loadPromise = invoke<WindowMaterialCapabilities>('get_window_material_capabilities')
+  loadPromise = windowApi.getWindowMaterialCapabilities()
     .then((result) => {
-      const normalized = normalizeCapabilities(result);
+      const normalized = normalizeCapabilities(result as TauriWindowMaterialCapabilities);
       capabilities.value = normalized;
       isWindowMaterialReady.value = true;
       return normalized;
@@ -125,7 +125,7 @@ export async function applyWindowMaterial(mode: WindowMaterialMode, isDark: bool
       });
     } else if (resolved === 'acrylic') {
       await trySetWindowBackgroundColor(getTransparentWindowColor());
-      await invoke('set_dark_mode_for_window', { dark: isDark });
+      await windowApi.setDarkModeForWindow(isDark);
       await appWindow.setEffects({
         effects: [Effect.Acrylic],
         color: getAcrylicTint(isDark),

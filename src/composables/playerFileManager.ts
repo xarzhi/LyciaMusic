@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import * as State from './playerState';
+import { fileApi } from '../services/tauri/fileApi';
 
 interface CreatePlayerFileManagerDeps {
   removeSidebarFolderLinked: (
@@ -110,7 +110,7 @@ export const createPlayerFileManager = ({
   showToast,
 }: CreatePlayerFileManagerDeps) => {
   const deleteFolder = async (path: string) => {
-    await invoke('delete_folder', { path });
+    await fileApi.deleteFolder(path);
 
     const isRoot = State.folderTree.value.some(node => node.path === path);
     if (isRoot) {
@@ -126,7 +126,7 @@ export const createPlayerFileManager = ({
     const sourceNode = findNode(State.folderTree.value, sourceFolderPath);
     const wasSourceCover = sourceNode?.cover_song_path === sourcePath;
 
-    await invoke('move_file_to_folder', { sourcePath, targetFolder: targetFolderPath });
+    await fileApi.moveFileToFolder(sourcePath, targetFolderPath);
 
     const songIndex = State.songList.value.findIndex(song => song.path === sourcePath);
     if (songIndex !== -1) {
@@ -137,9 +137,7 @@ export const createPlayerFileManager = ({
 
     if (wasSourceCover) {
       try {
-        const newCoverPath = await invoke<string | null>('get_folder_first_song', {
-          folderPath: sourceFolderPath,
-        });
+        const newCoverPath = await fileApi.getFolderFirstSong(sourceFolderPath);
         updateFolderCover(State.folderTree.value, sourceFolderPath, newCoverPath);
       } catch {
         updateFolderCover(State.folderTree.value, sourceFolderPath, null);
@@ -149,9 +147,7 @@ export const createPlayerFileManager = ({
     incrementNodeCount(State.folderTree.value, targetFolderPath);
 
     try {
-      const targetCoverPath = await invoke<string | null>('get_folder_first_song', {
-        folderPath: targetFolderPath,
-      });
+      const targetCoverPath = await fileApi.getFolderFirstSong(targetFolderPath);
       updateFolderCover(State.folderTree.value, targetFolderPath, targetCoverPath);
     } catch {
       updateFolderCover(State.folderTree.value, targetFolderPath, null);
@@ -180,7 +176,7 @@ export const createPlayerFileManager = ({
       }
     });
 
-    const movedCount = await invoke<number>('batch_move_music_files', { paths, targetFolder });
+    const movedCount = await fileApi.batchMoveMusicFiles(paths, targetFolder);
 
     paths.forEach(oldPath => {
       const songIndex = State.songList.value.findIndex(song => song.path === oldPath);
@@ -196,9 +192,7 @@ export const createPlayerFileManager = ({
 
       if (entry.coverPaths.length > 0) {
         try {
-          const newCoverPath = await invoke<string | null>('get_folder_first_song', {
-            folderPath: sourceFolder,
-          });
+          const newCoverPath = await fileApi.getFolderFirstSong(sourceFolder);
           updateFolderCover(State.folderTree.value, sourceFolder, newCoverPath);
         } catch {
           updateFolderCover(State.folderTree.value, sourceFolder, null);
@@ -211,9 +205,7 @@ export const createPlayerFileManager = ({
     }
 
     try {
-      const targetCoverPath = await invoke<string | null>('get_folder_first_song', {
-        folderPath: targetFolder,
-      });
+      const targetCoverPath = await fileApi.getFolderFirstSong(targetFolder);
       updateFolderCover(State.folderTree.value, targetFolder, targetCoverPath);
     } catch {
       updateFolderCover(State.folderTree.value, targetFolder, null);
@@ -223,7 +215,7 @@ export const createPlayerFileManager = ({
   };
 
   const refreshFolder = async (folderPath: string) => {
-    const newSongs = await invoke<State.Song[]>('scan_music_folder', { folderPath });
+    const newSongs = await fileApi.scanMusicFolder(folderPath);
     const otherSongs = State.songList.value.filter(song => !song.path.startsWith(folderPath));
     State.songList.value = [...otherSongs, ...newSongs];
   };
@@ -263,7 +255,7 @@ export const createPlayerFileManager = ({
 
   const moveFile = async (song: State.Song, newPath: string) => {
     try {
-      await invoke('move_music_file', { oldPath: song.path, newPath });
+      await fileApi.moveMusicFile(song.path, newPath);
 
       const oldPath = song.path;
       const targetSong = State.songList.value.find(item => item.path === oldPath);
@@ -295,12 +287,12 @@ export const createPlayerFileManager = ({
   };
 
   const openInFinder = async (path: string) => {
-    await invoke('show_in_folder', { path });
+    await fileApi.showInFolder(path);
   };
 
   const deleteFromDisk = async (song: State.Song) => {
     try {
-      await invoke('delete_music_file', { path: song.path });
+      await fileApi.deleteMusicFile(song.path);
       State.songList.value = State.songList.value.filter(item => item.path !== song.path);
       State.favoritePaths.value = State.favoritePaths.value.filter(path => path !== song.path);
       await removeFromHistory([song.path]);
@@ -336,7 +328,7 @@ export const createPlayerFileManager = ({
 
       let allNewSongs: State.Song[] = [];
       for (const folder of State.watchedFolders.value) {
-        const songs = await invoke<State.Song[]>('scan_music_folder', { folderPath: folder });
+        const songs = await fileApi.scanMusicFolder(folder);
         allNewSongs = allNewSongs.concat(songs);
       }
 

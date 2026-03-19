@@ -1,7 +1,7 @@
 import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
-import { invoke } from '@tauri-apps/api/core';
 import { currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
 import { watch, type Ref } from 'vue';
+import { windowApi } from '../services/tauri/windowApi';
 
 interface UseMiniModeWindowOptions {
   isMiniMode: Ref<boolean>;
@@ -102,7 +102,7 @@ export function useMiniModeWindow({
             const appEl = document.getElementById('app');
             if (appEl) appEl.classList.add('mini-mode-active');
 
-            await invoke('set_mini_boundary_enabled', { enabled: true });
+            await windowApi.setMiniBoundaryEnabled(true);
           }
 
           let height = MINI_BASE_HEIGHT;
@@ -127,7 +127,7 @@ export function useMiniModeWindow({
 
         miniPosition = await getWindowLogicalPosition();
         closeMiniPlaylist();
-        await invoke('set_mini_boundary_enabled', { enabled: false });
+        await windowApi.setMiniBoundaryEnabled(false);
         await appWindow.setResizable(true);
         await appWindow.setMaxSize(null);
         await appWindow.setMinSize(new LogicalSize(960, 600));

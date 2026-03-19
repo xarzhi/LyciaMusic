@@ -1,7 +1,8 @@
-import { invoke } from '@tauri-apps/api/core';
 import * as State from './playerState';
 import { getLibraryAddScanOptions, resolveScanLibraryOptions } from './playerLibraryScan';
 import type { ScanLibraryOptions } from './playerLibraryScan';
+import { fileApi } from '../services/tauri/fileApi';
+import { libraryApi } from '../services/tauri/libraryApi';
 
 interface AppSettingsRef {
   value: {
@@ -80,7 +81,7 @@ export const createPlayerLibraryManager = ({
 }: CreatePlayerLibraryManagerDeps) => {
   const fetchLibraryFolders = async () => {
     try {
-      const folders = await invoke<State.LibraryFolder[]>('get_library_folders');
+      const folders = await libraryApi.getLibraryFolders();
       State.libraryFolders.value = folders;
     } catch (error) {
       console.error('Failed to fetch library folders:', error);
@@ -88,25 +89,25 @@ export const createPlayerLibraryManager = ({
   };
 
   const addLibraryFolderRecord = async (path: string, scanOptions?: ScanLibraryOptions) => {
-    await invoke('add_library_folder', { path });
+    await libraryApi.addLibraryFolder(path);
     await fetchLibraryFolders();
     await scanLibrary(scanOptions ?? getLibraryAddScanOptions(path));
   };
 
   const addSidebarFolderRecord = async (path: string) => {
-    await invoke('add_sidebar_folder', { path });
-    await invoke('scan_music_folder', { folderPath: path });
+    await libraryApi.addSidebarFolder(path);
+    await fileApi.scanMusicFolder(path);
     await fetchSidebarTree();
   };
 
   const removeLibraryFolderRecord = async (path: string) => {
-    await invoke('remove_library_folder', { path });
+    await libraryApi.removeLibraryFolder(path);
     await fetchLibraryFolders();
     await scanLibrary({ trigger: 'manual-rescan', visibility: 'inline' });
   };
 
   const removeSidebarFolderRecord = async (path: string) => {
-    await invoke('remove_sidebar_folder', { path });
+    await libraryApi.removeSidebarFolder(path);
     await fetchSidebarTree();
   };
 
@@ -208,7 +209,7 @@ export const createPlayerLibraryManager = ({
     const pathKinds = await Promise.all(
       uniquePaths.map(async path => ({
         path,
-        isDirectory: await invoke<boolean>('is_directory', { path }).catch(() => false),
+        isDirectory: await fileApi.isDirectory(path).catch(() => false),
       })),
     );
 
@@ -234,7 +235,7 @@ export const createPlayerLibraryManager = ({
     }
 
     const parsedSongs = filePaths.length > 0
-      ? await invoke<State.Song[]>('parse_audio_files', { paths: filePaths }).catch(error => {
+      ? await fileApi.parseAudioFiles(filePaths).catch(error => {
         console.error('Failed to parse external audio files:', error);
         return [];
       })

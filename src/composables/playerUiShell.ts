@@ -1,6 +1,6 @@
-import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import * as State from './playerState';
+import { playbackApi } from '../services/tauri/playbackApi';
 
 interface CreatePlayerUiShellDeps {
   addFolder: () => void | Promise<void>;
@@ -14,18 +14,18 @@ export const createPlayerUiShell = ({
   const handleVolume = async (event: Event) => {
     const volume = parseInt((event.target as HTMLInputElement).value, 10);
     State.volume.value = volume;
-    await invoke('set_volume', { volume: volume / 100 });
+    await playbackApi.setVolume(volume / 100);
   };
 
   const toggleMute = async () => {
     if (State.volume.value > 0) {
       State.volume.value = 0;
-      await invoke('set_volume', { volume: 0 });
+      await playbackApi.setVolume(0);
       return;
     }
 
     State.volume.value = 100;
-    await invoke('set_volume', { volume: 1 });
+    await playbackApi.setVolume(1);
   };
 
   const togglePlaylist = () => {

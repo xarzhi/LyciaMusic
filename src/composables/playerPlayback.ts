@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import * as State from './playerState';
+import { playbackApi } from '../services/tauri/playbackApi';
 
 interface PlaySongOptions {
   updateShuffleHistory?: boolean;
@@ -78,7 +78,7 @@ export const createPlayerPlayback = ({
       if (!State.isPlaying.value || isSeeking) return;
 
       try {
-        const realTime = await invoke<number>('get_playback_progress');
+        const realTime = await playbackApi.getPlaybackProgress();
         if (Math.abs(realTime - State.currentTime.value) > 0.05) {
           reanchorPlaybackClock(realTime);
         }
@@ -97,10 +97,8 @@ export const createPlayerPlayback = ({
 
     const totalDuration = accumulatedTime + currentSession;
     if (totalDuration >= 10) {
-      invoke('record_play', {
-        songPath: song.path,
-        duration: Math.floor(totalDuration),
-      }).catch(error => console.warn('record_play failed:', error));
+      playbackApi.recordPlay(song.path, Math.floor(totalDuration))
+        .catch(error => console.warn('record_play failed:', error));
     }
 
     accumulatedTime = 0;
@@ -139,11 +137,11 @@ export const createPlayerPlayback = ({
     addToHistory(song);
 
     try {
-      const cover = await invoke<string>('get_song_cover', { path: song.path }).catch(() => '');
+      const cover = await playbackApi.getSongCover(song.path).catch(() => '');
       if (requestId !== playRequestId || State.currentSong.value?.path !== song.path) return;
 
       State.currentCover.value = cover;
-      await invoke('play_audio', {
+      await playbackApi.playAudio({
         path: song.path,
         title: song.name,
         artist: song.artist || 'Unknown Artist',
@@ -174,7 +172,7 @@ export const createPlayerPlayback = ({
     }
 
     State.isPlaying.value = false;
-    await invoke('pause_audio');
+    await playbackApi.pauseAudio();
     stopPlaybackRuntime();
   };
 
@@ -187,7 +185,7 @@ export const createPlayerPlayback = ({
         sessionStartTime = null;
       }
 
-      await invoke('pause_audio');
+      await playbackApi.pauseAudio();
       State.isPlaying.value = false;
       stopPlaybackRuntime();
       return;
@@ -196,7 +194,7 @@ export const createPlayerPlayback = ({
     if (!State.isSongLoaded.value) {
       await playSong(State.currentSong.value);
     } else {
-      await invoke('resume_audio');
+      await playbackApi.resumeAudio();
       sessionStartTime = Date.now();
     }
 
@@ -219,7 +217,7 @@ export const createPlayerPlayback = ({
     reanchorPlaybackClock(targetTime);
 
     try {
-      await invoke('seek_audio', {
+      await playbackApi.seekAudio({
         time: targetTime,
         isPlaying: State.isPlaying.value,
         requestId,

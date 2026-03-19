@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { usePlayer } from '../../composables/player';
+import { usePlayerViewState } from '../../composables/usePlayerViewState';
 
 defineProps<{
   isBatchMode: boolean;
@@ -12,7 +12,7 @@ import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 
 const { 
   recentTab, 
-} = usePlayer();
+} = usePlayerViewState();
 
 // --- Tab Underline Logic ---
 const tabsContainer = ref<HTMLElement | null>(null);

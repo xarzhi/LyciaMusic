@@ -2,9 +2,12 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { usePlayer, Song } from '../../composables/player';
+import { Song } from '../../composables/player';
+import { usePlayerViewState } from '../../composables/usePlayerViewState';
+import { useLibraryCollections } from '../../composables/useLibraryCollections';
 
-const { playlistSortMode, setPlaylistSortMode } = usePlayer();
+const { playlistSortMode, setPlaylistSortMode, currentViewMode, filterCondition } = usePlayerViewState();
+const { playlists } = useLibraryCollections();
 
 const showSortMenu = ref(false);
 const sortMenuX = ref(0);
@@ -58,8 +61,8 @@ const emit = defineEmits([
 const headerCover = ref('');
 
 const updateHeaderCover = async () => {
-  if (usePlayer().currentViewMode.value === 'playlist') {
-      const pl = usePlayer().playlists.value.find(p => p.id === usePlayer().filterCondition.value);
+  if (currentViewMode.value === 'playlist') {
+      const pl = playlists.value.find(p => p.id === filterCondition.value);
       if (pl && pl.songPaths.length > 0) {
         const firstSongPath = pl.songPaths[0];
         try {

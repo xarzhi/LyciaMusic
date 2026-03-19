@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { usePlayer } from '../../composables/player';
+import { usePlayerViewState } from '../../composables/usePlayerViewState';
 
 defineProps<{
   isBatchMode: boolean;
@@ -11,7 +11,7 @@ const emit = defineEmits(['update:isBatchMode', 'playAll', 'batchPlay', 'addToPl
 const { 
   localSortMode,
   setLocalSortMode,
-} = usePlayer();
+} = usePlayerViewState();
 
 import { ref, onMounted, onUnmounted } from 'vue';
 const showSortMenu = ref(false);

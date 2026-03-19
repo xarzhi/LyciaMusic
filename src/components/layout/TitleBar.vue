@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
-import { usePlayer } from '../../composables/player';
+import { usePlayerViewState } from '../../composables/usePlayerViewState';
 import { getCurrentWindow } from '@tauri-apps/api/window'; 
 import { useSettings } from '../../composables/settings';
 import { ref } from 'vue';
 
 const router = useRouter();
-const { searchQuery, setSearch, isMiniMode } = usePlayer();
+const { searchQuery, setSearch, isMiniMode } = usePlayerViewState();
 const appWindow = getCurrentWindow();
 const { settings } = useSettings();
 const rotation = ref(0); // For settings icon animation

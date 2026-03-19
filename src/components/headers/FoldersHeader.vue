@@ -3,10 +3,10 @@ import { ref, onMounted, onUnmounted } from 'vue';
 
 import FolderContextMenu from '../overlays/FolderContextMenu.vue';
 import { useToast } from '../../composables/toast';
-import { usePlayer } from '../../composables/player';
+import { usePlayerViewState } from '../../composables/usePlayerViewState';
 import { dragSession } from '../../composables/playerState';
 
-const { folderSortMode, setFolderSortMode } = usePlayer();
+const { folderSortMode, setFolderSortMode } = usePlayerViewState();
 
 const props = defineProps<{
   isBatchMode: boolean;

@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { usePlayer, dragSession } from '../../composables/player';
 import { useLibraryCollections } from '../../composables/useLibraryCollections';
+import { usePlayerViewState } from '../../composables/usePlayerViewState';
 import { useCoverCache } from '../../composables/useCoverCache';
 import { useHomeNavigation } from '../../composables/useHomeNavigation';
 
@@ -13,14 +14,16 @@ import PlaylistContextMenu from '../overlays/PlaylistContextMenu.vue';
 const {
   artistList,
   albumList,
-  currentViewMode,
-  filterCondition,
-  currentFolderFilter,
   playSong,
   addSongsToQueue,
   clearQueue,
   settings,
 } = usePlayer();
+const {
+  currentViewMode,
+  filterCondition,
+  currentFolderFilter,
+} = usePlayerViewState();
 const {
   playlists,
   createPlaylist,

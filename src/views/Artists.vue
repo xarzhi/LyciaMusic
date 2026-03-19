@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { usePlayer, dragSession } from '../composables/player';
+import { dragSession } from '../composables/playerState';
+import { useLibraryBrowse } from '../composables/useLibraryBrowse';
 import { useRouter } from 'vue-router';
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useCoverCache } from '../composables/useCoverCache';
 import { useHomeNavigation } from '../composables/useHomeNavigation';
 
-const { filteredArtistList, artistSortMode, updateArtistOrder, searchQuery } = usePlayer();
+const { filteredArtistList, artistSortMode, updateArtistOrder, searchQuery } = useLibraryBrowse();
 const router = useRouter();
 const { openHomeArtist } = useHomeNavigation(router);
 const isSearchActive = computed(() => searchQuery.value.trim().length > 0);

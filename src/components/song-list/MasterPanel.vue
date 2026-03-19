@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { usePlayer, dragSession } from '../../composables/player';
+import { usePlayer } from '../../composables/player';
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'; // 🟢 Added computed
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core'; // 🟢 1. 引入转换工具
@@ -8,8 +8,7 @@ import FolderContextMenu from '../overlays/FolderContextMenu.vue';
 import ModernModal from '../common/ModernModal.vue'; 
 import ModernInputModal from '../common/ModernInputModal.vue';
 import { useToast } from '../../composables/toast';
-
-import { FolderNode } from '../../composables/playerState';
+import { dragSession, FolderNode } from '../../composables/playerState';
 
 const props = withDefaults(defineProps<{
   isManagementMode?: boolean; // 🟢 Prop, now optional

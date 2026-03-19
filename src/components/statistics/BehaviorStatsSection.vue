@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
-import { usePlayer } from '../../composables/player';
+import { useLibraryBrowse } from '../../composables/useLibraryBrowse';
 import { useCoverCache } from '../../composables/useCoverCache';
 
 interface TopSong {
@@ -59,7 +59,7 @@ const emit = defineEmits<{
   hide: [title: string];
 }>();
 
-const { librarySongs } = usePlayer();
+const { librarySongs } = useLibraryBrowse();
 const { coverCache, preloadCovers } = useCoverCache();
 
 function normalizePath(path: string): string {

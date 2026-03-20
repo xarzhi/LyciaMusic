@@ -94,12 +94,15 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { storeToRefs } from 'pinia';
 import { open } from '@tauri-apps/plugin-dialog';
 import { usePlayer } from '../../composables/player';
-import { libraryFolders, libraryScanProgress, lastLibraryScanError } from '../../composables/playerState';
+import { useLibraryStore } from '../../stores/library';
 import ConfirmModal from '../overlays/ConfirmModal.vue';
 
 const { addLibraryFolderLinked, removeLibraryFolderLinked, scanLibrary } = usePlayer();
+const libraryStore = useLibraryStore();
+const { libraryFolders, libraryScanProgress, lastLibraryScanError } = storeToRefs(libraryStore);
 const isScanning = computed(() =>
   !!libraryScanProgress.value && !libraryScanProgress.value.done && !libraryScanProgress.value.failed
 );

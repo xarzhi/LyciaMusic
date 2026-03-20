@@ -1,6 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { storeToRefs } from 'pinia';
+
 import * as State from './playerState';
+import { useLibraryStore } from '../stores/library';
 
 interface FolderTreeSettings {
   value: {
@@ -67,12 +70,15 @@ export const createPlayerFolderTree = ({
   unlinkFolderTreeFromLibrary,
   showToast,
 }: CreatePlayerFolderTreeDeps) => {
+  const libraryStore = useLibraryStore();
+  const { folderTree } = storeToRefs(libraryStore);
+
   const fetchFolderTree = async () => {
     try {
-      const expandedPaths = collectExpandedPaths(State.folderTree.value);
+      const expandedPaths = collectExpandedPaths(folderTree.value);
       const tree = await invoke<State.FolderNode[]>('get_sidebar_hierarchy');
       applyExpandedPaths(tree, expandedPaths);
-      State.folderTree.value = tree;
+      folderTree.value = tree;
     } catch (error) {
       console.error('Failed to fetch folder tree:', error);
     }
@@ -157,7 +163,7 @@ export const createPlayerFolderTree = ({
   };
 
   const expandFolderPath = (targetPath: string) => {
-    expandTreeToPath(State.folderTree.value, targetPath);
+    expandTreeToPath(folderTree.value, targetPath);
   };
 
   return {

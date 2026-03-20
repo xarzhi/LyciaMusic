@@ -3,6 +3,7 @@ import { storeToRefs } from 'pinia';
 
 import * as State from './playerState';
 import { playbackApi } from '../services/tauri/playbackApi';
+import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
 
 interface CreatePlayerUiShellDeps {
@@ -14,8 +15,10 @@ export const createPlayerUiShell = ({
   addFolder,
   removeFromHistory,
 }: CreatePlayerUiShellDeps) => {
+  const libraryStore = useLibraryStore();
   const navigationStore = useNavigationStore();
   const { currentViewMode } = storeToRefs(navigationStore);
+  const { songList } = storeToRefs(libraryStore);
 
   const handleVolume = async (event: Event) => {
     const volume = parseInt((event.target as HTMLInputElement).value, 10);
@@ -52,7 +55,7 @@ export const createPlayerUiShell = ({
 
   const removeSongFromList = async (song: State.Song) => {
     if (currentViewMode.value === 'all') {
-      State.songList.value = State.songList.value.filter(item => item.path !== song.path);
+      songList.value = songList.value.filter(item => item.path !== song.path);
       return;
     }
 

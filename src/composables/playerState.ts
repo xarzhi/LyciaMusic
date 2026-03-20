@@ -1,5 +1,8 @@
 import { ref, reactive } from 'vue';
+import type { Ref } from 'vue';
+
 import { Song, Playlist, HistoryItem } from '../types';
+import { useLibraryStore } from '../stores/library';
 
 export type { Song, Playlist, HistoryItem };
 
@@ -74,25 +77,30 @@ export const dragSession = reactive({
 export const showAddToPlaylistModal = ref(false);
 export const playlistAddTargetSongs = ref<string[]>([]);
 
-export const songList = ref<Song[]>([]);
-export const librarySongs = ref<Song[]>([]);
-export const libraryFolders = ref<LibraryFolder[]>([]);
-export const folderTree = ref<FolderNode[]>([]);
-export const originalSongList = ref<Song[]>([]);
-
 export const playQueue = ref<Song[]>([]);
 export const tempQueue = ref<Song[]>([]);
 export const currentSong = ref<Song | null>(null);
 export const currentCover = ref<string>('');
 export const dominantColors = ref<string[]>(['transparent', 'transparent', 'transparent', 'transparent']);
 export const playlistCover = ref<string>('');
-export const libraryScanProgress = ref<LibraryScanProgress | null>(null);
-export const libraryScanSession = ref<LibraryScanSession | null>(null);
-export const lastLibraryScanError = ref<string | null>(null);
-export const watchedFolders = ref<string[]>([]);
 export const favoritePaths = ref<string[]>([]);
 export const playlists = ref<Playlist[]>([]);
 export const recentSongs = ref<HistoryItem[]>([]);
+const createLibraryStoreBridgeRef = <T>(getter: () => T, setter: (value: T) => void): Ref<T> =>
+  ({
+    __v_isRef: true,
+    get value() {
+      return getter();
+    },
+    set value(nextValue: T) {
+      setter(nextValue);
+    },
+  }) as unknown as Ref<T>;
+
+export const lastLibraryScanError = createLibraryStoreBridgeRef(
+  () => useLibraryStore().lastLibraryScanError,
+  value => useLibraryStore().setLastLibraryScanError(value),
+);
 
 export const artistSortMode = ref<'count' | 'name' | 'custom'>('count');
 export const albumSortMode = ref<'count' | 'name' | 'artist' | 'custom'>('artist');

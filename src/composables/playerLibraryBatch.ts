@@ -1,4 +1,7 @@
 import * as State from './playerState';
+import { storeToRefs } from 'pinia';
+
+import { useLibraryStore } from '../stores/library';
 
 const LIBRARY_SCAN_BATCH_FLUSH_MS = 120;
 
@@ -9,6 +12,8 @@ interface CreatePlayerLibraryBatchDeps {
 export const createPlayerLibraryBatch = ({
   createSongLookup,
 }: CreatePlayerLibraryBatchDeps) => {
+  const libraryStore = useLibraryStore();
+  const { songList, librarySongs } = storeToRefs(libraryStore);
   let libraryScanBatchFlushTimer: ReturnType<typeof setTimeout> | null = null;
   const pendingLibraryScanSongs = new Map<string, State.Song>();
   const pendingLibraryScanDeletedPaths = new Set<string>();
@@ -17,13 +22,13 @@ export const createPlayerLibraryBatch = ({
   const refreshStateSongReferences = (fallbackSongs: State.Song[] = []) => {
     const lookup = createSongLookup([
       ...fallbackSongs,
-      ...State.songList.value,
+      ...songList.value,
       ...State.playQueue.value,
       ...State.recentSongs.value.map(item => item.song),
       ...(State.currentSong.value ? [State.currentSong.value] : []),
     ]);
 
-    State.songList.value = State.songList.value
+    songList.value = songList.value
       .map(song => lookup.get(song.path) ?? song)
       .filter((song): song is State.Song => !!song);
     State.playQueue.value = State.playQueue.value
@@ -53,7 +58,7 @@ export const createPlayerLibraryBatch = ({
     }
 
     const merged = new Map<string, State.Song>();
-    for (const song of State.librarySongs.value) {
+    for (const song of librarySongs.value) {
       if (!pendingLibraryScanDeletedPaths.has(song.path)) {
         merged.set(song.path, song);
       }
@@ -65,7 +70,7 @@ export const createPlayerLibraryBatch = ({
       }
     }
 
-    State.librarySongs.value = Array.from(merged.values());
+    librarySongs.value = Array.from(merged.values());
     refreshStateSongReferences(Array.from(pendingLibraryScanFallbackSongs.values()));
 
     pendingLibraryScanSongs.clear();

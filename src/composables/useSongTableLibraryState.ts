@@ -5,13 +5,11 @@ import {
   watch,
   type Ref,
 } from 'vue';
-import {
-  libraryFolders,
-  libraryScanProgress,
-  libraryScanSession,
-} from './playerState';
+import { storeToRefs } from 'pinia';
+
 import type { ScanLibraryOptions } from './playerLibraryScan';
 import type { Song } from '../types';
+import { useLibraryStore } from '../stores/library';
 
 const HERO_MIN_VISIBLE_MS = 700;
 const HERO_SUCCESS_DWELL_MS = 900;
@@ -31,6 +29,8 @@ export function useSongTableLibraryState({
   addLibraryFolder,
   scanLibrary,
 }: UseSongTableLibraryStateOptions) {
+  const libraryStore = useLibraryStore();
+  const { libraryFolders, libraryScanProgress, libraryScanSession } = storeToRefs(libraryStore);
   const showHeroScanCard = ref(false);
   let heroScanHideTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -169,7 +169,7 @@ export function useSongTableLibraryState({
       heroScanHideTimer = setTimeout(() => {
         showHeroScanCard.value = false;
         if (libraryScanSession.value?.trigger === 'first-import' && libraryScanSession.value?.visibility === 'hero') {
-          libraryScanSession.value = null;
+          libraryStore.setLibraryScanSession(null);
         }
         heroScanHideTimer = null;
       }, waitMs);

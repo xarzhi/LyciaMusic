@@ -1,6 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { storeToRefs } from 'pinia';
+
 import * as State from './playerState';
+import { useLibraryStore } from '../stores/library';
 
 interface GeneratedFolder {
   name: string;
@@ -25,6 +28,9 @@ const isDirectParent = (parentPath: string, childPath: string) => {
 export const createPlayerFolderImport = ({
   showToast,
 }: CreatePlayerFolderImportDeps) => {
+  const libraryStore = useLibraryStore();
+  const { songList, watchedFolders } = storeToRefs(libraryStore);
+
   const addFoldersFromStructure = async () => {
     try {
       const selectedPath = await open({
@@ -48,17 +54,17 @@ export const createPlayerFolderImport = ({
       const allNewSongs: State.Song[] = [];
 
       newFolders.forEach(folder => {
-        if (!State.watchedFolders.value.includes(folder.path)) {
-          State.watchedFolders.value.push(folder.path);
+        if (!watchedFolders.value.includes(folder.path)) {
+          watchedFolders.value.push(folder.path);
           addedCount += 1;
         }
 
         allNewSongs.push(...folder.songs);
       });
 
-      const existingPaths = new Set(State.songList.value.map(song => song.path));
+      const existingPaths = new Set(songList.value.map(song => song.path));
       const uniqueNewSongs = allNewSongs.filter(song => !existingPaths.has(song.path));
-      State.songList.value = [...State.songList.value, ...uniqueNewSongs];
+      songList.value = [...songList.value, ...uniqueNewSongs];
 
       showToast(`已添加 ${addedCount} 个文件夹到本地目录视图`, 'success');
     } catch (error) {
@@ -68,8 +74,8 @@ export const createPlayerFolderImport = ({
   };
 
   const clearLocalMusic = () => {
-    State.songList.value = [];
-    State.watchedFolders.value = [];
+    songList.value = [];
+    watchedFolders.value = [];
   };
 
   const addFolder = async () => {
@@ -82,34 +88,34 @@ export const createPlayerFolderImport = ({
       });
 
       if (newFolders.length === 0) {
-        if (!State.watchedFolders.value.includes(selected)) {
-          State.watchedFolders.value.push(selected);
+        if (!watchedFolders.value.includes(selected)) {
+          watchedFolders.value.push(selected);
         }
 
         const songs = await invoke<State.Song[]>('scan_music_folder', { folderPath: selected });
-        const existingPaths = new Set(State.songList.value.map(song => song.path));
+        const existingPaths = new Set(songList.value.map(song => song.path));
         const uniqueSongs = songs.filter(song => !existingPaths.has(song.path));
-        State.songList.value = [...State.songList.value, ...uniqueSongs];
+        songList.value = [...songList.value, ...uniqueSongs];
         return;
       }
 
       newFolders.forEach(folder => {
-        if (!State.watchedFolders.value.includes(folder.path)) {
-          State.watchedFolders.value.push(folder.path);
+        if (!watchedFolders.value.includes(folder.path)) {
+          watchedFolders.value.push(folder.path);
         }
       });
 
       const allNewSongs = newFolders.flatMap(folder => folder.songs);
-      const existingPaths = new Set(State.songList.value.map(song => song.path));
+      const existingPaths = new Set(songList.value.map(song => song.path));
       const uniqueNewSongs = allNewSongs.filter(song => !existingPaths.has(song.path));
-      State.songList.value = [...State.songList.value, ...uniqueNewSongs];
+      songList.value = [...songList.value, ...uniqueNewSongs];
     } catch (error) {
       console.error('添加文件夹失败:', error);
     }
   };
 
   const getSongsInFolder = (folderPath: string) => {
-    return State.songList.value.filter(song => isDirectParent(folderPath, song.path));
+    return songList.value.filter(song => isDirectParent(folderPath, song.path));
   };
 
   return {

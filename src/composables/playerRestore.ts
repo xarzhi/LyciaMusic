@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import * as State from './playerState';
 import { playerStorage } from '../services/storage/playerStorage';
+import { useLibraryStore } from '../stores/library';
 
 interface RecentHistoryRecord {
   songPath: string;
@@ -43,6 +44,8 @@ export const createPlayerRestore = ({
   readStoredStringArray,
   loadLibrarySongsFromCache,
 }: CreatePlayerRestoreDeps) => {
+  const libraryStore = useLibraryStore();
+
   const restoreRecentHistory = async () => {
     const legacyHistory = readStoredHistory(keys.legacyPlayerHistory);
     const legacyHistorySongs = legacyHistory.map(item => item.song);
@@ -101,7 +104,7 @@ export const createPlayerRestore = ({
       ...(legacyLastSong ? [legacyLastSong] : []),
     ];
 
-    if (State.librarySongs.value.length === 0) {
+    if (libraryStore.librarySongs.length === 0) {
       await loadLibrarySongsFromCache();
     }
 
@@ -113,7 +116,7 @@ export const createPlayerRestore = ({
       ?? legacyLastSong?.path
       ?? null;
 
-    State.songList.value = resolveSongsFromPaths(storedSongListPaths, fallbackSongs);
+    libraryStore.setSongList(resolveSongsFromPaths(storedSongListPaths, fallbackSongs));
     State.playQueue.value = resolveSongsFromPaths(storedQueuePaths, fallbackSongs);
 
     if (storedLastSongPath) {

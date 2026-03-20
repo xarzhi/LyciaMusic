@@ -1,4 +1,11 @@
 import * as State from './playerState';
+import { useLibraryStore } from '../stores/library';
+
+const LIBRARY_SCAN_VISIBILITY_PRIORITY: Record<State.LibraryScanVisibility, number> = {
+  silent: 1,
+  inline: 2,
+  hero: 3,
+};
 
 export interface ScanLibraryOptions {
   trigger?: State.LibraryScanTrigger;
@@ -6,11 +13,7 @@ export interface ScanLibraryOptions {
   sourcePath?: string;
 }
 
-const LIBRARY_SCAN_VISIBILITY_PRIORITY: Record<State.LibraryScanVisibility, number> = {
-  silent: 1,
-  inline: 2,
-  hero: 3,
-};
+const getLibraryStore = () => useLibraryStore();
 
 export const resolveScanLibraryOptions = (
   options: ScanLibraryOptions = {},
@@ -20,13 +23,17 @@ export const resolveScanLibraryOptions = (
   sourcePath: options.sourcePath ?? '',
 });
 
-export const isLibraryScanActive = () =>
-  !!State.libraryScanProgress.value
-  && !State.libraryScanProgress.value.done
-  && !State.libraryScanProgress.value.failed;
+export const isLibraryScanActive = () => {
+  const libraryStore = getLibraryStore();
+  return !!libraryStore.libraryScanProgress
+    && !libraryStore.libraryScanProgress.done
+    && !libraryStore.libraryScanProgress.failed;
+};
 
 const shouldReplaceLibraryScanSession = (nextVisibility: State.LibraryScanVisibility) => {
-  if (!State.libraryScanSession.value) {
+  const libraryStore = getLibraryStore();
+
+  if (!libraryStore.libraryScanSession) {
     return true;
   }
 
@@ -34,56 +41,60 @@ const shouldReplaceLibraryScanSession = (nextVisibility: State.LibraryScanVisibi
     return true;
   }
 
-  const currentPriority = LIBRARY_SCAN_VISIBILITY_PRIORITY[State.libraryScanSession.value.visibility];
+  const currentPriority = LIBRARY_SCAN_VISIBILITY_PRIORITY[libraryStore.libraryScanSession.visibility];
   const nextPriority = LIBRARY_SCAN_VISIBILITY_PRIORITY[nextVisibility];
   return nextPriority > currentPriority;
 };
 
 export const startLibraryScanSession = (options: Required<ScanLibraryOptions>) => {
+  const libraryStore = getLibraryStore();
   const nextSession: State.LibraryScanSession = {
     trigger: options.trigger,
     visibility: options.visibility,
     startedAt: Date.now(),
-    hadLibraryFoldersAtStart: State.libraryFolders.value.length > 0,
-    hadSongsAtStart: State.librarySongs.value.length > 0,
+    hadLibraryFoldersAtStart: libraryStore.libraryFolders.length > 0,
+    hadSongsAtStart: libraryStore.librarySongs.length > 0,
     sourcePath: options.sourcePath || undefined,
   };
 
   if (shouldReplaceLibraryScanSession(options.visibility)) {
-    State.libraryScanSession.value = nextSession;
+    libraryStore.setLibraryScanSession(nextSession);
     return nextSession;
   }
 
   if (
-    State.libraryScanSession.value
-    && !State.libraryScanSession.value.sourcePath
+    libraryStore.libraryScanSession
+    && !libraryStore.libraryScanSession.sourcePath
     && nextSession.sourcePath
   ) {
-    State.libraryScanSession.value = {
-      ...State.libraryScanSession.value,
+    libraryStore.setLibraryScanSession({
+      ...libraryStore.libraryScanSession,
       sourcePath: nextSession.sourcePath,
-    };
+    });
   }
 
-  return State.libraryScanSession.value!;
+  return libraryStore.libraryScanSession!;
 };
 
 export const beginLibraryScanProgress = (session: State.LibraryScanSession) => {
-  State.libraryScanProgress.value = {
+  const libraryStore = getLibraryStore();
+  libraryStore.setLibraryScanProgress({
     phase: 'collecting',
     current: 0,
     total: 0,
     folder_path: session.sourcePath ?? '',
     folder_index: session.sourcePath ? 1 : 0,
-    folder_total: Math.max(1, State.libraryFolders.value.length),
+    folder_total: Math.max(1, libraryStore.libraryFolders.length),
     message: null,
     done: false,
     failed: false,
-  };
+  });
 };
 
 export const getLibraryAddScanOptions = (path: string): Required<ScanLibraryOptions> => {
-  const isFirstImport = State.libraryFolders.value.length === 0 && State.librarySongs.value.length === 0;
+  const libraryStore = getLibraryStore();
+  const isFirstImport = libraryStore.libraryFolders.length === 0 && libraryStore.librarySongs.length === 0;
+
   return {
     trigger: isFirstImport ? 'first-import' : 'folder-add',
     visibility: isFirstImport ? 'hero' : 'silent',
@@ -96,16 +107,18 @@ export const finalizeLibraryScanProgress = (
   failed = false,
   message?: string,
 ) => {
-  const existing = State.libraryScanProgress.value;
-  State.libraryScanProgress.value = {
+  const libraryStore = getLibraryStore();
+  const existing = libraryStore.libraryScanProgress;
+
+  libraryStore.setLibraryScanProgress({
     phase: failed ? 'error' : 'complete',
     current: songs.length,
     total: songs.length,
-    folder_path: existing?.folder_path ?? State.libraryScanSession.value?.sourcePath ?? '',
+    folder_path: existing?.folder_path ?? libraryStore.libraryScanSession?.sourcePath ?? '',
     folder_index: existing?.folder_index ?? 0,
-    folder_total: existing?.folder_total ?? Math.max(1, State.libraryFolders.value.length),
-    message: message ?? (failed ? '扫描音乐库时出现问题' : `已完成扫描，共 ${songs.length} 首歌曲`),
+    folder_total: existing?.folder_total ?? Math.max(1, libraryStore.libraryFolders.length),
+    message: message ?? (failed ? 'Library scan failed' : `Scan complete: ${songs.length} songs`),
     done: true,
     failed,
-  };
+  });
 };

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { useLibraryStore } from '../stores/library';
 import * as State from './playerState';
 
 interface QueuePlaySongOptions {
@@ -18,6 +19,7 @@ export const createPlayerQueue = ({
   stopPlaybackRuntime,
   showToast,
 }: CreatePlayerQueueDeps) => {
+  const libraryStore = useLibraryStore();
   const shuffleHistory: string[] = [];
   const shuffleFuture: string[] = [];
 
@@ -45,7 +47,7 @@ export const createPlayerQueue = ({
   };
 
   const getNavigationList = () =>
-    State.playQueue.value.length ? State.playQueue.value : State.songList.value;
+    State.playQueue.value.length ? State.playQueue.value : libraryStore.songList;
 
   const findSongByPath = (path: string | undefined, primaryList: State.Song[] = []) => {
     if (!path) return null;
@@ -54,8 +56,8 @@ export const createPlayerQueue = ({
       primaryList,
       State.playQueue.value,
       State.tempQueue.value,
-      State.songList.value,
-      State.librarySongs.value,
+      libraryStore.songList,
+      libraryStore.librarySongs,
       State.currentSong.value ? [State.currentSong.value] : [],
     ];
 

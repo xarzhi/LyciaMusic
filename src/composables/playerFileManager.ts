@@ -1,5 +1,8 @@
 import * as State from './playerState';
+import { storeToRefs } from 'pinia';
+
 import { fileApi } from '../services/tauri/fileApi';
+import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
 import { useSettingsStore } from '../stores/settings';
 
@@ -111,51 +114,53 @@ export const createPlayerFileManager = ({
   removeFromHistory,
   showToast,
 }: CreatePlayerFileManagerDeps) => {
+  const libraryStore = useLibraryStore();
   const navigationStore = useNavigationStore();
   const settingsStore = useSettingsStore();
+  const { folderTree, songList, watchedFolders } = storeToRefs(libraryStore);
 
   const deleteFolder = async (path: string) => {
     await fileApi.deleteFolder(path);
 
-    const isRoot = State.folderTree.value.some(node => node.path === path);
+    const isRoot = folderTree.value.some(node => node.path === path);
     if (isRoot) {
       await removeSidebarFolderLinked(path, { showToast: false });
       return;
     }
 
-    removeNodeFromTree(State.folderTree.value, path);
+    removeNodeFromTree(folderTree.value, path);
   };
 
   const moveFilePhysical = async (sourcePath: string, targetFolderPath: string) => {
     const sourceFolderPath = getParentFolder(sourcePath);
-    const sourceNode = findNode(State.folderTree.value, sourceFolderPath);
+    const sourceNode = findNode(folderTree.value, sourceFolderPath);
     const wasSourceCover = sourceNode?.cover_song_path === sourcePath;
 
     await fileApi.moveFileToFolder(sourcePath, targetFolderPath);
 
-    const songIndex = State.songList.value.findIndex(song => song.path === sourcePath);
+    const songIndex = songList.value.findIndex(song => song.path === sourcePath);
     if (songIndex !== -1) {
-      State.songList.value.splice(songIndex, 1);
+      songList.value.splice(songIndex, 1);
     }
 
-    decrementNodeCount(State.folderTree.value, sourceFolderPath);
+    decrementNodeCount(folderTree.value, sourceFolderPath);
 
     if (wasSourceCover) {
       try {
         const newCoverPath = await fileApi.getFolderFirstSong(sourceFolderPath);
-        updateFolderCover(State.folderTree.value, sourceFolderPath, newCoverPath);
+        updateFolderCover(folderTree.value, sourceFolderPath, newCoverPath);
       } catch {
-        updateFolderCover(State.folderTree.value, sourceFolderPath, null);
+        updateFolderCover(folderTree.value, sourceFolderPath, null);
       }
     }
 
-    incrementNodeCount(State.folderTree.value, targetFolderPath);
+    incrementNodeCount(folderTree.value, targetFolderPath);
 
     try {
       const targetCoverPath = await fileApi.getFolderFirstSong(targetFolderPath);
-      updateFolderCover(State.folderTree.value, targetFolderPath, targetCoverPath);
+      updateFolderCover(folderTree.value, targetFolderPath, targetCoverPath);
     } catch {
-      updateFolderCover(State.folderTree.value, targetFolderPath, null);
+      updateFolderCover(folderTree.value, targetFolderPath, null);
     }
   };
 
@@ -165,7 +170,7 @@ export const createPlayerFileManager = ({
     paths.forEach(oldPath => {
       const sourceFolder = getParentFolder(oldPath);
       if (!sourceFolderMap.has(sourceFolder)) {
-        const node = findNode(State.folderTree.value, sourceFolder);
+        const node = findNode(folderTree.value, sourceFolder);
         sourceFolderMap.set(sourceFolder, {
           count: 0,
           coverPaths: node?.cover_song_path === oldPath ? [oldPath] : [],
@@ -175,7 +180,7 @@ export const createPlayerFileManager = ({
       const entry = sourceFolderMap.get(sourceFolder)!;
       entry.count += 1;
 
-      const node = findNode(State.folderTree.value, sourceFolder);
+      const node = findNode(folderTree.value, sourceFolder);
       if (node?.cover_song_path === oldPath && !entry.coverPaths.includes(oldPath)) {
         entry.coverPaths.push(oldPath);
       }
@@ -184,36 +189,36 @@ export const createPlayerFileManager = ({
     const movedCount = await fileApi.batchMoveMusicFiles(paths, targetFolder);
 
     paths.forEach(oldPath => {
-      const songIndex = State.songList.value.findIndex(song => song.path === oldPath);
+      const songIndex = songList.value.findIndex(song => song.path === oldPath);
       if (songIndex !== -1) {
-        State.songList.value.splice(songIndex, 1);
+        songList.value.splice(songIndex, 1);
       }
     });
 
     for (const [sourceFolder, entry] of sourceFolderMap) {
       for (let index = 0; index < entry.count; index += 1) {
-        decrementNodeCount(State.folderTree.value, sourceFolder);
+        decrementNodeCount(folderTree.value, sourceFolder);
       }
 
       if (entry.coverPaths.length > 0) {
         try {
           const newCoverPath = await fileApi.getFolderFirstSong(sourceFolder);
-          updateFolderCover(State.folderTree.value, sourceFolder, newCoverPath);
+          updateFolderCover(folderTree.value, sourceFolder, newCoverPath);
         } catch {
-          updateFolderCover(State.folderTree.value, sourceFolder, null);
+          updateFolderCover(folderTree.value, sourceFolder, null);
         }
       }
     }
 
     for (let index = 0; index < movedCount; index += 1) {
-      incrementNodeCount(State.folderTree.value, targetFolder);
+      incrementNodeCount(folderTree.value, targetFolder);
     }
 
     try {
       const targetCoverPath = await fileApi.getFolderFirstSong(targetFolder);
-      updateFolderCover(State.folderTree.value, targetFolder, targetCoverPath);
+      updateFolderCover(folderTree.value, targetFolder, targetCoverPath);
     } catch {
-      updateFolderCover(State.folderTree.value, targetFolder, null);
+      updateFolderCover(folderTree.value, targetFolder, null);
     }
 
     return movedCount;
@@ -221,16 +226,16 @@ export const createPlayerFileManager = ({
 
   const refreshFolder = async (folderPath: string) => {
     const newSongs = await fileApi.scanMusicFolder(folderPath);
-    const otherSongs = State.songList.value.filter(song => !song.path.startsWith(folderPath));
-    State.songList.value = [...otherSongs, ...newSongs];
+    const otherSongs = songList.value.filter(song => !song.path.startsWith(folderPath));
+    songList.value = [...otherSongs, ...newSongs];
   };
 
   const removeFolder = (folderPath: string) => {
-    State.watchedFolders.value = State.watchedFolders.value.filter(path => path !== folderPath);
+    watchedFolders.value = watchedFolders.value.filter(path => path !== folderPath);
 
     if (navigationStore.currentFolderFilter === folderPath) {
       navigationStore.currentFolderFilter =
-        State.watchedFolders.value.length > 0 ? State.watchedFolders.value[0] : '';
+        watchedFolders.value.length > 0 ? watchedFolders.value[0] : '';
     }
   };
 
@@ -263,7 +268,7 @@ export const createPlayerFileManager = ({
       await fileApi.moveMusicFile(song.path, newPath);
 
       const oldPath = song.path;
-      const targetSong = State.songList.value.find(item => item.path === oldPath);
+      const targetSong = songList.value.find(item => item.path === oldPath);
       if (targetSong) {
         targetSong.path = newPath;
       }
@@ -298,7 +303,7 @@ export const createPlayerFileManager = ({
   const deleteFromDisk = async (song: State.Song) => {
     try {
       await fileApi.deleteMusicFile(song.path);
-      State.songList.value = State.songList.value.filter(item => item.path !== song.path);
+      songList.value = songList.value.filter(item => item.path !== song.path);
       State.favoritePaths.value = State.favoritePaths.value.filter(path => path !== song.path);
       await removeFromHistory([song.path]);
       State.playlists.value.forEach(playlist => {
@@ -311,9 +316,9 @@ export const createPlayerFileManager = ({
 
   const refreshAllFolders = async () => {
     try {
-      if (State.watchedFolders.value.length === 0 && State.songList.value.length > 0) {
+      if (watchedFolders.value.length === 0 && songList.value.length > 0) {
         const potentialFolders = new Set<string>();
-        State.songList.value.forEach(song => {
+        songList.value.forEach(song => {
           const parent = song.path.replace(/[/\\][^/\\]+$/, '');
           if (parent) {
             potentialFolders.add(parent);
@@ -321,27 +326,27 @@ export const createPlayerFileManager = ({
         });
 
         if (potentialFolders.size > 0) {
-          State.watchedFolders.value = Array.from(potentialFolders);
+          watchedFolders.value = Array.from(potentialFolders);
           showToast(`已恢复 ${potentialFolders.size} 个文件夹`, 'success');
         }
       }
 
-      if (State.watchedFolders.value.length === 0) {
+      if (watchedFolders.value.length === 0) {
         showToast('没有可刷新的文件夹', 'info');
         return;
       }
 
       let allNewSongs: State.Song[] = [];
-      for (const folder of State.watchedFolders.value) {
+      for (const folder of watchedFolders.value) {
         const songs = await fileApi.scanMusicFolder(folder);
         allNewSongs = allNewSongs.concat(songs);
       }
 
-      const keptSongs = State.songList.value.filter(song => {
-        return !State.watchedFolders.value.some(folder => song.path.startsWith(folder));
+      const keptSongs = songList.value.filter(song => {
+        return !watchedFolders.value.some(folder => song.path.startsWith(folder));
       });
 
-      State.songList.value = [...keptSongs, ...allNewSongs];
+      songList.value = [...keptSongs, ...allNewSongs];
       showToast('已刷新所有文件夹', 'success');
     } catch (error) {
       console.error('刷新文件夹失败:', error);

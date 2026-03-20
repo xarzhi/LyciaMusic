@@ -87,18 +87,19 @@ const LEGACY_PLAYER_HISTORY_KEY = 'player_history';
 const LEGACY_PLAYER_LAST_SONG_KEY = 'player_last_song';
 
 const finalizeLibraryScanProgress = (songs: State.Song[], failed = false, message?: string) => {
-  const existing = State.libraryScanProgress.value;
-  State.libraryScanProgress.value = {
+  const libraryStore = useLibraryStore();
+  const existing = libraryStore.libraryScanProgress;
+  libraryStore.setLibraryScanProgress({
     phase: failed ? 'error' : 'complete',
     current: songs.length,
     total: songs.length,
-    folder_path: existing?.folder_path ?? State.libraryScanSession.value?.sourcePath ?? '',
+    folder_path: existing?.folder_path ?? libraryStore.libraryScanSession?.sourcePath ?? '',
     folder_index: existing?.folder_index ?? 0,
-    folder_total: existing?.folder_total ?? Math.max(1, State.libraryFolders.value.length),
+    folder_total: existing?.folder_total ?? Math.max(1, libraryStore.libraryFolders.length),
     message: message ?? (failed ? '扫描音乐库时出现问题' : `已完成扫描，共 ${songs.length} 首歌曲`),
     done: true,
     failed,
-  };
+  });
 };
 
 const readStoredStringArray = (key: string): string[] | null => {
@@ -150,6 +151,7 @@ const dedupeSongs = (songs: State.Song[]) => {
 };
 
 const createSongLookup = (fallbackSongs: State.Song[] = []) => {
+  const libraryStore = useLibraryStore();
   const lookup = new Map<string, State.Song>();
 
   for (const song of fallbackSongs) {
@@ -158,7 +160,7 @@ const createSongLookup = (fallbackSongs: State.Song[] = []) => {
     }
   }
 
-  for (const song of State.librarySongs.value) {
+  for (const song of libraryStore.librarySongs) {
     if (song?.path) {
       lookup.set(song.path, song);
     }
@@ -184,6 +186,12 @@ function createPlayerService() {
   const navigationStore = useNavigationStore();
   const libraryRefs = storeToRefs(libraryStore);
   const navigationRefs = storeToRefs(navigationStore);
+  const {
+    songList,
+    librarySongs,
+    folderTree,
+    watchedFolders,
+  } = libraryRefs;
   const {
     currentViewMode,
     filterCondition,
@@ -330,14 +338,6 @@ function createPlayerService() {
   const isLocalMusic = computed(() => currentViewMode.value === 'all' || currentViewMode.value === 'artist' || currentViewMode.value === 'album');
 
   const isFolderMode = computed(() => currentViewMode.value === 'folder');
-
-
-
-
-  // Core library song source populated by scanLibrary.
-  const librarySongs = computed(() => {
-    return State.librarySongs.value;
-  });
 
   // --- Library Management ---
   async function addLibraryFolderLinked(
@@ -788,7 +788,7 @@ function createPlayerService() {
     // folderList 椤哄簭鐩存帴锟?watchedFolders 鏁扮粍椤哄簭鍐冲畾锛屽洜姝ゆ敮鎸佹墜鍔ㄦ帓锟?
 
 
-    return State.watchedFolders.value.map(folderPath => {
+    return watchedFolders.value.map(folderPath => {
 
 
 
@@ -796,7 +796,7 @@ function createPlayerService() {
 
 
 
-      const songsInFolder = State.songList.value.filter(s => isDirectParent(folderPath, s.path));
+      const songsInFolder = songList.value.filter(s => isDirectParent(folderPath, s.path));
 
 
 
@@ -942,7 +942,7 @@ function createPlayerService() {
 
       if (currentViewMode.value === 'folder') {
         return sortItemsByAlphabetIndex(
-          State.songList.value.filter(s =>
+          songList.value.filter(s =>
             s.name.toLowerCase().includes(q) ||
             getSongArtistSearchText(s).includes(q) ||
             s.album.toLowerCase().includes(q),
@@ -990,7 +990,7 @@ function createPlayerService() {
     // ???????????????????????
     if (currentViewMode.value === 'folder') {
       if (currentFolderFilter.value) {
-        let songs = State.songList.value.filter(s => isDirectParent(currentFolderFilter.value, s.path));
+        let songs = songList.value.filter(s => isDirectParent(currentFolderFilter.value, s.path));
 
         // 馃煝 娣诲姞鎺掑簭閫昏緫
         if (State.folderSortMode.value === 'title') {
@@ -1072,8 +1072,8 @@ function createPlayerService() {
       if (!pl) return [];
 
       const songMap = new Map();
-      State.librarySongs.value.forEach(s => songMap.set(s.path, s));
-      State.songList.value.forEach(s => {
+      librarySongs.value.forEach(s => songMap.set(s.path, s));
+      songList.value.forEach(s => {
         if (!songMap.has(s.path)) songMap.set(s.path, s);
       });
 
@@ -1370,7 +1370,7 @@ function createPlayerService() {
     },
 
     // Sidebar (Decoupled)
-    folderTree: State.folderTree,
+    folderTree,
     activeRootPath,
     deleteFolder,
     moveFilePhysical,

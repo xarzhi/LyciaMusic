@@ -14,6 +14,7 @@ import {
   type LocalSortMode,
   type PlaylistSortMode,
 } from '../services/storage/playerStorage';
+import { useLibraryStore } from '../stores/library';
 import { mergeAppSettings, useSettingsStore } from '../stores/settings';
 import type { AppSettings } from '../types';
 
@@ -192,8 +193,10 @@ export const createPlayerLifecycle = ({
   lastSongPathKey,
   legacyLastSongKey,
 }: CreatePlayerLifecycleDeps) => {
+  const libraryStore = useLibraryStore();
   const settingsStore = useSettingsStore();
   const { settings } = storeToRefs(settingsStore);
+  const { songList, watchedFolders } = storeToRefs(libraryStore);
 
   onMounted(async () => {
     await bootstrapLibrary();
@@ -226,10 +229,10 @@ export const createPlayerLifecycle = ({
         applyLibraryScanBatch(event.payload);
       }),
       listen<LibraryScanProgressPayload>('library-scan-progress', event => {
-        State.libraryScanProgress.value = {
+        libraryStore.setLibraryScanProgress({
           ...event.payload,
           message: event.payload.message ?? null,
-        };
+        });
 
         if (event.payload.failed) {
           State.lastLibraryScanError.value = event.payload.message ?? '扫描音乐库时出现问题';
@@ -254,8 +257,8 @@ export const createPlayerLifecycle = ({
 
     watch(
       [
-        () => State.songList.value.map(song => song.path),
-        State.watchedFolders,
+        () => songList.value.map(song => song.path),
+        watchedFolders,
         State.favoritePaths,
         State.playlists,
         settings,
@@ -332,7 +335,9 @@ export const createPlayerLifecycle = ({
 
       await restoreOutputDevice();
 
-      State.watchedFolders.value = playerStorage.readStringArray(playerStorageKeys.watchedFolders) ?? [];
+      libraryStore.setWatchedFolders(
+        playerStorage.readStringArray(playerStorageKeys.watchedFolders) ?? [],
+      );
 
       State.favoritePaths.value = playerStorage.readStringArray(playerStorageKeys.favorites) ?? [];
 

@@ -1,4 +1,6 @@
+import { ref } from 'vue';
 import { defineStore } from 'pinia';
+
 import * as State from '../composables/playerState';
 import type {
   Song,
@@ -15,36 +17,50 @@ const formatPlaylistDate = () => {
 };
 
 export const useLibraryStore = defineStore('library', () => {
+  const songList = ref<Song[]>([]);
+  const librarySongs = ref<Song[]>([]);
+  const libraryFolders = ref<LibraryFolder[]>([]);
+  const folderTree = ref<FolderNode[]>([]);
+  const originalSongList = ref<Song[]>([]);
+  const libraryScanProgress = ref<LibraryScanProgress | null>(null);
+  const libraryScanSession = ref<LibraryScanSession | null>(null);
+  const lastLibraryScanError = ref<string | null>(null);
+  const watchedFolders = ref<string[]>([]);
+
   const setSongList = (songs: Song[]) => {
-    State.songList.value = songs;
+    songList.value = songs;
   };
 
   const setLibrarySongs = (songs: Song[]) => {
-    State.librarySongs.value = songs;
+    librarySongs.value = songs;
   };
 
   const setLibraryFolders = (folders: LibraryFolder[]) => {
-    State.libraryFolders.value = folders;
+    libraryFolders.value = folders;
   };
 
   const setFolderTree = (tree: FolderNode[]) => {
-    State.folderTree.value = tree;
+    folderTree.value = tree;
   };
 
   const setOriginalSongList = (songs: Song[]) => {
-    State.originalSongList.value = songs;
+    originalSongList.value = songs;
   };
 
   const setLibraryScanProgress = (progress: LibraryScanProgress | null) => {
-    State.libraryScanProgress.value = progress;
+    libraryScanProgress.value = progress;
   };
 
   const setLibraryScanSession = (session: LibraryScanSession | null) => {
-    State.libraryScanSession.value = session;
+    libraryScanSession.value = session;
   };
 
   const setLastLibraryScanError = (message: string | null) => {
-    State.lastLibraryScanError.value = message;
+    lastLibraryScanError.value = message;
+  };
+
+  const setWatchedFolders = (paths: string[]) => {
+    watchedFolders.value = paths;
   };
 
   const createPlaylist = (name: string, initialSongs: string[] = []) => {
@@ -164,14 +180,14 @@ export const useLibraryStore = defineStore('library', () => {
   };
 
   const reorderWatchedFolders = (from: number, to: number) => {
-    const list = [...State.watchedFolders.value];
+    const list = [...watchedFolders.value];
     const [removed] = list.splice(from, 1);
     if (!removed) {
       return;
     }
 
     list.splice(to, 0, removed);
-    State.watchedFolders.value = list;
+    watchedFolders.value = list;
   };
 
   const reorderPlaylists = (from: number, to: number) => {
@@ -192,7 +208,7 @@ export const useLibraryStore = defineStore('library', () => {
     }
 
     const songMap = new Map<string, Song>();
-    State.songList.value.forEach(song => {
+    songList.value.forEach(song => {
       songMap.set(song.path, song);
     });
 
@@ -202,15 +218,15 @@ export const useLibraryStore = defineStore('library', () => {
   };
 
   return {
-    songList: State.songList,
-    librarySongs: State.librarySongs,
-    libraryFolders: State.libraryFolders,
-    folderTree: State.folderTree,
-    originalSongList: State.originalSongList,
-    libraryScanProgress: State.libraryScanProgress,
-    libraryScanSession: State.libraryScanSession,
-    lastLibraryScanError: State.lastLibraryScanError,
-    watchedFolders: State.watchedFolders,
+    songList,
+    librarySongs,
+    libraryFolders,
+    folderTree,
+    originalSongList,
+    libraryScanProgress,
+    libraryScanSession,
+    lastLibraryScanError,
+    watchedFolders,
     favoritePaths: State.favoritePaths,
     playlists: State.playlists,
     recentSongs: State.recentSongs,
@@ -222,6 +238,7 @@ export const useLibraryStore = defineStore('library', () => {
     setLibraryScanProgress,
     setLibraryScanSession,
     setLastLibraryScanError,
+    setWatchedFolders,
     createPlaylist,
     deletePlaylist,
     getPlaylistById,

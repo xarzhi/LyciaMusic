@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia';
 import * as State from './playerState';
 import type { Song, Playlist } from './playerState';
 import { compareByAlphabetIndex } from '../utils/alphabetIndex';
+import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
 
 export interface ArtistListItem {
@@ -48,6 +49,7 @@ const getSongAlbumKey = (song: Song) =>
   song.album_key || `${song.album || 'Unknown'}::${song.album_artist || song.artist || 'Unknown'}`;
 
 export function useLibraryBrowse() {
+  const libraryStore = useLibraryStore();
   const navigationStore = useNavigationStore();
   const {
     searchQuery,
@@ -56,11 +58,18 @@ export function useLibraryBrowse() {
     currentFolderFilter,
     activeRootPath,
   } = storeToRefs(navigationStore);
+  const {
+    songList,
+    librarySongs,
+    libraryFolders,
+    folderTree,
+    watchedFolders,
+  } = storeToRefs(libraryStore);
 
   const artistList = computed<ArtistListItem[]>(() => {
     const map = new Map<string, { count: number; firstSongPath: string }>();
 
-    State.librarySongs.value.forEach(song => {
+    librarySongs.value.forEach(song => {
       getSongArtistNames(song).forEach(artistName => {
         const key = artistName || 'Unknown';
         const existing = map.get(key);
@@ -99,7 +108,7 @@ export function useLibraryBrowse() {
   const albumList = computed<AlbumListItem[]>(() => {
     const map = new Map<string, AlbumListItem>();
 
-    State.librarySongs.value.forEach(song => {
+    librarySongs.value.forEach(song => {
       const key = getSongAlbumKey(song);
       const existing = map.get(key);
 
@@ -162,8 +171,8 @@ export function useLibraryBrowse() {
   });
 
   const folderList = computed(() =>
-    State.watchedFolders.value.map(folderPath => {
-      const songsInFolder = State.songList.value.filter(song => isDirectParent(folderPath, song.path));
+    watchedFolders.value.map(folderPath => {
+      const songsInFolder = songList.value.filter(song => isDirectParent(folderPath, song.path));
 
       return {
         path: folderPath,
@@ -175,7 +184,7 @@ export function useLibraryBrowse() {
   );
 
   const favoriteSongList = computed(() =>
-    State.librarySongs.value.filter(song => State.favoritePaths.value.includes(song.path)),
+    librarySongs.value.filter(song => State.favoritePaths.value.includes(song.path)),
   );
 
   const favArtistList = computed(() => {
@@ -272,14 +281,14 @@ export function useLibraryBrowse() {
   };
 
   const reorderWatchedFolders = (from: number, to: number) => {
-    const list = [...State.watchedFolders.value];
+    const list = [...watchedFolders.value];
     const [removed] = list.splice(from, 1);
     if (!removed) {
       return;
     }
 
     list.splice(to, 0, removed);
-    State.watchedFolders.value = list;
+    watchedFolders.value = list;
   };
 
   return {
@@ -288,9 +297,9 @@ export function useLibraryBrowse() {
     currentViewMode,
     currentFolderFilter,
     activeRootPath,
-    folderTree: State.folderTree,
-    libraryFolders: State.libraryFolders,
-    librarySongs: State.librarySongs,
+    folderTree,
+    libraryFolders,
+    librarySongs,
     artistSortMode: State.artistSortMode,
     albumSortMode: State.albumSortMode,
     artistList,

@@ -21,6 +21,12 @@ import { createPlayerQueue } from './playerQueue';
 import { createPlayerLibraryRuntime } from './playerLibraryRuntime';
 import { createPlayerLifecycle } from './playerLifecycle';
 import { createPlayerRestore } from './playerRestore';
+import { useCollectionsActions } from './useCollectionsActions';
+import { useFileImport } from './useFileImport';
+import { useLibrarySync } from './useLibrarySync';
+import { useNavigationActions } from './useNavigationActions';
+import { usePlaybackActions } from './usePlaybackActions';
+import { useWindowActions } from './useWindowActions';
 import {
   getLibraryAddScanOptions,
 } from './playerLibraryScan';
@@ -228,10 +234,14 @@ function createPlayerService() {
   const resetShuffleState = () => playerQueue.resetShuffleState();
   let playerPlayback: ReturnType<typeof createPlayerPlayback>;
   const playerPlaylist = createPlayerPlaylist({
-    switchViewToAll,
+    switchViewToAll: () => navigationStore.switchViewToAll(),
   });
   const playerHistoryFavorites = createPlayerHistoryFavorites({
     legacyPlayerHistoryKey: LEGACY_PLAYER_HISTORY_KEY,
+  });
+  const collectionsActions = useCollectionsActions({
+    playerPlaylist,
+    playerHistoryFavorites,
   });
   const playerFileManager = createPlayerFileManager({
     removeSidebarFolderLinked,
@@ -269,6 +279,13 @@ function createPlayerService() {
   const playerUiShell = createPlayerUiShell({
     addFolder,
     removeFromHistory: (songPaths: string[]) => playerHistoryFavorites.removeFromHistory(songPaths),
+  });
+  const playbackActions = usePlaybackActions({
+    currentSong,
+    playMode,
+    getPlayerPlayback: () => playerPlayback,
+    getPlayerQueue: () => playerQueue,
+    playerUiShell,
   });
   libraryRuntime = createPlayerLibraryRuntime({
     fetchLibraryFolders,
@@ -1128,7 +1145,7 @@ function createPlayerService() {
     getDisplaySongList: () => displaySongList.value,
     addToHistory,
     loadLyrics,
-    handleAutoNext,
+    handleAutoNext: playbackActions.handleAutoNext,
     onBeforePlay: (song, options) => {
       playerQueue.handleBeforePlay(song, options);
     },
@@ -1141,6 +1158,33 @@ function createPlayerService() {
     if (newList.length > 0) { try { const cover = await invoke<string>('get_song_cover', { path: newList[0].path }); playlistCover.value = cover; } catch { playlistCover.value = ''; } } else { playlistCover.value = ''; }
 
   }, { immediate: true });
+
+  const navigationActions = useNavigationActions({
+    navigationStore,
+    artistList,
+    albumList,
+  });
+  const librarySync = useLibrarySync({
+    fetchLibraryFolders,
+    addLibraryFolder,
+    addLibraryFolderLinked,
+    removeLibraryFolder,
+    removeLibraryFolderLinked,
+    handleExternalPaths,
+    scanLibrary,
+    addLibraryFolderPath,
+    refreshFolder,
+    refreshAllFolders,
+  });
+  const fileImportActions = useFileImport({
+    addFolder,
+    addFoldersFromStructure,
+    getSongsInFolder,
+    clearLocalMusic,
+  });
+  const windowActions = useWindowActions({
+    playerUiShell,
+  });
 
 
 
@@ -1162,13 +1206,6 @@ function createPlayerService() {
 
 
 
-  // 馃煝 閲嶇偣锛氬垱寤烘瓕鍗曟椂锛岃褰曞綋鍓嶆棩锟?
-  function createPlaylist(n: string, initialSongs: string[] = []) {
-    playerPlaylist.createPlaylist(n, initialSongs);
-  }
-
-
-
   async function moveFilesToFolder(paths: string[], targetFolder: string) {
     return playerFileManager.moveFilesToFolder(paths, targetFolder);
   }
@@ -1179,92 +1216,21 @@ function createPlayerService() {
     return playerFileManager.refreshFolder(folderPath);
   }
 
-
-
-  // ... (鍏朵粬鍑芥暟淇濇寔涓嶅彉) ...
-
-  function deletePlaylist(id: string) { playerPlaylist.deletePlaylist(id); }
-
-  function addToPlaylist(pid: string, path: string) { playerPlaylist.addToPlaylist(pid, path); }
-
-  function removeFromPlaylist(pid: string, path: string) { playerPlaylist.removeFromPlaylist(pid, path); }
-
-  function addSongsToPlaylist(playlistId: string, songPaths: string[]): number { return playerPlaylist.addSongsToPlaylist(playlistId, songPaths); }
-
-  function viewPlaylist(id: string) { playerPlaylist.viewPlaylist(id); }
-
-  function switchToFolderView() { navigationStore.switchToFolderView(); }
-
   function removeFolder(folderPath: string) {
     playerFileManager.removeFolder(folderPath);
   }
-
-  function viewArtist(n: string) { navigationStore.viewArtist(n); }
-
-  function viewAlbum(n: string) { navigationStore.viewAlbum(n); }
-
-  function viewGenre(n: string) { navigationStore.viewGenre(n); }
-
-  function viewYear(n: string) { navigationStore.viewYear(n); }
-
-  function switchViewToAll() { navigationStore.switchViewToAll(); }
-
-  function switchViewToFolder(p: string) { navigationStore.switchViewToFolder(p); }
-
-  function switchToRecent() { navigationStore.switchToRecent(); }
-
-  function switchToFavorites() { navigationStore.switchToFavorites(); }
-
-  function switchToStatistics() { navigationStore.switchToStatistics(); }
-
-  function setSearch(q: string) { navigationStore.setSearch(q); }
-
-  function switchLocalTab(tab: 'default' | 'artist' | 'album') {
-    navigationStore.switchLocalTab(tab, {
-      firstArtistName: artistList.value[0]?.name,
-      firstAlbumKey: albumList.value[0]?.key,
-    });
-  }
-
-  function switchFavTab(tab: 'songs' | 'artists' | 'albums') { navigationStore.switchFavTab(tab); }
-
-  function isFavorite(s: State.Song | null) { return playerHistoryFavorites.isFavorite(s); }
-
-  function toggleFavorite(s: State.Song) { playerHistoryFavorites.toggleFavorite(s); }
 
   async function addToHistory(song: State.Song) {
     return playerHistoryFavorites.addToHistory(song);
   }
 
-  async function removeFromHistory(songPaths: string[]) {
-    return playerHistoryFavorites.removeFromHistory(songPaths);
-  }
-
-  async function clearHistory() {
-    return playerHistoryFavorites.clearHistory();
-  }
-
   function clearLocalMusic() { playerFolderImport.clearLocalMusic(); }
-
-  function clearFavorites() { playerHistoryFavorites.clearFavorites(); }
 
   async function addFolder() {
     return playerFolderImport.addFolder();
   }
   function generateOrganizedPath(song: State.Song): string { return playerFileManager.generateOrganizedPath(song); }
   async function moveFile(song: State.Song, newPath: string) { return playerFileManager.moveFile(song, newPath); }
-  function handleAutoNext() { if (playMode.value === 1 && currentSong.value) { playSong(currentSong.value); } else { nextSong(); } }
-  async function handleVolume(e: Event) { return playerUiShell.handleVolume(e); }
-  async function toggleMute() { return playerUiShell.toggleMute(); }
-  function toggleMode() { playerQueue.toggleMode(); }
-  function togglePlaylist() { playerUiShell.togglePlaylist(); }
-  function toggleMiniPlaylist() { playerUiShell.toggleMiniPlaylist(); }
-  function closeMiniPlaylist() { playerUiShell.closeMiniPlaylist(); }
-  async function handleScan() { return playerUiShell.handleScan(); }
-  function playNext(song: State.Song) { playerQueue.playNext(song); }
-  async function removeSongFromList(song: State.Song) {
-    return playerUiShell.removeSongFromList(song);
-  }
   async function openInFinder(path: string) { return playerFileManager.openInFinder(path); }
   async function deleteFromDisk(song: State.Song) {
     return playerFileManager.deleteFromDisk(song);
@@ -1273,11 +1239,6 @@ function createPlayerService() {
   async function playSong(song: State.Song, options: PlaySongOptions = {}) {
     return playerPlayback.playSong(song, options);
   }
-
-  async function pauseSong() {
-    return playerPlayback.pauseSong();
-  }
-
   async function togglePlay() {
     return playerPlayback.togglePlay();
   }
@@ -1285,34 +1246,6 @@ function createPlayerService() {
   function nextSong() { playerQueue.nextSong(); }
 
   function prevSong() { playerQueue.prevSong(); }
-
-  async function clearQueue() { return playerQueue.clearQueue(); }
-
-  function removeSongFromQueue(song: State.Song) { playerQueue.removeSongFromQueue(song); }
-
-  function addSongToQueue(song: State.Song) { playerQueue.addSongToQueue(song); }
-
-  function addSongsToQueue(songs: State.Song[]) { playerQueue.addSongsToQueue(songs); }
-
-
-  function getSongsFromPlaylist(playlistId: string): State.Song[] { return playerPlaylist.getSongsFromPlaylist(playlistId); }
-  async function seekTo(newTime: number) {
-    return playerPlayback.seekTo(newTime);
-  }
-  async function playAt(time: number) {
-    return playerPlayback.playAt(time);
-  }
-  async function handleSeek(e: MouseEvent) {
-    return playerPlayback.handleSeek(e);
-  }
-  async function stepSeek(step: number) {
-    return playerPlayback.stepSeek(step);
-  }
-  async function toggleAlwaysOnTop(enable: boolean) { return playerUiShell.toggleAlwaysOnTop(enable); }
-  function togglePlayerDetail() { playerUiShell.togglePlayerDetail(); }
-  function toggleQueue() { playerUiShell.toggleQueue(); }
-  function openAddToPlaylistDialog(songPath: string) { playerPlaylist.openAddToPlaylistDialog(songPath); }
-
   function init() {
     playerLifecycle.init();
   }
@@ -1332,28 +1265,15 @@ function createPlayerService() {
     artistList, albumList, filteredArtistList, filteredAlbumList, genreList, yearList, folderList, favoriteSongList, favArtistList, favAlbumList, recentAlbumList, recentPlaylistList, displaySongList, isLocalMusic, isFolderMode,
     init, formatDuration, formatTimeAgo,
     // Library
-    fetchLibraryFolders,
-    addLibraryFolder,
-    addLibraryFolderLinked,
-    removeLibraryFolder,
-    removeLibraryFolderLinked,
-    handleExternalPaths,
-    scanLibrary,
-    // Existing
-    playSong,
-    pauseSong,
-    togglePlay, nextSong, prevSong, handleSeek, handleVolume, toggleMute, handleScan, toggleMode, togglePlaylist, toggleMiniPlaylist, closeMiniPlaylist,
-    addFolder, addLibraryFolderPath, switchViewToAll, switchViewToFolder, switchToFolderView, switchToRecent, switchToFavorites, switchToStatistics, switchLocalTab, switchFavTab,
-    removeFolder, addToHistory, removeFromHistory, clearHistory, clearLocalMusic, clearFavorites, addSongsToPlaylist, isFavorite, toggleFavorite,
-    viewArtist, viewAlbum, viewGenre, viewYear, setSearch, createPlaylist, deletePlaylist, addToPlaylist, removeFromPlaylist, viewPlaylist,
-    moveFile, generateOrganizedPath, playNext, removeSongFromList, openInFinder, deleteFromDisk,
-    stepSeek, toggleAlwaysOnTop, togglePlayerDetail, seekTo, openAddToPlaylistDialog, playAt,
-    addFoldersFromStructure, getSongsInFolder,
+    ...librarySync,
+    ...fileImportActions,
+    removeFolder,
+    moveFile, generateOrganizedPath, openInFinder, deleteFromDisk,
     moveFilesToFolder,
-    refreshFolder,
-    refreshAllFolders,
-    clearQueue, removeSongFromQueue, addSongToQueue, toggleQueue,
-    addSongsToQueue, getSongsFromPlaylist,
+    ...collectionsActions,
+    ...navigationActions,
+    ...playbackActions,
+    ...windowActions,
     // Mini 妯″紡
     isMiniMode,
     reorderWatchedFolders: (from: number, to: number) => libraryStore.reorderWatchedFolders(from, to),

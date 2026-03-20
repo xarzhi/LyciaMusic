@@ -534,7 +534,7 @@ function createPlayerService() {
     return libraryRuntime.scanLibrary(options);
     /*
 
-        State.lastLibraryScanError.value = errorMessage;
+        libraryStore.setLastLibraryScanError(errorMessage);
         finalizeLibraryScanProgress([], true, errorMessage || '鎵弿闊充箰搴撴椂鍑虹幇闂');
         if (session.visibility === 'silent') {
           useToast().showToast("鍚庡彴鎵弿澶辫触锛岃鍦ㄩ煶涔愬簱璁剧疆涓噸锟?, "error");

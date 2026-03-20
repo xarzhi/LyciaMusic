@@ -238,7 +238,7 @@ export const createPlayerLifecycle = ({
         });
 
         if (event.payload.failed) {
-          State.lastLibraryScanError.value = event.payload.message ?? '扫描音乐库时出现问题';
+          libraryStore.setLastLibraryScanError(event.payload.message ?? 'Library scan failed');
         }
 
         if (event.payload.done) {

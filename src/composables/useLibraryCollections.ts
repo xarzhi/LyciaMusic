@@ -1,17 +1,19 @@
 import { storeToRefs } from 'pinia';
-import * as State from './playerState';
 import type { Song } from './playerState';
 import { playerStorage } from '../services/storage/playerStorage';
 import { historyApi } from '../services/tauri/historyApi';
 import { useCollectionsStore } from '../stores/collections';
 import { useNavigationStore } from '../stores/navigation';
+import { useUiStore } from '../stores/ui';
 
 const LEGACY_PLAYER_HISTORY_KEY = 'player_history';
 
 export function useLibraryCollections() {
   const collectionsStore = useCollectionsStore();
   const navigationStore = useNavigationStore();
+  const uiStore = useUiStore();
   const collectionsRefs = storeToRefs(collectionsStore);
+  const uiRefs = storeToRefs(uiStore);
 
   const createPlaylist = (name: string, initialSongs: string[] = []) =>
     collectionsStore.createPlaylist(name, initialSongs);
@@ -109,14 +111,14 @@ export function useLibraryCollections() {
   };
 
   const openAddToPlaylistDialog = (songPath: string) => {
-    State.playlistAddTargetSongs.value = [songPath];
-    State.showAddToPlaylistModal.value = true;
+    uiStore.playlistAddTargetSongs = [songPath];
+    uiStore.showAddToPlaylistModal = true;
   };
 
   return {
     ...collectionsRefs,
-    showAddToPlaylistModal: State.showAddToPlaylistModal,
-    playlistAddTargetSongs: State.playlistAddTargetSongs,
+    showAddToPlaylistModal: uiRefs.showAddToPlaylistModal,
+    playlistAddTargetSongs: uiRefs.playlistAddTargetSongs,
     createPlaylist,
     deletePlaylist,
     addToPlaylist,

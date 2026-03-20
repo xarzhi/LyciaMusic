@@ -3,6 +3,8 @@ import type { Ref } from 'vue';
 
 import { Song, Playlist, HistoryItem } from '../types';
 import { useLibraryStore } from '../stores/library';
+import { usePlaybackStore } from '../stores/playback';
+import { useUiStore } from '../stores/ui';
 
 export type { Song, Playlist, HistoryItem };
 
@@ -45,17 +47,6 @@ export interface LibraryScanSession {
   sourcePath?: string;
 }
 
-export const isPlaying = ref(false);
-export const volume = ref(100);
-export const currentTime = ref(0);
-export const playMode = ref(0);
-export const showPlaylist = ref(false);
-export const showMiniPlaylist = ref(false);
-export const isSongLoaded = ref(false);
-export const showPlayerDetail = ref(false);
-export const showQueue = ref(false);
-export const isMiniMode = ref(false);
-export const showVolumePopover = ref(false);
 export const AUDIO_DELAY = ref(0.45);
 
 export const footerCoverEl = ref<HTMLElement | null>(null);
@@ -74,16 +65,7 @@ export const dragSession = reactive({
   sortLineTop: -1,
 });
 
-export const showAddToPlaylistModal = ref(false);
-export const playlistAddTargetSongs = ref<string[]>([]);
-
-export const playQueue = ref<Song[]>([]);
-export const tempQueue = ref<Song[]>([]);
-export const currentSong = ref<Song | null>(null);
-export const currentCover = ref<string>('');
-export const dominantColors = ref<string[]>(['transparent', 'transparent', 'transparent', 'transparent']);
-export const playlistCover = ref<string>('');
-const createLibraryStoreBridgeRef = <T>(getter: () => T, setter: (value: T) => void): Ref<T> =>
+const createStoreBridgeRef = <T>(getter: () => T, setter: (value: T) => void): Ref<T> =>
   ({
     __v_isRef: true,
     get value() {
@@ -94,7 +76,140 @@ const createLibraryStoreBridgeRef = <T>(getter: () => T, setter: (value: T) => v
     },
   }) as unknown as Ref<T>;
 
-export const lastLibraryScanError = createLibraryStoreBridgeRef(
+export const isPlaying = createStoreBridgeRef(
+  () => usePlaybackStore().isPlaying,
+  value => {
+    usePlaybackStore().isPlaying = value;
+  },
+);
+
+export const volume = createStoreBridgeRef(
+  () => usePlaybackStore().volume,
+  value => {
+    usePlaybackStore().volume = value;
+  },
+);
+
+export const currentTime = createStoreBridgeRef(
+  () => usePlaybackStore().currentTime,
+  value => {
+    usePlaybackStore().currentTime = value;
+  },
+);
+
+export const playMode = createStoreBridgeRef(
+  () => usePlaybackStore().playMode,
+  value => {
+    usePlaybackStore().playMode = value;
+  },
+);
+
+export const isSongLoaded = createStoreBridgeRef(
+  () => usePlaybackStore().isSongLoaded,
+  value => {
+    usePlaybackStore().isSongLoaded = value;
+  },
+);
+
+export const playQueue = createStoreBridgeRef(
+  () => usePlaybackStore().playQueue,
+  value => {
+    usePlaybackStore().playQueue = value;
+  },
+);
+
+export const tempQueue = createStoreBridgeRef(
+  () => usePlaybackStore().tempQueue,
+  value => {
+    usePlaybackStore().tempQueue = value;
+  },
+);
+
+export const currentSong = createStoreBridgeRef(
+  () => usePlaybackStore().currentSong,
+  value => {
+    usePlaybackStore().currentSong = value;
+  },
+);
+
+export const currentCover = createStoreBridgeRef(
+  () => usePlaybackStore().currentCover,
+  value => {
+    usePlaybackStore().currentCover = value;
+  },
+);
+
+export const showPlaylist = createStoreBridgeRef(
+  () => useUiStore().showPlaylist,
+  value => {
+    useUiStore().showPlaylist = value;
+  },
+);
+
+export const showMiniPlaylist = createStoreBridgeRef(
+  () => useUiStore().showMiniPlaylist,
+  value => {
+    useUiStore().showMiniPlaylist = value;
+  },
+);
+
+export const showPlayerDetail = createStoreBridgeRef(
+  () => useUiStore().showPlayerDetail,
+  value => {
+    useUiStore().showPlayerDetail = value;
+  },
+);
+
+export const showQueue = createStoreBridgeRef(
+  () => useUiStore().showQueue,
+  value => {
+    useUiStore().showQueue = value;
+  },
+);
+
+export const isMiniMode = createStoreBridgeRef(
+  () => useUiStore().isMiniMode,
+  value => {
+    useUiStore().isMiniMode = value;
+  },
+);
+
+export const showVolumePopover = createStoreBridgeRef(
+  () => useUiStore().showVolumePopover,
+  value => {
+    useUiStore().showVolumePopover = value;
+  },
+);
+
+export const showAddToPlaylistModal = createStoreBridgeRef(
+  () => useUiStore().showAddToPlaylistModal,
+  value => {
+    useUiStore().showAddToPlaylistModal = value;
+  },
+);
+
+export const playlistAddTargetSongs = createStoreBridgeRef(
+  () => useUiStore().playlistAddTargetSongs,
+  value => {
+    useUiStore().playlistAddTargetSongs = value;
+  },
+);
+
+export const dominantColors = createStoreBridgeRef(
+  () => useUiStore().dominantColors,
+  value => {
+    useUiStore().dominantColors = value;
+  },
+);
+
+export const playlistCover = createStoreBridgeRef(
+  () => useUiStore().playlistCover,
+  value => {
+    useUiStore().playlistCover = value;
+  },
+);
+
+export const lastLibraryScanError = createStoreBridgeRef(
   () => useLibraryStore().lastLibraryScanError,
   value => useLibraryStore().setLastLibraryScanError(value),
 );

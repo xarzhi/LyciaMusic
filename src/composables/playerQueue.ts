@@ -1,6 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
+import { storeToRefs } from 'pinia';
+
 import { useLibraryStore } from '../stores/library';
-import * as State from './playerState';
+import { usePlaybackStore } from '../stores/playback';
+import type { Song } from './playerState';
 
 interface QueuePlaySongOptions {
   updateShuffleHistory?: boolean;
@@ -9,7 +12,7 @@ interface QueuePlaySongOptions {
 }
 
 interface CreatePlayerQueueDeps {
-  playSong: (song: State.Song, options?: QueuePlaySongOptions) => void | Promise<void>;
+  playSong: (song: Song, options?: QueuePlaySongOptions) => void | Promise<void>;
   stopPlaybackRuntime: () => void;
   showToast: (message: string, type: 'success' | 'info' | 'error') => void;
 }
@@ -20,6 +23,8 @@ export const createPlayerQueue = ({
   showToast,
 }: CreatePlayerQueueDeps) => {
   const libraryStore = useLibraryStore();
+  const playbackStore = usePlaybackStore();
+  const { currentSong, isPlaying, playMode, playQueue, tempQueue } = storeToRefs(playbackStore);
   const shuffleHistory: string[] = [];
   const shuffleFuture: string[] = [];
 
@@ -28,13 +33,13 @@ export const createPlayerQueue = ({
     shuffleFuture.length = 0;
   };
 
-  const handleBeforePlay = (song: State.Song, options: QueuePlaySongOptions = {}) => {
+  const handleBeforePlay = (song: Song, options: QueuePlaySongOptions = {}) => {
     const shouldUpdateShuffleHistory = options.updateShuffleHistory ?? true;
     const shouldClearShuffleFuture = options.clearShuffleFuture ?? true;
-    const previousSong = State.currentSong.value;
+    const previousSong = currentSong.value;
 
     if (
-      State.playMode.value === 2 &&
+      playMode.value === 2 &&
       shouldUpdateShuffleHistory &&
       previousSong &&
       previousSong.path !== song.path
@@ -47,18 +52,18 @@ export const createPlayerQueue = ({
   };
 
   const getNavigationList = () =>
-    State.playQueue.value.length ? State.playQueue.value : libraryStore.songList;
+    playQueue.value.length ? playQueue.value : libraryStore.songList;
 
-  const findSongByPath = (path: string | undefined, primaryList: State.Song[] = []) => {
+  const findSongByPath = (path: string | undefined, primaryList: Song[] = []) => {
     if (!path) return null;
 
     const candidateLists = [
       primaryList,
-      State.playQueue.value,
-      State.tempQueue.value,
+      playQueue.value,
+      tempQueue.value,
       libraryStore.songList,
       libraryStore.librarySongs,
-      State.currentSong.value ? [State.currentSong.value] : [],
+      currentSong.value ? [currentSong.value] : [],
     ];
 
     for (const list of candidateLists) {
@@ -69,19 +74,19 @@ export const createPlayerQueue = ({
     return null;
   };
 
-  const pickRandomSong = (list: State.Song[]) => {
+  const pickRandomSong = (list: Song[]) => {
     if (list.length === 0) return null;
     if (list.length === 1) return list[0];
 
-    const currentPath = State.currentSong.value?.path;
+    const currentPath = currentSong.value?.path;
     const candidates = currentPath ? list.filter(song => song.path !== currentPath) : list;
     if (candidates.length === 0) return list[0];
     return candidates[Math.floor(Math.random() * candidates.length)];
   };
 
   const nextSong = () => {
-    if (State.tempQueue.value.length > 0) {
-      const next = State.tempQueue.value.shift();
+    if (tempQueue.value.length > 0) {
+      const next = tempQueue.value.shift();
       if (next) {
         playSong(next);
         return;
@@ -91,7 +96,7 @@ export const createPlayerQueue = ({
     const navigationList = getNavigationList();
     if (!navigationList.length) return;
 
-    if (State.playMode.value === 2) {
+    if (playMode.value === 2) {
       const futureSong = findSongByPath(shuffleFuture.pop(), navigationList);
       if (futureSong) {
         playSong(futureSong, { updateShuffleHistory: false, clearShuffleFuture: false });
@@ -105,7 +110,7 @@ export const createPlayerQueue = ({
       return;
     }
 
-    let index = navigationList.findIndex(song => song.path === State.currentSong.value?.path);
+    let index = navigationList.findIndex(song => song.path === currentSong.value?.path);
     index = (index + 1) % navigationList.length;
     playSong(navigationList[index]);
   };
@@ -114,12 +119,12 @@ export const createPlayerQueue = ({
     const navigationList = getNavigationList();
     if (!navigationList.length) return;
 
-    if (State.playMode.value === 2) {
+    if (playMode.value === 2) {
       const previousPath = shuffleHistory.pop();
       const previousSong = findSongByPath(previousPath, navigationList);
       if (previousSong) {
-        if (State.currentSong.value) {
-          shuffleFuture.push(State.currentSong.value.path);
+        if (currentSong.value) {
+          shuffleFuture.push(currentSong.value.path);
         }
         playSong(previousSong, { updateShuffleHistory: false, clearShuffleFuture: false });
         return;
@@ -132,48 +137,48 @@ export const createPlayerQueue = ({
       return;
     }
 
-    let index = navigationList.findIndex(song => song.path === State.currentSong.value?.path);
+    let index = navigationList.findIndex(song => song.path === currentSong.value?.path);
     index = (index - 1 + navigationList.length) % navigationList.length;
     playSong(navigationList[index]);
   };
 
   const clearQueue = async () => {
-    State.playQueue.value = [];
-    State.tempQueue.value = [];
+    playQueue.value = [];
+    tempQueue.value = [];
     resetShuffleState();
 
-    if (State.isPlaying.value) {
+    if (isPlaying.value) {
       await invoke('pause_audio');
-      State.isPlaying.value = false;
+      isPlaying.value = false;
     }
 
     stopPlaybackRuntime();
-    State.currentSong.value = null;
+    currentSong.value = null;
   };
 
-  const removeSongFromQueue = (song: State.Song) => {
-    State.playQueue.value = State.playQueue.value.filter(item => item.path !== song.path);
-    State.tempQueue.value = State.tempQueue.value.filter(item => item.path !== song.path);
+  const removeSongFromQueue = (song: Song) => {
+    playQueue.value = playQueue.value.filter(item => item.path !== song.path);
+    tempQueue.value = tempQueue.value.filter(item => item.path !== song.path);
   };
 
-  const addSongToQueue = (song: State.Song) => {
-    State.playQueue.value.push(song);
-    showToast('已添加到队列', 'success');
+  const addSongToQueue = (song: Song) => {
+    playQueue.value.push(song);
+    showToast('宸叉坊鍔犲埌闃熷垪', 'success');
   };
 
-  const addSongsToQueue = (songs: State.Song[]) => {
+  const addSongsToQueue = (songs: Song[]) => {
     if (songs.length === 0) return;
-    State.playQueue.value.push(...songs);
-    showToast(`已添加 ${songs.length} 首歌曲到队列`, 'success');
+    playQueue.value.push(...songs);
+    showToast(`宸叉坊鍔?${songs.length} 棣栨瓕鏇插埌闃熷垪`, 'success');
   };
 
   const toggleMode = () => {
-    State.playMode.value = (State.playMode.value + 1) % 3;
+    playMode.value = (playMode.value + 1) % 3;
     resetShuffleState();
   };
 
-  const playNext = (song: State.Song) => {
-    State.tempQueue.value.unshift(song);
+  const playNext = (song: Song) => {
+    tempQueue.value.unshift(song);
   };
 
   return {

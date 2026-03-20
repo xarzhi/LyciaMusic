@@ -6,6 +6,8 @@ import { playbackApi } from '../services/tauri/playbackApi';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
+import { usePlaybackStore } from '../stores/playback';
+import { useUiStore } from '../stores/ui';
 
 interface CreatePlayerUiShellDeps {
   addFolder: () => void | Promise<void>;
@@ -19,37 +21,39 @@ export const createPlayerUiShell = ({
   const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
   const navigationStore = useNavigationStore();
+  const playbackStore = usePlaybackStore();
+  const uiStore = useUiStore();
   const { currentViewMode } = storeToRefs(navigationStore);
   const { songList } = storeToRefs(libraryStore);
   const { favoritePaths } = storeToRefs(collectionsStore);
 
   const handleVolume = async (event: Event) => {
     const volume = parseInt((event.target as HTMLInputElement).value, 10);
-    State.volume.value = volume;
+    playbackStore.volume = volume;
     await playbackApi.setVolume(volume / 100);
   };
 
   const toggleMute = async () => {
-    if (State.volume.value > 0) {
-      State.volume.value = 0;
+    if (playbackStore.volume > 0) {
+      playbackStore.volume = 0;
       await playbackApi.setVolume(0);
       return;
     }
 
-    State.volume.value = 100;
+    playbackStore.volume = 100;
     await playbackApi.setVolume(1);
   };
 
   const togglePlaylist = () => {
-    State.showPlaylist.value = !State.showPlaylist.value;
+    uiStore.showPlaylist = !uiStore.showPlaylist;
   };
 
   const toggleMiniPlaylist = () => {
-    State.showMiniPlaylist.value = !State.showMiniPlaylist.value;
+    uiStore.showMiniPlaylist = !uiStore.showMiniPlaylist;
   };
 
   const closeMiniPlaylist = () => {
-    State.showMiniPlaylist.value = false;
+    uiStore.showMiniPlaylist = false;
   };
 
   const handleScan = async () => {
@@ -81,11 +85,11 @@ export const createPlayerUiShell = ({
   };
 
   const togglePlayerDetail = () => {
-    State.showPlayerDetail.value = !State.showPlayerDetail.value;
+    uiStore.showPlayerDetail = !uiStore.showPlayerDetail;
   };
 
   const toggleQueue = () => {
-    State.showQueue.value = !State.showQueue.value;
+    uiStore.showQueue = !uiStore.showQueue;
   };
 
   return {

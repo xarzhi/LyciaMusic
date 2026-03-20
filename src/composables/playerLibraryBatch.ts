@@ -3,6 +3,7 @@ import { storeToRefs } from 'pinia';
 
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
+import { usePlaybackStore } from '../stores/playback';
 
 const LIBRARY_SCAN_BATCH_FLUSH_MS = 120;
 
@@ -15,8 +16,10 @@ export const createPlayerLibraryBatch = ({
 }: CreatePlayerLibraryBatchDeps) => {
   const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
+  const playbackStore = usePlaybackStore();
   const { songList, librarySongs } = storeToRefs(libraryStore);
   const { recentSongs } = storeToRefs(collectionsStore);
+  const { playQueue, currentSong } = storeToRefs(playbackStore);
   let libraryScanBatchFlushTimer: ReturnType<typeof setTimeout> | null = null;
   const pendingLibraryScanSongs = new Map<string, State.Song>();
   const pendingLibraryScanDeletedPaths = new Set<string>();
@@ -26,15 +29,15 @@ export const createPlayerLibraryBatch = ({
     const lookup = createSongLookup([
       ...fallbackSongs,
       ...songList.value,
-      ...State.playQueue.value,
+      ...playQueue.value,
       ...recentSongs.value.map(item => item.song),
-      ...(State.currentSong.value ? [State.currentSong.value] : []),
+      ...(currentSong.value ? [currentSong.value] : []),
     ]);
 
     songList.value = songList.value
       .map(song => lookup.get(song.path) ?? song)
       .filter((song): song is State.Song => !!song);
-    State.playQueue.value = State.playQueue.value
+    playQueue.value = playQueue.value
       .map(song => lookup.get(song.path) ?? song)
       .filter((song): song is State.Song => !!song);
     recentSongs.value = recentSongs.value
@@ -44,8 +47,8 @@ export const createPlayerLibraryBatch = ({
       })
       .filter((item): item is State.HistoryItem => !!item);
 
-    if (State.currentSong.value?.path) {
-      State.currentSong.value = lookup.get(State.currentSong.value.path) ?? State.currentSong.value;
+    if (currentSong.value?.path) {
+      currentSong.value = lookup.get(currentSong.value.path) ?? currentSong.value;
     }
   };
 

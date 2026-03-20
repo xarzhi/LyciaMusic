@@ -4,6 +4,7 @@ import type { ScanLibraryOptions } from './playerLibraryScan';
 import { fileApi } from '../services/tauri/fileApi';
 import { libraryApi } from '../services/tauri/libraryApi';
 import { useLibraryStore } from '../stores/library';
+import { usePlaybackStore } from '../stores/playback';
 
 interface AppSettingsRef {
   value: {
@@ -81,6 +82,7 @@ export const createPlayerLibraryManager = ({
   resetShuffleState,
 }: CreatePlayerLibraryManagerDeps) => {
   const libraryStore = useLibraryStore();
+  const playbackStore = usePlaybackStore();
 
   const fetchLibraryFolders = async () => {
     try {
@@ -186,8 +188,8 @@ export const createPlayerLibraryManager = ({
     const queue = dedupeSongs(songs);
     if (queue.length === 0) return;
 
-    State.playQueue.value = [...queue];
-    State.tempQueue.value = [];
+    playbackStore.playQueue = [...queue];
+    playbackStore.tempQueue = [];
     resetShuffleState();
 
     await playSong(queue[0], { preserveQueue: true });

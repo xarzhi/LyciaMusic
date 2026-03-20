@@ -1,10 +1,11 @@
 import { ref, computed, reactive, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { usePlaybackStore } from '../stores/playback';
 import type {
   LyricLine as AmlLyricLine,
   LyricWord as AmlLyricWord,
 } from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js';
-import { currentSong, currentTime, AUDIO_DELAY } from './playerState';
+import { AUDIO_DELAY } from './playerState';
 
 export interface LyricLine {
   time: number;
@@ -293,7 +294,8 @@ async function parseLyrics(raw: string): Promise<LyricLine[]> {
 
 async function loadLyrics() {
   const requestId = ++loadRequestId;
-  const song = currentSong.value;
+  const playbackStore = usePlaybackStore();
+  const song = playbackStore.currentSong;
 
   if (!song) {
     rawLyrics.value = '';
@@ -309,16 +311,16 @@ async function loadLyrics() {
   try {
     const lrc = await invoke<string>('get_song_lyrics', { path: song.path });
 
-    if (requestId !== loadRequestId || currentSong.value?.path !== song.path) return;
+    if (requestId !== loadRequestId || playbackStore.currentSong?.path !== song.path) return;
 
     rawLyrics.value = lrc || '';
     const parsed = await parseLyrics(rawLyrics.value);
-    if (requestId !== loadRequestId || currentSong.value?.path !== song.path) return;
+    if (requestId !== loadRequestId || playbackStore.currentSong?.path !== song.path) return;
 
     parsedLyrics.value = parsed;
     lyricsStatus.value = parsedLyrics.value.length > 0 ? 'ready' : 'empty';
   } catch (e) {
-    if (requestId !== loadRequestId || currentSong.value?.path !== song.path) return;
+    if (requestId !== loadRequestId || playbackStore.currentSong?.path !== song.path) return;
 
     rawLyrics.value = '';
     parsedLyrics.value = [];
@@ -348,7 +350,7 @@ function findLyricIndexByTime(lines: LyricLine[], targetTime: number): number {
 const currentLyricIndex = computed(() => {
   if (parsedLyrics.value.length === 0) return -1;
 
-  const targetTime = currentTime.value - AUDIO_DELAY.value;
+  const targetTime = usePlaybackStore().currentTime - AUDIO_DELAY.value;
   return findLyricIndexByTime(parsedLyrics.value, targetTime);
 });
 

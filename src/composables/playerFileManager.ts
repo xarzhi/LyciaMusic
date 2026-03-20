@@ -5,6 +5,7 @@ import { fileApi } from '../services/tauri/fileApi';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
+import { usePlaybackStore } from '../stores/playback';
 import { useSettingsStore } from '../stores/settings';
 
 interface CreatePlayerFileManagerDeps {
@@ -118,6 +119,7 @@ export const createPlayerFileManager = ({
   const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
   const navigationStore = useNavigationStore();
+  const playbackStore = usePlaybackStore();
   const settingsStore = useSettingsStore();
   const { folderTree, songList, watchedFolders } = storeToRefs(libraryStore);
   const { favoritePaths, playlists } = storeToRefs(collectionsStore);
@@ -276,8 +278,8 @@ export const createPlayerFileManager = ({
         targetSong.path = newPath;
       }
 
-      if (State.currentSong.value?.path === oldPath) {
-        State.currentSong.value.path = newPath;
+      if (playbackStore.currentSong?.path === oldPath) {
+        playbackStore.currentSong.path = newPath;
       }
 
       playlists.value.forEach(playlist => {

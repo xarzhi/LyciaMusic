@@ -30,6 +30,8 @@ import { playerStorage } from '../services/storage/playerStorage';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
+import { usePlaybackStore } from '../stores/playback';
+import { useUiStore } from '../stores/ui';
 
 
 
@@ -186,9 +188,13 @@ function createPlayerService() {
   const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
   const navigationStore = useNavigationStore();
+  const playbackStore = usePlaybackStore();
+  const uiStore = useUiStore();
   const collectionsRefs = storeToRefs(collectionsStore);
   const libraryRefs = storeToRefs(libraryStore);
   const navigationRefs = storeToRefs(navigationStore);
+  const playbackRefs = storeToRefs(playbackStore);
+  const uiRefs = storeToRefs(uiStore);
   const { favoritePaths, playlists, recentSongs } = collectionsRefs;
   const {
     songList,
@@ -208,6 +214,8 @@ function createPlayerService() {
     favDetailFilter,
     activeRootPath,
   } = navigationRefs;
+  const { currentSong, playMode } = playbackRefs;
+  const { isMiniMode, playlistCover } = uiRefs;
   const {
     applyLibraryScanBatch,
     flushBufferedLibraryScanBatch,
@@ -1130,7 +1138,7 @@ function createPlayerService() {
 
     if (currentViewMode.value === 'favorites' && (favTab.value === 'artists' || favTab.value === 'albums') && !favDetailFilter.value) return;
 
-    if (newList.length > 0) { try { const cover = await invoke<string>('get_song_cover', { path: newList[0].path }); State.playlistCover.value = cover; } catch { State.playlistCover.value = ''; } } else { State.playlistCover.value = ''; }
+    if (newList.length > 0) { try { const cover = await invoke<string>('get_song_cover', { path: newList[0].path }); playlistCover.value = cover; } catch { playlistCover.value = ''; } } else { playlistCover.value = ''; }
 
   }, { immediate: true });
 
@@ -1245,7 +1253,7 @@ function createPlayerService() {
   }
   function generateOrganizedPath(song: State.Song): string { return playerFileManager.generateOrganizedPath(song); }
   async function moveFile(song: State.Song, newPath: string) { return playerFileManager.moveFile(song, newPath); }
-  function handleAutoNext() { if (State.playMode.value === 1 && State.currentSong.value) { playSong(State.currentSong.value); } else { nextSong(); } }
+  function handleAutoNext() { if (playMode.value === 1 && currentSong.value) { playSong(currentSong.value); } else { nextSong(); } }
   async function handleVolume(e: Event) { return playerUiShell.handleVolume(e); }
   async function toggleMute() { return playerUiShell.toggleMute(); }
   function toggleMode() { playerQueue.toggleMode(); }
@@ -1318,6 +1326,8 @@ function createPlayerService() {
     ...collectionsRefs,
     ...libraryRefs,
     ...navigationRefs,
+    ...playbackRefs,
+    ...uiRefs,
     settings: appSettings,
     artistList, albumList, filteredArtistList, filteredAlbumList, genreList, yearList, folderList, favoriteSongList, favArtistList, favAlbumList, recentAlbumList, recentPlaylistList, displaySongList, isLocalMusic, isFolderMode,
     init, formatDuration, formatTimeAgo,
@@ -1345,7 +1355,7 @@ function createPlayerService() {
     clearQueue, removeSongFromQueue, addSongToQueue, toggleQueue,
     addSongsToQueue, getSongsFromPlaylist,
     // Mini 妯″紡
-    isMiniMode: State.isMiniMode,
+    isMiniMode,
     reorderWatchedFolders: (from: number, to: number) => libraryStore.reorderWatchedFolders(from, to),
     reorderPlaylists: (from: number, to: number) => collectionsStore.reorderPlaylists(from, to),
     updateArtistOrder: (newOrder: string[]) => {

@@ -7,11 +7,12 @@ import {
   type ComputedRef,
   type Ref,
 } from 'vue';
+import { storeToRefs } from 'pinia';
 import {
-  currentSong,
   type FolderNode,
   type Song,
 } from './playerState';
+import { usePlaybackStore } from '../stores/playback';
 import {
   INDEX_KEYS,
   getAlphabetIndexKey,
@@ -55,6 +56,7 @@ export function useSongTableAlphabetIndex({
   refreshFolder,
   expandFolderPath,
 }: UseSongTableAlphabetIndexOptions) {
+  const { currentSong } = storeToRefs(usePlaybackStore());
   const indexBarRef = ref<HTMLElement | null>(null);
   const isIndexDragging = ref(false);
   const dragIndexKey = ref<AlphabetIndexKey | null>(null);

@@ -3,6 +3,7 @@ import * as State from './playerState';
 import { playerStorage } from '../services/storage/playerStorage';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
+import { usePlaybackStore } from '../stores/playback';
 
 interface RecentHistoryRecord {
   songPath: string;
@@ -47,6 +48,7 @@ export const createPlayerRestore = ({
 }: CreatePlayerRestoreDeps) => {
   const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
+  const playbackStore = usePlaybackStore();
 
   const restoreRecentHistory = async () => {
     const legacyHistory = readStoredHistory(keys.legacyPlayerHistory);
@@ -119,19 +121,19 @@ export const createPlayerRestore = ({
       ?? null;
 
     libraryStore.setSongList(resolveSongsFromPaths(storedSongListPaths, fallbackSongs));
-    State.playQueue.value = resolveSongsFromPaths(storedQueuePaths, fallbackSongs);
+    playbackStore.playQueue = resolveSongsFromPaths(storedQueuePaths, fallbackSongs);
 
     if (storedLastSongPath) {
-      State.currentSong.value = createSongLookup(fallbackSongs).get(storedLastSongPath) ?? legacyLastSong;
+      playbackStore.currentSong = createSongLookup(fallbackSongs).get(storedLastSongPath) ?? legacyLastSong;
     }
 
-    if (State.currentSong.value?.path) {
-      invoke<string>('get_song_cover', { path: State.currentSong.value.path })
+    if (playbackStore.currentSong?.path) {
+      invoke<string>('get_song_cover', { path: playbackStore.currentSong.path })
         .then(cover => {
-          State.currentCover.value = cover;
+          playbackStore.currentCover = cover;
         })
         .catch(() => {});
-      State.isSongLoaded.value = false;
+      playbackStore.isSongLoaded = false;
     }
   };
 

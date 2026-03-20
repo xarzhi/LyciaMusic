@@ -1,5 +1,7 @@
 import * as State from './playerState';
+import { storeToRefs } from 'pinia';
 import { playbackApi } from '../services/tauri/playbackApi';
+import { usePlaybackStore } from '../stores/playback';
 
 interface PlaySongOptions {
   updateShuffleHistory?: boolean;
@@ -37,6 +39,16 @@ export const createPlayerPlayback = ({
   handleAutoNext,
   onBeforePlay,
 }: CreatePlayerPlaybackDeps) => {
+  const playbackStore = usePlaybackStore();
+  const {
+    currentCover,
+    currentSong,
+    currentTime,
+    isPlaying,
+    isSongLoaded,
+    playQueue,
+  } = storeToRefs(playbackStore);
+
   const stopPlaybackRuntime = () => {
     if (progressFrameId !== null) {
       cancelAnimationFrame(progressFrameId);
@@ -51,21 +63,21 @@ export const createPlayerPlayback = ({
   const reanchorPlaybackClock = (time: number) => {
     playbackAnchorTime = performance.now();
     playbackStartOffset = time;
-    State.currentTime.value = time;
+    currentTime.value = time;
   };
 
   const startPlaybackRuntime = () => {
     stopPlaybackRuntime();
-    reanchorPlaybackClock(State.currentTime.value);
+    reanchorPlaybackClock(currentTime.value);
 
     const update = () => {
-      if (!State.currentSong.value || !State.isPlaying.value) return;
+      if (!currentSong.value || !isPlaying.value) return;
 
       const now = performance.now();
       const delta = (now - playbackAnchorTime) / 1000.0;
-      State.currentTime.value = playbackStartOffset + delta;
+      currentTime.value = playbackStartOffset + delta;
 
-      if (State.currentTime.value >= State.currentSong.value.duration) {
+      if (currentTime.value >= currentSong.value.duration) {
         handleAutoNext();
         return;
       }
@@ -75,11 +87,11 @@ export const createPlayerPlayback = ({
 
     progressFrameId = requestAnimationFrame(update);
     syncIntervalId = setInterval(async () => {
-      if (!State.isPlaying.value || isSeeking) return;
+      if (!isPlaying.value || isSeeking) return;
 
       try {
         const realTime = await playbackApi.getPlaybackProgress();
-        if (Math.abs(realTime - State.currentTime.value) > 0.05) {
+        if (Math.abs(realTime - currentTime.value) > 0.05) {
           reanchorPlaybackClock(realTime);
         }
       } catch {}
@@ -87,11 +99,11 @@ export const createPlayerPlayback = ({
   };
 
   const flushPlaySession = () => {
-    const song = State.currentSong.value;
+    const song = currentSong.value;
     if (!song) return;
 
     let currentSession = 0;
-    if (State.isPlaying.value && sessionStartTime) {
+    if (isPlaying.value && sessionStartTime) {
       currentSession = (Date.now() - sessionStartTime) / 1000;
     }
 
@@ -112,23 +124,23 @@ export const createPlayerPlayback = ({
     onBeforePlay?.(song, options);
 
     const preserveQueue = options.preserveQueue ?? false;
-    State.currentSong.value = song;
+    currentSong.value = song;
 
     if (!preserveQueue) {
       const displaySongList = getDisplaySongList();
       if (displaySongList.some(item => item.path === song.path)) {
-        State.playQueue.value = [...displaySongList];
-      } else if (!State.playQueue.value.some(item => item.path === song.path)) {
-        if (State.playQueue.value.length === 0) {
-          State.playQueue.value = [song];
+        playQueue.value = [...displaySongList];
+      } else if (!playQueue.value.some(item => item.path === song.path)) {
+        if (playQueue.value.length === 0) {
+          playQueue.value = [song];
         } else {
-          State.playQueue.value.push(song);
+          playQueue.value.push(song);
         }
       }
     }
 
-    State.isPlaying.value = true;
-    State.isSongLoaded.value = false;
+    isPlaying.value = true;
+    isSongLoaded.value = false;
     stopPlaybackRuntime();
     reanchorPlaybackClock(0);
     accumulatedTime = 0;
@@ -138,9 +150,9 @@ export const createPlayerPlayback = ({
 
     try {
       const cover = await playbackApi.getSongCover(song.path).catch(() => '');
-      if (requestId !== playRequestId || State.currentSong.value?.path !== song.path) return;
+      if (requestId !== playRequestId || currentSong.value?.path !== song.path) return;
 
-      State.currentCover.value = cover;
+      currentCover.value = cover;
       await playbackApi.playAudio({
         path: song.path,
         title: song.name,
@@ -149,86 +161,86 @@ export const createPlayerPlayback = ({
         cover,
         duration: Math.floor(song.duration),
       });
-      if (requestId !== playRequestId || State.currentSong.value?.path !== song.path) return;
+      if (requestId !== playRequestId || currentSong.value?.path !== song.path) return;
 
-      State.isSongLoaded.value = true;
+      isSongLoaded.value = true;
       sessionStartTime = Date.now();
       loadLyrics();
       startPlaybackRuntime();
     } catch {
-      if (requestId !== playRequestId || State.currentSong.value?.path !== song.path) return;
+      if (requestId !== playRequestId || currentSong.value?.path !== song.path) return;
 
-      State.isPlaying.value = false;
-      State.isSongLoaded.value = false;
+      isPlaying.value = false;
+      isSongLoaded.value = false;
       sessionStartTime = null;
       stopPlaybackRuntime();
     }
   };
 
   const pauseSong = async () => {
-    if (State.isPlaying.value && sessionStartTime) {
+    if (isPlaying.value && sessionStartTime) {
       accumulatedTime += (Date.now() - sessionStartTime) / 1000;
       sessionStartTime = null;
     }
 
-    State.isPlaying.value = false;
+    isPlaying.value = false;
     await playbackApi.pauseAudio();
     stopPlaybackRuntime();
   };
 
   const togglePlay = async () => {
-    if (!State.currentSong.value) return;
+    if (!currentSong.value) return;
 
-    if (State.isPlaying.value) {
+    if (isPlaying.value) {
       if (sessionStartTime) {
         accumulatedTime += (Date.now() - sessionStartTime) / 1000;
         sessionStartTime = null;
       }
 
       await playbackApi.pauseAudio();
-      State.isPlaying.value = false;
+      isPlaying.value = false;
       stopPlaybackRuntime();
       return;
     }
 
-    if (!State.isSongLoaded.value) {
-      await playSong(State.currentSong.value);
+    if (!isSongLoaded.value) {
+      await playSong(currentSong.value);
     } else {
       await playbackApi.resumeAudio();
       sessionStartTime = Date.now();
     }
 
-    State.isPlaying.value = true;
+    isPlaying.value = true;
     startPlaybackRuntime();
   };
 
   const seekTo = async (newTime: number) => {
-    if (!State.currentSong.value) return;
+    if (!currentSong.value) return;
 
-    if (State.isPlaying.value && sessionStartTime) {
+    if (isPlaying.value && sessionStartTime) {
       accumulatedTime += (Date.now() - sessionStartTime) / 1000;
       sessionStartTime = Date.now();
     }
 
     isSeeking = true;
     stopPlaybackRuntime();
-    const targetTime = Math.max(0, Math.min(newTime, State.currentSong.value.duration));
+    const targetTime = Math.max(0, Math.min(newTime, currentSong.value.duration));
     const requestId = ++latestSeekRequestId;
     reanchorPlaybackClock(targetTime);
 
     try {
       await playbackApi.seekAudio({
         time: targetTime,
-        isPlaying: State.isPlaying.value,
+        isPlaying: isPlaying.value,
         requestId,
       });
       reanchorPlaybackClock(targetTime);
-      if (State.isPlaying.value) {
+      if (isPlaying.value) {
         startPlaybackRuntime();
       }
     } catch (error) {
       isSeeking = false;
-      if (State.isPlaying.value) {
+      if (isPlaying.value) {
         startPlaybackRuntime();
       }
       throw error;
@@ -237,9 +249,9 @@ export const createPlayerPlayback = ({
 
   const playAt = async (time: number) => {
     await seekTo(time);
-    if (!State.isPlaying.value) {
+    if (!isPlaying.value) {
       setTimeout(async () => {
-        if (!State.isPlaying.value) {
+        if (!isPlaying.value) {
           await togglePlay();
         }
       }, 150);
@@ -247,17 +259,17 @@ export const createPlayerPlayback = ({
   };
 
   const handleSeek = async (event: MouseEvent) => {
-    if (!State.currentSong.value) return;
+    if (!currentSong.value) return;
 
     const target = event.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
     const progress = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-    await seekTo(progress * State.currentSong.value.duration);
+    await seekTo(progress * currentSong.value.duration);
   };
 
   const stepSeek = async (step: number) => {
-    if (!State.currentSong.value) return;
-    await seekTo(State.currentTime.value + step);
+    if (!currentSong.value) return;
+    await seekTo(currentTime.value + step);
   };
 
   const handleSeekCompleted = (payload: SeekCompletedPayload) => {

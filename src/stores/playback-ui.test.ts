@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
-import * as State from '../composables/playerState';
+import * as PlayerState from '../composables/playerState';
 import { usePlaybackStore } from './playback';
 import { useUiStore } from './ui';
 
@@ -25,43 +25,44 @@ describe('playback and ui stores', () => {
     setActivePinia(createPinia());
   });
 
-  it('keeps playback state in sync with playerState bridge refs', () => {
+  it('stores playback state directly in the playback store', () => {
     const playbackStore = usePlaybackStore();
 
-    State.isPlaying.value = true;
-    State.volume.value = 72;
-    State.currentSong.value = demoSong;
-    State.playQueue.value = [demoSong];
+    playbackStore.isPlaying = true;
+    playbackStore.volume = 72;
+    playbackStore.currentSong = demoSong;
+    playbackStore.playQueue = [demoSong];
 
     expect(playbackStore.isPlaying).toBe(true);
     expect(playbackStore.volume).toBe(72);
     expect(playbackStore.currentSong).toEqual(demoSong);
     expect(playbackStore.playQueue).toEqual([demoSong]);
-
-    playbackStore.currentTime = 48;
-    playbackStore.playMode = 2;
-
-    expect(State.currentTime.value).toBe(48);
-    expect(State.playMode.value).toBe(2);
   });
 
-  it('keeps ui state in sync with playerState bridge refs', () => {
+  it('stores ui state directly in the ui store', () => {
     const uiStore = useUiStore();
 
-    State.showQueue.value = true;
-    State.showAddToPlaylistModal.value = true;
-    State.playlistAddTargetSongs.value = ['/music/demo.flac'];
-    State.dominantColors.value = ['#111111', '#222222', '#333333', '#444444'];
+    uiStore.showQueue = true;
+    uiStore.showAddToPlaylistModal = true;
+    uiStore.playlistAddTargetSongs = ['/music/demo.flac'];
+    uiStore.dominantColors = ['#111111', '#222222', '#333333', '#444444'];
+    uiStore.isMiniMode = true;
+    uiStore.playlistCover = '/covers/demo.jpg';
 
     expect(uiStore.showQueue).toBe(true);
     expect(uiStore.showAddToPlaylistModal).toBe(true);
     expect(uiStore.playlistAddTargetSongs).toEqual(['/music/demo.flac']);
     expect(uiStore.dominantColors).toEqual(['#111111', '#222222', '#333333', '#444444']);
+    expect(uiStore.isMiniMode).toBe(true);
+    expect(uiStore.playlistCover).toBe('/covers/demo.jpg');
+  });
 
-    uiStore.isMiniMode = true;
-    uiStore.playlistCover = '/covers/demo.jpg';
-
-    expect(State.isMiniMode.value).toBe(true);
-    expect(State.playlistCover.value).toBe('/covers/demo.jpg');
+  it('removes playback and ui bridge exports from playerState', () => {
+    expect('isPlaying' in PlayerState).toBe(false);
+    expect('playQueue' in PlayerState).toBe(false);
+    expect('currentSong' in PlayerState).toBe(false);
+    expect('showQueue' in PlayerState).toBe(false);
+    expect('showAddToPlaylistModal' in PlayerState).toBe(false);
+    expect('playlistCover' in PlayerState).toBe(false);
   });
 });

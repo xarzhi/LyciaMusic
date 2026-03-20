@@ -16,7 +16,9 @@ import {
 } from '../services/storage/playerStorage';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
+import { usePlaybackStore } from '../stores/playback';
 import { mergeAppSettings, useSettingsStore } from '../stores/settings';
+import { useUiStore } from '../stores/ui';
 import type { AppSettings } from '../types';
 
 interface SeekCompletedPayload {
@@ -196,10 +198,22 @@ export const createPlayerLifecycle = ({
 }: CreatePlayerLifecycleDeps) => {
   const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
+  const playbackStore = usePlaybackStore();
   const settingsStore = useSettingsStore();
+  const uiStore = useUiStore();
   const { settings } = storeToRefs(settingsStore);
   const { songList, watchedFolders } = storeToRefs(libraryStore);
   const { favoritePaths, playlists } = storeToRefs(collectionsStore);
+  const {
+    currentCover,
+    currentSong,
+    currentTime,
+    isPlaying,
+    playMode,
+    playQueue,
+    volume,
+  } = storeToRefs(playbackStore);
+  const { dominantColors } = storeToRefs(uiStore);
 
   onMounted(async () => {
     await bootstrapLibrary();
@@ -213,12 +227,12 @@ export const createPlayerLifecycle = ({
 
     const listenerRegistrations = [
       listen('player:play', () => {
-        if (!State.isPlaying.value) {
+        if (!isPlaying.value) {
           void togglePlay();
         }
       }),
       listen('player:pause', () => {
-        if (State.isPlaying.value) {
+        if (isPlaying.value) {
           void togglePlay();
         }
       }),
@@ -250,11 +264,11 @@ export const createPlayerLifecycle = ({
       }),
     ];
 
-    watch(State.volume, value => {
+    watch(volume, value => {
       playerStorage.writeNumber(playerStorageKeys.volume, value);
     });
 
-    watch(State.playMode, value => {
+    watch(playMode, value => {
       playerStorage.writeNumber(playerStorageKeys.playMode, value);
     });
 
@@ -265,7 +279,7 @@ export const createPlayerLifecycle = ({
         favoritePaths,
         playlists,
         settings,
-        () => State.playQueue.value.map(song => song.path),
+        () => playQueue.value.map(song => song.path),
         State.artistCustomOrder,
         State.albumCustomOrder,
         State.folderCustomOrder,
@@ -293,7 +307,7 @@ export const createPlayerLifecycle = ({
       playerStorage.setString(playerStorageKeys.playlistSortMode, value);
     });
 
-    watch(State.currentSong, song => {
+    watch(currentSong, song => {
       if (song?.path) {
         playerStorage.setString(lastSongPathKey, song.path);
         playerStorage.remove(legacyLastSongKey);
@@ -304,36 +318,36 @@ export const createPlayerLifecycle = ({
       playerStorage.remove(legacyLastSongKey);
     });
 
-    watch(State.currentCover, async currentCover => {
-      if (!currentCover) return;
+    watch(currentCover, async nextCover => {
+      if (!nextCover) return;
 
       const taskId = ++dominantColorTaskId;
-      let coverUrl = currentCover;
-      if (!currentCover.startsWith('http') && !currentCover.startsWith('data:')) {
-        coverUrl = convertFileSrc(currentCover);
+      let coverUrl = nextCover;
+      if (!nextCover.startsWith('http') && !nextCover.startsWith('data:')) {
+        coverUrl = convertFileSrc(nextCover);
       }
 
       const colors = await extractDominantColors(coverUrl, 4);
       if (taskId !== dominantColorTaskId) return;
-      State.dominantColors.value = colors;
+      dominantColors.value = colors;
     });
 
-    watch(State.isPlaying, playing => {
+    watch(isPlaying, playing => {
       if (!playing) {
-        playerStorage.writeNumber(playerStorageKeys.lastTime, State.currentTime.value);
+        playerStorage.writeNumber(playerStorageKeys.lastTime, currentTime.value);
       }
     });
 
     const beforeUnloadHandler = () => {
       flushPersistedState();
-      playerStorage.writeNumber(playerStorageKeys.lastTime, State.currentTime.value);
+      playerStorage.writeNumber(playerStorageKeys.lastTime, currentTime.value);
     };
 
     onMounted(async () => {
       const storedVolume = playerStorage.readNumber(playerStorageKeys.volume);
       if (storedVolume !== null) {
-        State.volume.value = storedVolume;
-        await invoke('set_volume', { volume: State.volume.value / 100 });
+        volume.value = storedVolume;
+        await invoke('set_volume', { volume: volume.value / 100 });
       }
 
       await restoreOutputDevice();
@@ -357,7 +371,7 @@ export const createPlayerLifecycle = ({
 
       const storedLastTime = playerStorage.readNumber(playerStorageKeys.lastTime);
       if (storedLastTime !== null) {
-        State.currentTime.value = storedLastTime;
+        currentTime.value = storedLastTime;
       }
 
       window.addEventListener('beforeunload', beforeUnloadHandler);

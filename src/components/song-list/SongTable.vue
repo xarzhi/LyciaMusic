@@ -3,7 +3,6 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { Song, usePlayer, dragSession } from '../../composables/player';
 import { useLibraryCollections } from '../../composables/useLibraryCollections';
-import { currentSong, isPlaying } from '../../composables/playerState';
 import { useSettings } from '../../composables/settings';
 import { useRoute, useRouter } from 'vue-router';
 import QualityBadge from '../common/QualityBadge.vue';
@@ -13,10 +12,13 @@ import { useHomeNavigation } from '../../composables/useHomeNavigation';
 import { useSongTableAlphabetIndex } from '../../composables/useSongTableAlphabetIndex';
 import { useSongTableLibraryState } from '../../composables/useSongTableLibraryState';
 import { useLibraryStore } from '../../stores/library';
+import { usePlaybackStore } from '../../stores/playback';
 
 const { settings } = useSettings();
 const libraryStore = useLibraryStore();
+const playbackStore = usePlaybackStore();
 const { libraryScanProgress, lastLibraryScanError } = storeToRefs(libraryStore);
+const { currentSong, isPlaying } = storeToRefs(playbackStore);
 
 const props = defineProps<{
   songs: Song[];

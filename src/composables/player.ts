@@ -33,7 +33,7 @@ import { useNavigationStore } from '../stores/navigation';
 
 
 
-// 馃煝 杈呭姪鍑芥暟锛氬垽鏂槸鍚︿负鐩村睘鐖剁洰锟?(闈為€掑綊)
+// Helper: detect whether a song belongs directly under the given folder.
 
 const isDirectParent = (parentPath: string, childPath: string) => {
 
@@ -244,13 +244,13 @@ function createPlayerService() {
     refreshStateSongReferences,
     finalizeLibraryScanProgress,
     onSilentScanError: () => {
-      useToast().showToast("?????????????????", "error");
+      useToast().showToast("\u540e\u53f0\u626b\u63cf\u5931\u8d25\uff0c\u8bf7\u5728\u97f3\u4e50\u5e93\u8bbe\u7f6e\u4e2d\u91cd\u8bd5", "error");
     },
   });
 
 
 
-  // ... (鏍煎紡鍖栧嚱鏁颁繚鎸佷笉锟? ...
+  // Formatting helpers.
 
   const {
     restoreRecentHistory,
@@ -313,7 +313,7 @@ function createPlayerService() {
 
 
 
-  // ... (璁＄畻灞炴€т繚鎸佷笉锟? ...
+  // Computed state.
 
   const isLocalMusic = computed(() => State.currentViewMode.value === 'all' || State.currentViewMode.value === 'artist' || State.currentViewMode.value === 'album');
 
@@ -322,7 +322,7 @@ function createPlayerService() {
 
 
 
-  // 馃煝 鏍稿績锛氬畾涔夆€滃簱鍐呮瓕鏇诧拷?  // 浣跨敤鏂扮殑 librarySongs 鐘讹拷?(锟?scanLibrary populates)
+  // Core library song source populated by scanLibrary.
   const librarySongs = computed(() => {
     return State.librarySongs.value;
   });
@@ -340,16 +340,16 @@ function createPlayerService() {
 
     if (showToast) {
       const toastText = resolvedScanOptions.visibility === 'silent'
-        ? "?????????????"
+        ? "\u5df2\u5c06\u6587\u4ef6\u5939\u52a0\u5165\u97f3\u4e50\u5e93"
         : linkedSidebar
-          ? "???????????????????"
-          : "??????????";
+          ? "\u5df2\u5c06\u6587\u4ef6\u5939\u540c\u6b65\u5230\u4fa7\u8fb9\u680f\u548c\u97f3\u4e50\u5e93"
+          : "\u5df2\u6dfb\u52a0\u6587\u4ef6\u5939";
       useToast().showToast(toastText, "success");
       return;
       useToast().showToast(
         linkedSidebar
-          ? "???????????????????"
-          : "??????????",
+          ? "\u5df2\u5c06\u6587\u4ef6\u5939\u540c\u6b65\u5230\u4fa7\u8fb9\u680f\u548c\u97f3\u4e50\u5e93"
+          : "\u5df2\u6dfb\u52a0\u6587\u4ef6\u5939",
         "success"
       );
     }
@@ -435,8 +435,8 @@ function createPlayerService() {
     if (showToast) {
       useToast().showToast(
         removedSidebar
-          ? "宸蹭粠鏈湴闊充箰搴撳拰渚ц竟鏍忓悓姝ョЩ闄ゆ枃浠跺す"
-          : "宸蹭粠闊充箰搴撶Щ闄ゆ枃浠跺す",
+          ? "\u5df2\u4ece\u672c\u5730\u97f3\u4e50\u5e93\u548c\u4fa7\u8fb9\u680f\u540c\u6b65\u79fb\u9664\u6587\u4ef6\u5939"
+          : "\u5df2\u4ece\u97f3\u4e50\u5e93\u79fb\u9664\u6587\u4ef6\u5939",
         "success"
       );
     }
@@ -458,7 +458,7 @@ function createPlayerService() {
 
   async function addLibraryFolder() {
     try {
-      const selected = await open({ directory: true, multiple: false, title: '???????' });
+      const selected = await open({ directory: true, multiple: false, title: '\u9009\u62e9\u97f3\u4e50\u6587\u4ef6\u5939' });
       if (selected && typeof selected === 'string') {
         const scanOptions = getLibraryAddScanOptions(selected);
         await addLibraryFolderLinked(selected, {
@@ -468,7 +468,7 @@ function createPlayerService() {
       }
     } catch (e) {
       console.error("Failed to add library folder:", e);
-      useToast().showToast("???????: " + e, "error");
+      useToast().showToast("\u6dfb\u52a0\u97f3\u4e50\u6587\u4ef6\u5939\u5931\u8d25: " + e, "error");
     }
   }
 

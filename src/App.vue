@@ -135,8 +135,8 @@ const mainBlurStyle = computed(() => {
         class="absolute inset-0 z-[140] pointer-events-none flex items-center justify-center bg-black/15 backdrop-blur-sm"
       >
         <div class="rounded-[28px] border border-white/35 bg-white/75 px-8 py-6 text-center shadow-[0_24px_60px_rgba(0,0,0,0.2)] dark:border-white/10 dark:bg-black/65">
-          <div class="text-lg font-semibold text-gray-900 dark:text-white">鏉惧紑鍗冲彲瀵煎叆鎴栨挱鏀?/div>
-          <div class="mt-2 text-sm text-gray-600 dark:text-white/70">闊抽鏂囦欢灏嗙洿鎺ユ挱鏀撅紝鏂囦欢澶瑰皢瀵煎叆闊充箰搴?/div>
+          <div class="text-lg font-semibold text-gray-900 dark:text-white">松开即可导入或播放</div>
+          <div class="mt-2 text-sm text-gray-600 dark:text-white/70">音频文件将直接播放，文件夹将导入音乐库</div>
         </div>
       </div>
     </transition>
@@ -152,7 +152,7 @@ const mainBlurStyle = computed(() => {
               {{ libraryScanPhaseLabel }}
             </div>
             <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-              {{ libraryScanProgress.message || '姝ｅ湪澶勭悊闊充箰搴? }}
+              {{ libraryScanProgress.message || '正在处理音乐库' }}
             </div>
             <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500 dark:text-white/55">
               <span v-if="libraryScanFolderLabel">{{ libraryScanFolderLabel }}</span>

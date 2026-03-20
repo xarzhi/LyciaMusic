@@ -1,5 +1,6 @@
 import * as State from './playerState';
 import { playerStorage } from '../services/storage/playerStorage';
+import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { useSettingsStore } from '../stores/settings';
 
@@ -11,6 +12,7 @@ interface PlayerPersistenceKeys {
 }
 
 export const createPlayerPersistence = ({ keys }: { keys: PlayerPersistenceKeys }) => {
+  const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
   const settingsStore = useSettingsStore();
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -28,8 +30,8 @@ export const createPlayerPersistence = ({ keys }: { keys: PlayerPersistenceKeys 
       legacyQueueKey: keys.legacyPlayerQueue,
       songList: libraryStore.songList,
       watchedFolders: libraryStore.watchedFolders,
-      favoritePaths: State.favoritePaths.value,
-      playlists: State.playlists.value,
+      favoritePaths: collectionsStore.favoritePaths,
+      playlists: collectionsStore.playlists,
       settings: settingsStore.settings,
       playQueue: State.playQueue.value,
       artistCustomOrder: State.artistCustomOrder.value,

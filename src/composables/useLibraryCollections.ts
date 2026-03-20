@@ -3,21 +3,21 @@ import * as State from './playerState';
 import type { Song } from './playerState';
 import { playerStorage } from '../services/storage/playerStorage';
 import { historyApi } from '../services/tauri/historyApi';
-import { useLibraryStore } from '../stores/library';
+import { useCollectionsStore } from '../stores/collections';
 import { useNavigationStore } from '../stores/navigation';
 
 const LEGACY_PLAYER_HISTORY_KEY = 'player_history';
 
 export function useLibraryCollections() {
-  const libraryStore = useLibraryStore();
+  const collectionsStore = useCollectionsStore();
   const navigationStore = useNavigationStore();
-  const libraryRefs = storeToRefs(libraryStore);
+  const collectionsRefs = storeToRefs(collectionsStore);
 
   const createPlaylist = (name: string, initialSongs: string[] = []) =>
-    libraryStore.createPlaylist(name, initialSongs);
+    collectionsStore.createPlaylist(name, initialSongs);
 
   const deletePlaylist = (id: string) => {
-    const deleted = libraryStore.deletePlaylist(id);
+    const deleted = collectionsStore.deletePlaylist(id);
 
     if (deleted && navigationStore.currentViewMode === 'playlist' && navigationStore.filterCondition === id) {
       navigationStore.switchViewToAll();
@@ -27,19 +27,19 @@ export function useLibraryCollections() {
   };
 
   const addToPlaylist = (playlistId: string, path: string) =>
-    libraryStore.addToPlaylist(playlistId, path);
+    collectionsStore.addToPlaylist(playlistId, path);
 
   const removeFromPlaylist = (playlistId: string, path: string) =>
-    libraryStore.removeFromPlaylist(playlistId, path);
+    collectionsStore.removeFromPlaylist(playlistId, path);
 
   const addSongsToPlaylist = (playlistId: string, songPaths: string[]) =>
-    libraryStore.addSongsToPlaylist(playlistId, songPaths);
+    collectionsStore.addSongsToPlaylist(playlistId, songPaths);
 
   const reorderPlaylists = (from: number, to: number) =>
-    libraryStore.reorderPlaylists(from, to);
+    collectionsStore.reorderPlaylists(from, to);
 
   const getSongsFromPlaylist = (playlistId: string) =>
-    libraryStore.getSongsFromPlaylist(playlistId);
+    collectionsStore.getSongsFromPlaylist(playlistId);
 
   const viewPlaylist = (playlistId: string) => {
     navigationStore.viewPlaylist(playlistId);
@@ -54,7 +54,7 @@ export function useLibraryCollections() {
   };
 
   const isFavorite = (target: Song | string | null | undefined) =>
-    libraryStore.isFavoritePath(resolveSongPath(target));
+    collectionsStore.isFavoritePath(resolveSongPath(target));
 
   const toggleFavorite = (target: Song | string) => {
     const path = resolveSongPath(target);
@@ -62,19 +62,19 @@ export function useLibraryCollections() {
       return false;
     }
 
-    return libraryStore.toggleFavoritePath(path);
+    return collectionsStore.toggleFavoritePath(path);
   };
 
   const removeFavoritePaths = (paths: string[]) => {
-    libraryStore.removeFavoritePaths(paths);
+    collectionsStore.removeFavoritePaths(paths);
   };
 
   const clearFavorites = () => {
-    libraryStore.clearFavorites();
+    collectionsStore.clearFavorites();
   };
 
   const addToHistory = async (song: Song) => {
-    libraryStore.addRecentSong(song);
+    collectionsStore.addRecentSong(song);
     playerStorage.remove(LEGACY_PLAYER_HISTORY_KEY);
 
     historyApi.addToHistory(song.path).catch(error => {
@@ -87,7 +87,7 @@ export function useLibraryCollections() {
       return;
     }
 
-    libraryStore.removeRecentSongs(songPaths);
+    collectionsStore.removeRecentSongs(songPaths);
     playerStorage.remove(LEGACY_PLAYER_HISTORY_KEY);
 
     try {
@@ -98,7 +98,7 @@ export function useLibraryCollections() {
   };
 
   const clearHistory = async () => {
-    libraryStore.clearRecentSongs();
+    collectionsStore.clearRecentSongs();
     playerStorage.remove(LEGACY_PLAYER_HISTORY_KEY);
 
     try {
@@ -114,7 +114,7 @@ export function useLibraryCollections() {
   };
 
   return {
-    ...libraryRefs,
+    ...collectionsRefs,
     showAddToPlaylistModal: State.showAddToPlaylistModal,
     playlistAddTargetSongs: State.playlistAddTargetSongs,
     createPlaylist,

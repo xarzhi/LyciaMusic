@@ -14,6 +14,7 @@ import {
   type LocalSortMode,
   type PlaylistSortMode,
 } from '../services/storage/playerStorage';
+import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { mergeAppSettings, useSettingsStore } from '../stores/settings';
 import type { AppSettings } from '../types';
@@ -193,10 +194,12 @@ export const createPlayerLifecycle = ({
   lastSongPathKey,
   legacyLastSongKey,
 }: CreatePlayerLifecycleDeps) => {
+  const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
   const settingsStore = useSettingsStore();
   const { settings } = storeToRefs(settingsStore);
   const { songList, watchedFolders } = storeToRefs(libraryStore);
+  const { favoritePaths, playlists } = storeToRefs(collectionsStore);
 
   onMounted(async () => {
     await bootstrapLibrary();
@@ -259,8 +262,8 @@ export const createPlayerLifecycle = ({
       [
         () => songList.value.map(song => song.path),
         watchedFolders,
-        State.favoritePaths,
-        State.playlists,
+        favoritePaths,
+        playlists,
         settings,
         () => State.playQueue.value.map(song => song.path),
         State.artistCustomOrder,
@@ -339,9 +342,11 @@ export const createPlayerLifecycle = ({
         playerStorage.readStringArray(playerStorageKeys.watchedFolders) ?? [],
       );
 
-      State.favoritePaths.value = playerStorage.readStringArray(playerStorageKeys.favorites) ?? [];
+      collectionsStore.setFavoritePaths(
+        playerStorage.readStringArray(playerStorageKeys.favorites) ?? [],
+      );
 
-      State.playlists.value = playerStorage.readPlaylists();
+      collectionsStore.setPlaylists(playerStorage.readPlaylists());
 
       restoreSortSettings();
       restoreAppSettings(settings.value, settingsStore.replaceSettings);

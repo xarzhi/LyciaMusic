@@ -2,6 +2,7 @@ import * as State from './playerState';
 import { storeToRefs } from 'pinia';
 
 import { fileApi } from '../services/tauri/fileApi';
+import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
 import { useSettingsStore } from '../stores/settings';
@@ -114,10 +115,12 @@ export const createPlayerFileManager = ({
   removeFromHistory,
   showToast,
 }: CreatePlayerFileManagerDeps) => {
+  const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
   const navigationStore = useNavigationStore();
   const settingsStore = useSettingsStore();
   const { folderTree, songList, watchedFolders } = storeToRefs(libraryStore);
+  const { favoritePaths, playlists } = storeToRefs(collectionsStore);
 
   const deleteFolder = async (path: string) => {
     await fileApi.deleteFolder(path);
@@ -277,16 +280,16 @@ export const createPlayerFileManager = ({
         State.currentSong.value.path = newPath;
       }
 
-      State.playlists.value.forEach(playlist => {
+      playlists.value.forEach(playlist => {
         const songIndex = playlist.songPaths.indexOf(oldPath);
         if (songIndex !== -1) {
           playlist.songPaths[songIndex] = newPath;
         }
       });
 
-      const favoriteIndex = State.favoritePaths.value.indexOf(oldPath);
+      const favoriteIndex = favoritePaths.value.indexOf(oldPath);
       if (favoriteIndex !== -1) {
-        State.favoritePaths.value[favoriteIndex] = newPath;
+        favoritePaths.value[favoriteIndex] = newPath;
       }
 
       return true;
@@ -304,9 +307,9 @@ export const createPlayerFileManager = ({
     try {
       await fileApi.deleteMusicFile(song.path);
       songList.value = songList.value.filter(item => item.path !== song.path);
-      State.favoritePaths.value = State.favoritePaths.value.filter(path => path !== song.path);
+      favoritePaths.value = favoritePaths.value.filter(path => path !== song.path);
       await removeFromHistory([song.path]);
-      State.playlists.value.forEach(playlist => {
+      playlists.value.forEach(playlist => {
         playlist.songPaths = playlist.songPaths.filter(path => path !== song.path);
       });
     } catch (error) {

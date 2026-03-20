@@ -3,6 +3,7 @@ import { storeToRefs } from 'pinia';
 
 import * as State from './playerState';
 import { playbackApi } from '../services/tauri/playbackApi';
+import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
 
@@ -15,10 +16,12 @@ export const createPlayerUiShell = ({
   addFolder,
   removeFromHistory,
 }: CreatePlayerUiShellDeps) => {
+  const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
   const navigationStore = useNavigationStore();
   const { currentViewMode } = storeToRefs(navigationStore);
   const { songList } = storeToRefs(libraryStore);
+  const { favoritePaths } = storeToRefs(collectionsStore);
 
   const handleVolume = async (event: Event) => {
     const volume = parseInt((event.target as HTMLInputElement).value, 10);
@@ -60,7 +63,7 @@ export const createPlayerUiShell = ({
     }
 
     if (currentViewMode.value === 'favorites') {
-      State.favoritePaths.value = State.favoritePaths.value.filter(path => path !== song.path);
+      favoritePaths.value = favoritePaths.value.filter(path => path !== song.path);
       return;
     }
 

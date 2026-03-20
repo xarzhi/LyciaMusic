@@ -27,6 +27,7 @@ import {
 import type { ScanLibraryOptions } from './playerLibraryScan';
 import { compareByAlphabetIndex, sortItemsByAlphabetIndex } from '../utils/alphabetIndex';
 import { playerStorage } from '../services/storage/playerStorage';
+import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
 
@@ -182,10 +183,13 @@ function createPlayerService() {
 
   const { loadLyrics } = useLyrics();
   const { settings: appSettings } = useAppSettings();
+  const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
   const navigationStore = useNavigationStore();
+  const collectionsRefs = storeToRefs(collectionsStore);
   const libraryRefs = storeToRefs(libraryStore);
   const navigationRefs = storeToRefs(navigationStore);
+  const { favoritePaths, playlists, recentSongs } = collectionsRefs;
   const {
     songList,
     librarySongs,
@@ -830,7 +834,7 @@ function createPlayerService() {
 
   });
 
-  const favoriteSongList = computed(() => { return librarySongs.value.filter(s => State.favoritePaths.value.includes(s.path)); });
+  const favoriteSongList = computed(() => { return librarySongs.value.filter(s => favoritePaths.value.includes(s.path)); });
 
   const favArtistList = computed(() => {
     const map = new Map<string, { count: number; firstSongPath: string }>();
@@ -864,7 +868,7 @@ function createPlayerService() {
 
   const recentAlbumList = computed(() => {
     const map = new Map<string, { key: string; name: string; artist: string; playedAt: number; firstSongPath: string }>();
-    State.recentSongs.value.forEach(item => {
+    recentSongs.value.forEach(item => {
       const key = getSongAlbumKey(item.song);
       if (!map.has(key) || item.playedAt > map.get(key)!.playedAt) {
         map.set(key, {
@@ -879,7 +883,7 @@ function createPlayerService() {
     return Array.from(map.values()).sort((a, b) => b.playedAt - a.playedAt);
   });
 
-  const recentPlaylistList = computed(() => { const result: { id: string, name: string, count: number, playedAt: number, firstSongPath: string }[] = []; State.playlists.value.forEach(pl => { let lastPlayedTime = 0; let hasPlayed = false; const plSongPaths = new Set(pl.songPaths); for (const historyItem of State.recentSongs.value) { if (plSongPaths.has(historyItem.song.path)) { if (historyItem.playedAt > lastPlayedTime) { lastPlayedTime = historyItem.playedAt; hasPlayed = true; } } } if (hasPlayed) { result.push({ id: pl.id, name: pl.name, count: pl.songPaths.length, playedAt: lastPlayedTime, firstSongPath: pl.songPaths.length > 0 ? pl.songPaths[0] : '' }); } }); return result.sort((a, b) => b.playedAt - a.playedAt); });
+  const recentPlaylistList = computed(() => { const result: { id: string, name: string, count: number, playedAt: number, firstSongPath: string }[] = []; playlists.value.forEach(pl => { let lastPlayedTime = 0; let hasPlayed = false; const plSongPaths = new Set(pl.songPaths); for (const historyItem of recentSongs.value) { if (plSongPaths.has(historyItem.song.path)) { if (historyItem.playedAt > lastPlayedTime) { lastPlayedTime = historyItem.playedAt; hasPlayed = true; } } } if (hasPlayed) { result.push({ id: pl.id, name: pl.name, count: pl.songPaths.length, playedAt: lastPlayedTime, firstSongPath: pl.songPaths.length > 0 ? pl.songPaths[0] : '' }); } }); return result.sort((a, b) => b.playedAt - a.playedAt); });
 
 
 
@@ -927,7 +931,7 @@ function createPlayerService() {
 
       if (currentViewMode.value === 'favorites') return favoriteSongList.value.filter(s => s.name.toLowerCase().includes(q) || getSongArtistSearchText(s).includes(q));
 
-      if (currentViewMode.value === 'recent') return State.recentSongs.value.map(h => h.song).filter(s => s.name.toLowerCase().includes(q));
+      if (currentViewMode.value === 'recent') return recentSongs.value.map(h => h.song).filter(s => s.name.toLowerCase().includes(q));
 
       if (currentViewMode.value === 'all') {
         return sortItemsByAlphabetIndex(
@@ -1025,7 +1029,7 @@ function createPlayerService() {
 
 
     if (currentViewMode.value === 'recent') {
-      let songs = State.recentSongs.value.map(h => h.song);
+      let songs = recentSongs.value.map(h => h.song);
 
       // 馃煝 搴旂敤鎺掑簭 (涓庢湰鍦伴煶涔愬叡浜ā锟?
       if (State.localSortMode.value === 'title') {
@@ -1068,7 +1072,7 @@ function createPlayerService() {
     }
 
     if (currentViewMode.value === 'playlist') {
-      const pl = State.playlists.value.find(p => p.id === filterCondition.value);
+      const pl = playlists.value.find(p => p.id === filterCondition.value);
       if (!pl) return [];
 
       const songMap = new Map();
@@ -1311,6 +1315,7 @@ function createPlayerService() {
 
   return {
     ...State,
+    ...collectionsRefs,
     ...libraryRefs,
     ...navigationRefs,
     settings: appSettings,
@@ -1342,7 +1347,7 @@ function createPlayerService() {
     // Mini 妯″紡
     isMiniMode: State.isMiniMode,
     reorderWatchedFolders: (from: number, to: number) => libraryStore.reorderWatchedFolders(from, to),
-    reorderPlaylists: (from: number, to: number) => libraryStore.reorderPlaylists(from, to),
+    reorderPlaylists: (from: number, to: number) => collectionsStore.reorderPlaylists(from, to),
     updateArtistOrder: (newOrder: string[]) => {
       State.artistCustomOrder.value = newOrder;
       if (State.artistSortMode.value !== 'custom') State.artistSortMode.value = 'custom';

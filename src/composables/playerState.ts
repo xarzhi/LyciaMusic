@@ -2,6 +2,7 @@ import { ref, reactive } from 'vue';
 import type { Ref } from 'vue';
 
 import { Song, Playlist, HistoryItem } from '../types';
+import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 
 export type { Song, Playlist, HistoryItem };
@@ -83,9 +84,6 @@ export const currentSong = ref<Song | null>(null);
 export const currentCover = ref<string>('');
 export const dominantColors = ref<string[]>(['transparent', 'transparent', 'transparent', 'transparent']);
 export const playlistCover = ref<string>('');
-export const favoritePaths = ref<string[]>([]);
-export const playlists = ref<Playlist[]>([]);
-export const recentSongs = ref<HistoryItem[]>([]);
 const createLibraryStoreBridgeRef = <T>(getter: () => T, setter: (value: T) => void): Ref<T> =>
   ({
     __v_isRef: true,
@@ -96,6 +94,32 @@ const createLibraryStoreBridgeRef = <T>(getter: () => T, setter: (value: T) => v
       setter(nextValue);
     },
   }) as unknown as Ref<T>;
+
+const createCollectionsStoreBridgeRef = <T>(getter: () => T, setter: (value: T) => void): Ref<T> =>
+  ({
+    __v_isRef: true,
+    get value() {
+      return getter();
+    },
+    set value(nextValue: T) {
+      setter(nextValue);
+    },
+  }) as unknown as Ref<T>;
+
+export const favoritePaths = createCollectionsStoreBridgeRef(
+  () => useCollectionsStore().favoritePaths,
+  value => useCollectionsStore().setFavoritePaths(value),
+);
+
+export const playlists = createCollectionsStoreBridgeRef(
+  () => useCollectionsStore().playlists,
+  value => useCollectionsStore().setPlaylists(value),
+);
+
+export const recentSongs = createCollectionsStoreBridgeRef(
+  () => useCollectionsStore().recentSongs,
+  value => useCollectionsStore().setRecentSongs(value),
+);
 
 export const lastLibraryScanError = createLibraryStoreBridgeRef(
   () => useLibraryStore().lastLibraryScanError,

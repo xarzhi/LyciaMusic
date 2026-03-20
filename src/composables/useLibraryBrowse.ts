@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia';
 import * as State from './playerState';
 import type { Song, Playlist } from './playerState';
 import { compareByAlphabetIndex } from '../utils/alphabetIndex';
+import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
 
@@ -49,6 +50,7 @@ const getSongAlbumKey = (song: Song) =>
   song.album_key || `${song.album || 'Unknown'}::${song.album_artist || song.artist || 'Unknown'}`;
 
 export function useLibraryBrowse() {
+  const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
   const navigationStore = useNavigationStore();
   const {
@@ -65,6 +67,7 @@ export function useLibraryBrowse() {
     folderTree,
     watchedFolders,
   } = storeToRefs(libraryStore);
+  const { favoritePaths, playlists, recentSongs } = storeToRefs(collectionsStore);
 
   const artistList = computed<ArtistListItem[]>(() => {
     const map = new Map<string, { count: number; firstSongPath: string }>();
@@ -184,7 +187,7 @@ export function useLibraryBrowse() {
   );
 
   const favoriteSongList = computed(() =>
-    librarySongs.value.filter(song => State.favoritePaths.value.includes(song.path)),
+    librarySongs.value.filter(song => favoritePaths.value.includes(song.path)),
   );
 
   const favArtistList = computed(() => {
@@ -236,12 +239,12 @@ export function useLibraryBrowse() {
   const recentPlaylistList = computed(() => {
     const result: { id: string; name: string; count: number; playedAt: number; firstSongPath: string }[] = [];
 
-    State.playlists.value.forEach((playlist: Playlist) => {
+    playlists.value.forEach((playlist: Playlist) => {
       let lastPlayedTime = 0;
       let hasPlayed = false;
       const playlistSongPaths = new Set(playlist.songPaths);
 
-      for (const historyItem of State.recentSongs.value) {
+      for (const historyItem of recentSongs.value) {
         if (!playlistSongPaths.has(historyItem.song.path)) {
           continue;
         }

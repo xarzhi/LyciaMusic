@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import * as State from './playerState';
 import { playerStorage } from '../services/storage/playerStorage';
+import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 
 interface RecentHistoryRecord {
@@ -44,6 +45,7 @@ export const createPlayerRestore = ({
   readStoredStringArray,
   loadLibrarySongsFromCache,
 }: CreatePlayerRestoreDeps) => {
+  const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
 
   const restoreRecentHistory = async () => {
@@ -54,14 +56,14 @@ export const createPlayerRestore = ({
       const records = await invoke<RecentHistoryRecord[]>('get_recent_history', { limit: 1000 });
       if (records.length > 0) {
         const lookup = createSongLookup(legacyHistorySongs);
-        State.recentSongs.value = records
+        collectionsStore.setRecentSongs(records
           .map(record => {
             const song = lookup.get(record.songPath);
             return song ? { song, playedAt: record.playedAt } : null;
           })
-          .filter((item): item is State.HistoryItem => !!item);
+          .filter((item): item is State.HistoryItem => !!item));
 
-        if (State.recentSongs.value.length > 0) {
+        if (collectionsStore.recentSongs.length > 0) {
           playerStorage.remove(keys.legacyPlayerHistory);
           return;
         }
@@ -71,15 +73,15 @@ export const createPlayerRestore = ({
     }
 
     if (legacyHistory.length === 0) {
-      State.recentSongs.value = [];
+      collectionsStore.setRecentSongs([]);
       return;
     }
 
     const lookup = createSongLookup(legacyHistorySongs);
-    State.recentSongs.value = legacyHistory.map(item => ({
+    collectionsStore.setRecentSongs(legacyHistory.map(item => ({
       song: lookup.get(item.song.path) ?? item.song,
       playedAt: item.playedAt,
-    }));
+    })));
 
     const importedEntries: RecentHistoryImportRecord[] = legacyHistory.map(item => ({
       songPath: item.song.path,

@@ -2,7 +2,6 @@ import { ref } from 'vue';
 import { defineStore } from 'pinia';
 
 import type { Song, LibraryFolder, FolderNode, LibraryScanProgress, LibraryScanSession } from '../composables/playerState';
-import { useCollectionsStore } from './collections';
 
 export const useLibraryStore = defineStore('library', () => {
   const songList = ref<Song[]>([]);
@@ -14,7 +13,6 @@ export const useLibraryStore = defineStore('library', () => {
   const libraryScanSession = ref<LibraryScanSession | null>(null);
   const lastLibraryScanError = ref<string | null>(null);
   const watchedFolders = ref<string[]>([]);
-  const collectionsStore = useCollectionsStore();
 
   const setSongList = (songs: Song[]) => {
     songList.value = songs;
@@ -73,9 +71,6 @@ export const useLibraryStore = defineStore('library', () => {
     libraryScanSession,
     lastLibraryScanError,
     watchedFolders,
-    favoritePaths: collectionsStore.favoritePaths,
-    playlists: collectionsStore.playlists,
-    recentSongs: collectionsStore.recentSongs,
     setSongList,
     setLibrarySongs,
     setLibraryFolders,
@@ -85,21 +80,6 @@ export const useLibraryStore = defineStore('library', () => {
     setLibraryScanSession,
     setLastLibraryScanError,
     setWatchedFolders,
-    createPlaylist: collectionsStore.createPlaylist,
-    deletePlaylist: collectionsStore.deletePlaylist,
-    getPlaylistById: collectionsStore.getPlaylistById,
-    addToPlaylist: collectionsStore.addToPlaylist,
-    removeFromPlaylist: collectionsStore.removeFromPlaylist,
-    addSongsToPlaylist: collectionsStore.addSongsToPlaylist,
-    isFavoritePath: collectionsStore.isFavoritePath,
-    toggleFavoritePath: collectionsStore.toggleFavoritePath,
-    removeFavoritePaths: collectionsStore.removeFavoritePaths,
-    clearFavorites: collectionsStore.clearFavorites,
-    addRecentSong: collectionsStore.addRecentSong,
-    removeRecentSongs: collectionsStore.removeRecentSongs,
-    clearRecentSongs: collectionsStore.clearRecentSongs,
     reorderWatchedFolders,
-    reorderPlaylists: collectionsStore.reorderPlaylists,
-    getSongsFromPlaylist: collectionsStore.getSongsFromPlaylist,
   };
 });

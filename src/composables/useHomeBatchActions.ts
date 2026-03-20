@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
 import { ref, type Ref } from 'vue';
+import { fileApi } from '../services/tauri/fileApi';
 import type { Playlist, Song } from '../types';
 
 interface ConfirmOptions {
@@ -85,7 +85,7 @@ export function useHomeBatchActions({
 
     for (const path of paths) {
       try {
-        await invoke('delete_music_file', { path });
+        await fileApi.deleteMusicFile(path);
         deletedPaths.add(path);
       } catch (error) {
         console.error('Failed to delete song from disk:', path, error);

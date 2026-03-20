@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
 import { useToast } from '../../composables/toast';
+import { libraryApi } from '../../services/tauri/libraryApi';
 
 const toast = useToast();
 
@@ -26,8 +26,7 @@ const handleRefresh = async () => {
   
   isRefreshing.value = true;
   try {
-    // 调用后端刷新指定文件夹
-    await invoke('refresh_folder_songs', { folderPath: props.targetPath });
+    await libraryApi.refreshFolderSongs(props.targetPath);
     toast.showToast('歌曲信息已刷新', 'success');
     refreshed.value = true;
   } catch (e) {

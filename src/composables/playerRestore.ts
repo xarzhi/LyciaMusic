@@ -1,19 +1,10 @@
-import { invoke } from '@tauri-apps/api/core';
 import * as State from './playerState';
 import { playerStorage } from '../services/storage/playerStorage';
+import { historyApi } from '../services/tauri/historyApi';
+import { playbackApi } from '../services/tauri/playbackApi';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { usePlaybackStore } from '../stores/playback';
-
-interface RecentHistoryRecord {
-  songPath: string;
-  playedAt: number;
-}
-
-interface RecentHistoryImportRecord {
-  songPath: string;
-  playedAt: number;
-}
 
 interface PlayerRestoreKeys {
   playerPlaylistPaths: string;
@@ -55,7 +46,7 @@ export const createPlayerRestore = ({
     const legacyHistorySongs = legacyHistory.map(item => item.song);
 
     try {
-      const records = await invoke<RecentHistoryRecord[]>('get_recent_history', { limit: 1000 });
+      const records = await historyApi.getRecentHistory(1000);
       if (records.length > 0) {
         const lookup = createSongLookup(legacyHistorySongs);
         collectionsStore.setRecentSongs(records
@@ -85,13 +76,13 @@ export const createPlayerRestore = ({
       playedAt: item.playedAt,
     })));
 
-    const importedEntries: RecentHistoryImportRecord[] = legacyHistory.map(item => ({
+    const importedEntries = legacyHistory.map(item => ({
       songPath: item.song.path,
       playedAt: Math.floor(item.playedAt / 1000),
     }));
 
     try {
-      await invoke('import_recent_history', { entries: importedEntries });
+      await historyApi.importRecentHistory(importedEntries);
       playerStorage.remove(keys.legacyPlayerHistory);
     } catch (error) {
       console.warn('import_recent_history failed:', error);
@@ -128,7 +119,7 @@ export const createPlayerRestore = ({
     }
 
     if (playbackStore.currentSong?.path) {
-      invoke<string>('get_song_cover', { path: playbackStore.currentSong.path })
+      playbackApi.getSongCover(playbackStore.currentSong.path)
         .then(cover => {
           playbackStore.currentCover = cover;
         })

@@ -4,7 +4,9 @@ import { listen } from '@tauri-apps/api/event';
 import { useSettings } from '../../composables/settings';
 import { usePlayer } from '../../composables/player';
 import { useToast } from '../../composables/toast';
-import { invoke } from '@tauri-apps/api/core';
+import { appApi } from '../../services/tauri/appApi';
+import type { AudioDevice, AudioOutputStatus } from '../../services/tauri/contracts';
+import { playbackApi } from '../../services/tauri/playbackApi';
 import ConfirmModal from '../overlays/ConfirmModal.vue';
 
 const OUTPUT_DEVICE_KEY = 'player_output_device';
@@ -21,17 +23,6 @@ const { showToast } = useToast();
 const launchOnStartup = ref(false);
 const gpuAcceleration = ref(true);
 const autoPlay = ref(true);
-
-interface AudioDevice {
-  id: string;
-  name: string;
-}
-
-interface AudioOutputStatus {
-  selected_device_id: string | null;
-  active_device_name: string | null;
-  follows_system_default: boolean;
-}
 
 const outputDevices = ref<AudioDevice[]>([]);
 const selectedDeviceId = ref<string | null>(null);
@@ -104,7 +95,7 @@ const handleClearAllData = async () => {
 
   try {
     await pauseSong().catch(() => {});
-    await invoke('clear_all_app_data');
+    await appApi.clearAllAppData();
     localStorage.clear();
     sessionStorage.clear();
     window.location.reload();
@@ -124,7 +115,7 @@ const applyOutputStatus = (status: AudioOutputStatus) => {
 
 const fetchDevices = async () => {
   try {
-    const devices = await invoke<AudioDevice[]>('get_output_devices');
+    const devices = await playbackApi.getOutputDevices();
     outputDevices.value = devices;
   } catch (error) {
     console.error('Failed to get devices:', error);
@@ -133,7 +124,7 @@ const fetchDevices = async () => {
 
 const fetchCurrentOutputStatus = async () => {
   try {
-    const status = await invoke<AudioOutputStatus>('get_current_output_device');
+    const status = await playbackApi.getCurrentOutputDevice();
     applyOutputStatus(status);
   } catch (error) {
     console.error('Failed to get current output device:', error);
@@ -142,7 +133,7 @@ const fetchCurrentOutputStatus = async () => {
 
 const selectSystemDefaultDevice = async () => {
   try {
-    await invoke('set_output_device', { deviceId: null });
+    await playbackApi.setOutputDevice(null);
     localStorage.removeItem(OUTPUT_DEVICE_KEY);
     localStorage.setItem(OUTPUT_DEVICE_MODE_KEY, 'default');
     showDeviceMenu.value = false;
@@ -154,7 +145,7 @@ const selectSystemDefaultDevice = async () => {
 
 const selectDevice = async (device: AudioDevice) => {
   try {
-    await invoke('set_output_device', { deviceId: device.id });
+    await playbackApi.setOutputDevice(device.id);
     localStorage.setItem(OUTPUT_DEVICE_KEY, device.id);
     localStorage.setItem(OUTPUT_DEVICE_MODE_KEY, 'manual');
     showDeviceMenu.value = false;

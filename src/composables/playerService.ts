@@ -1,5 +1,4 @@
 ﻿import { computed, watch } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
 import { storeToRefs } from 'pinia';
 import { open } from '@tauri-apps/plugin-dialog';
 import * as State from './playerState';
@@ -33,6 +32,7 @@ import {
 import type { ScanLibraryOptions } from './playerLibraryScan';
 import { compareByAlphabetIndex, sortItemsByAlphabetIndex } from '../utils/alphabetIndex';
 import { playerStorage } from '../services/storage/playerStorage';
+import { playbackApi } from '../services/tauri/playbackApi';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
@@ -1155,7 +1155,7 @@ function createPlayerService() {
 
     if (currentViewMode.value === 'favorites' && (favTab.value === 'artists' || favTab.value === 'albums') && !favDetailFilter.value) return;
 
-    if (newList.length > 0) { try { const cover = await invoke<string>('get_song_cover', { path: newList[0].path }); playlistCover.value = cover; } catch { playlistCover.value = ''; } } else { playlistCover.value = ''; }
+    if (newList.length > 0) { try { const cover = await playbackApi.getSongCover(newList[0].path); playlistCover.value = cover; } catch { playlistCover.value = ''; } } else { playlistCover.value = ''; }
 
   }, { immediate: true });
 

@@ -2,19 +2,19 @@ import type { Song } from '../../types';
 import { tauriInvoke } from './invoke';
 
 export const fileApi = {
-  deleteFolder: (path: string) => tauriInvoke<void>('delete_folder', { path }),
+  deleteFolder: (path: string): Promise<void> => tauriInvoke('delete_folder', { path }),
   moveFileToFolder: (sourcePath: string, targetFolder: string) =>
-    tauriInvoke<void>('move_file_to_folder', { sourcePath, targetFolder }),
+    tauriInvoke('move_file_to_folder', { sourcePath, targetFolder }),
   batchMoveMusicFiles: (paths: string[], targetFolder: string) =>
-    tauriInvoke<number>('batch_move_music_files', { paths, targetFolder }),
+    tauriInvoke('batch_move_music_files', { paths, targetFolder }),
   getFolderFirstSong: (folderPath: string) =>
-    tauriInvoke<string | null>('get_folder_first_song', { folderPath }),
+    tauriInvoke('get_folder_first_song', { folderPath }),
   scanMusicFolder: (folderPath: string) =>
-    tauriInvoke<Song[]>('scan_music_folder', { folderPath }),
+    tauriInvoke('scan_music_folder', { folderPath }),
   moveMusicFile: (oldPath: string, newPath: string) =>
-    tauriInvoke<void>('move_music_file', { oldPath, newPath }),
-  showInFolder: (path: string) => tauriInvoke<void>('show_in_folder', { path }),
-  deleteMusicFile: (path: string) => tauriInvoke<void>('delete_music_file', { path }),
-  isDirectory: (path: string) => tauriInvoke<boolean>('is_directory', { path }),
-  parseAudioFiles: (paths: string[]) => tauriInvoke<Song[]>('parse_audio_files', { paths }),
+    tauriInvoke('move_music_file', { oldPath, newPath }),
+  showInFolder: (path: string): Promise<void> => tauriInvoke('show_in_folder', { path }),
+  deleteMusicFile: (path: string): Promise<void> => tauriInvoke('delete_music_file', { path }),
+  isDirectory: (path: string): Promise<boolean> => tauriInvoke('is_directory', { path }),
+  parseAudioFiles: (paths: string[]): Promise<Song[]> => tauriInvoke('parse_audio_files', { paths }),
 };

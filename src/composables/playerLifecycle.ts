@@ -1,4 +1,4 @@
-import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { onMounted, onScopeDispose, watch } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -14,6 +14,7 @@ import {
   type LocalSortMode,
   type PlaylistSortMode,
 } from '../services/storage/playerStorage';
+import { playbackApi } from '../services/tauri/playbackApi';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { usePlaybackStore } from '../stores/playback';
@@ -65,13 +66,13 @@ const restoreOutputDevice = async () => {
   const storedOutputMode = playerStorage.getString(playerStorageKeys.outputDeviceMode);
 
   if ((storedOutputMode === 'manual' || (!storedOutputMode && storedOutputDevice)) && storedOutputDevice) {
-    await invoke('set_output_device', { deviceId: storedOutputDevice }).catch(error => {
+    await playbackApi.setOutputDevice(storedOutputDevice).catch(error => {
       console.warn('Failed to restore output device:', error);
     });
     return;
   }
 
-  await invoke('set_output_device', { deviceId: null }).catch(error => {
+  await playbackApi.setOutputDevice(null).catch(error => {
     console.warn('Failed to restore default output device mode:', error);
   });
 };
@@ -347,7 +348,7 @@ export const createPlayerLifecycle = ({
       const storedVolume = playerStorage.readNumber(playerStorageKeys.volume);
       if (storedVolume !== null) {
         volume.value = storedVolume;
-        await invoke('set_volume', { volume: volume.value / 100 });
+        await playbackApi.setVolume(volume.value / 100);
       }
 
       await restoreOutputDevice();

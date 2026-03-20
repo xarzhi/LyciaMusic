@@ -1,28 +1,24 @@
 import { tauriInvoke } from './invoke';
-
-interface PlayAudioOptions {
-  path: string;
-  title: string;
-  artist: string;
-  album: string;
-  cover: string;
-  duration: number;
-}
-
-interface SeekAudioOptions {
-  time: number;
-  isPlaying: boolean;
-  requestId: number;
-}
+import type {
+  AudioDevice,
+  AudioOutputStatus,
+  PlayAudioOptions,
+  SeekAudioOptions,
+} from './contracts';
 
 export const playbackApi = {
-  setVolume: (volume: number) => tauriInvoke<void>('set_volume', { volume }),
-  getPlaybackProgress: () => tauriInvoke<number>('get_playback_progress'),
+  setVolume: (volume: number): Promise<void> => tauriInvoke('set_volume', { volume }),
+  getPlaybackProgress: (): Promise<number> => tauriInvoke('get_playback_progress'),
   recordPlay: (songPath: string, duration: number) =>
-    tauriInvoke<void>('record_play', { songPath, duration }),
-  getSongCover: (path: string) => tauriInvoke<string>('get_song_cover', { path }),
-  playAudio: (options: PlayAudioOptions) => tauriInvoke<void>('play_audio', options),
-  pauseAudio: () => tauriInvoke<void>('pause_audio'),
-  resumeAudio: () => tauriInvoke<void>('resume_audio'),
-  seekAudio: (options: SeekAudioOptions) => tauriInvoke<void>('seek_audio', options),
+    tauriInvoke('record_play', { songPath, duration }),
+  getSongCover: (path: string): Promise<string> => tauriInvoke('get_song_cover', { path }),
+  playAudio: (options: PlayAudioOptions): Promise<void> => tauriInvoke('play_audio', options),
+  pauseAudio: (): Promise<void> => tauriInvoke('pause_audio'),
+  resumeAudio: (): Promise<void> => tauriInvoke('resume_audio'),
+  seekAudio: (options: SeekAudioOptions): Promise<void> => tauriInvoke('seek_audio', options),
+  setOutputDevice: (deviceId: string | null) =>
+    tauriInvoke('set_output_device', { deviceId }),
+  getOutputDevices: (): Promise<AudioDevice[]> => tauriInvoke('get_output_devices'),
+  getCurrentOutputDevice: (): Promise<AudioOutputStatus> =>
+    tauriInvoke('get_current_output_device'),
 };

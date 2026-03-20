@@ -1,8 +1,9 @@
-import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { storeToRefs } from 'pinia';
 
 import * as State from './playerState';
+import { fileApi } from '../services/tauri/fileApi';
+import { libraryApi } from '../services/tauri/libraryApi';
 import { useLibraryStore } from '../stores/library';
 
 interface FolderTreeSettings {
@@ -76,7 +77,7 @@ export const createPlayerFolderTree = ({
   const fetchFolderTree = async () => {
     try {
       const expandedPaths = collectExpandedPaths(folderTree.value);
-      const tree = await invoke<State.FolderNode[]>('get_sidebar_hierarchy');
+      const tree = await libraryApi.getSidebarHierarchy();
       applyExpandedPaths(tree, expandedPaths);
       folderTree.value = tree;
     } catch (error) {
@@ -85,7 +86,7 @@ export const createPlayerFolderTree = ({
   };
 
   const createFolder = async (parentPath: string, folderName: string) => {
-    return invoke<string>('create_folder', { parentPath, folderName });
+    return libraryApi.createFolder(parentPath, folderName);
   };
 
   const addFolderTreeFolderLinked = async (
@@ -135,8 +136,8 @@ export const createPlayerFolderTree = ({
       }
 
       const shouldLinkToLibrary = appSettings.value.linkFoldersToLibrary;
-      await invoke('add_sidebar_folder', { path: selected });
-      await invoke('scan_music_folder', { folderPath: selected });
+      await libraryApi.addSidebarFolder(selected);
+      await fileApi.scanMusicFolder(selected);
       await fetchFolderTree();
 
       if (shouldLinkToLibrary) {
@@ -154,7 +155,7 @@ export const createPlayerFolderTree = ({
 
   const removeFolderTreeFolder = async (path: string) => {
     try {
-      await invoke('remove_sidebar_folder', { path });
+      await libraryApi.removeSidebarFolder(path);
       await fetchFolderTree();
       showToast('已从左侧文件夹树移除文件夹', 'success');
     } catch (error) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
 import { useToast } from '../../composables/toast';
+import { appApi } from '../../services/tauri/appApi';
 
 const toast = useToast();
 
@@ -54,10 +54,10 @@ const launchMusicTag = async () => {
   
   isLaunching.value = true;
   try {
-    await invoke('open_external_program', { 
-      path: musicTagPath.value,
-      args: props.targetPath ? [props.targetPath] : []
-    });
+    await appApi.openExternalProgram(
+      musicTagPath.value,
+      props.targetPath ? [props.targetPath] : [],
+    );
     toast.showToast('MusicTag 已启动', 'success');
   } catch (e) {
     console.error(e);

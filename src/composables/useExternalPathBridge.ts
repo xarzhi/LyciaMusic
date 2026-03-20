@@ -1,7 +1,7 @@
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { onMounted, onUnmounted, ref } from 'vue';
+import { appApi } from '../services/tauri/appApi';
 
 type ExternalPathSource = 'drop' | 'open';
 
@@ -28,7 +28,7 @@ export function useExternalPathBridge({ handleExternalPaths }: UseExternalPathBr
   };
 
   const consumePendingOpenPaths = async () => {
-    const paths = await invoke<string[]>('consume_pending_open_paths');
+    const paths = await appApi.consumePendingOpenPaths();
     if (paths.length > 0) {
       await enqueueExternalPaths(paths, 'open');
     }

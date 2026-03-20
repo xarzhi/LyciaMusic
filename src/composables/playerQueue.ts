@@ -1,6 +1,6 @@
-import { invoke } from '@tauri-apps/api/core';
 import { storeToRefs } from 'pinia';
 
+import { playbackApi } from '../services/tauri/playbackApi';
 import { useLibraryStore } from '../stores/library';
 import { usePlaybackStore } from '../stores/playback';
 import type { Song } from './playerState';
@@ -148,7 +148,7 @@ export const createPlayerQueue = ({
     resetShuffleState();
 
     if (isPlaying.value) {
-      await invoke('pause_audio');
+      await playbackApi.pauseAudio();
       isPlaying.value = false;
     }
 

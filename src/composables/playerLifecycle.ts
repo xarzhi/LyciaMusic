@@ -1,6 +1,8 @@
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { onMounted, onScopeDispose, watch } from 'vue';
+import { storeToRefs } from 'pinia';
+
 import * as State from './playerState';
 import { extractDominantColors } from './colorExtraction';
 import {
@@ -12,6 +14,8 @@ import {
   type LocalSortMode,
   type PlaylistSortMode,
 } from '../services/storage/playerStorage';
+import { mergeAppSettings, useSettingsStore } from '../stores/settings';
+import type { AppSettings } from '../types';
 
 interface SeekCompletedPayload {
   request_id: number;
@@ -115,14 +119,17 @@ const restoreSortSettings = () => {
   }
 };
 
-const restoreAppSettings = () => {
+const restoreAppSettings = (
+  currentSettings: AppSettings,
+  replaceSettings: (settings: AppSettings) => void,
+) => {
   const storedSettings = playerStorage.readSettings();
   if (!storedSettings) return;
 
   try {
-    const saved = storedSettings as Partial<typeof State.settings.value>;
+    const saved = storedSettings as Partial<typeof currentSettings>;
     if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
-    type SavedThemeShape = Partial<typeof State.settings.value.theme> & {
+    type SavedThemeShape = Partial<typeof currentSettings.theme> & {
       enableDynamicBg?: boolean;
       dynamicBgType?: string;
       windowMaterial?: string;
@@ -131,11 +138,11 @@ const restoreAppSettings = () => {
     const savedTheme =
       (saved.theme && typeof saved.theme === 'object' ? saved.theme : {}) as SavedThemeShape;
     const savedSidebar =
-      (saved.sidebar && typeof saved.sidebar === 'object' ? saved.sidebar : {}) as Partial<typeof State.settings.value.sidebar>;
+      (saved.sidebar && typeof saved.sidebar === 'object' ? saved.sidebar : {}) as Partial<typeof currentSettings.sidebar>;
     const savedCustomBackground =
       savedTheme.customBackground && typeof savedTheme.customBackground === 'object'
         ? savedTheme.customBackground
-        : {} as Partial<typeof State.settings.value.theme.customBackground>;
+        : {} as Partial<typeof currentSettings.theme.customBackground>;
 
     let dynamicBgType = savedTheme.dynamicBgType;
     if (dynamicBgType === undefined && savedTheme.enableDynamicBg !== undefined) {
@@ -144,30 +151,22 @@ const restoreAppSettings = () => {
 
     const savedWindowMaterial = typeof savedTheme.windowMaterial === 'string'
       && ['none', 'mica', 'acrylic'].includes(savedTheme.windowMaterial)
-      ? savedTheme.windowMaterial as typeof State.settings.value.theme.windowMaterial
-      : State.settings.value.theme.windowMaterial;
+      ? savedTheme.windowMaterial as typeof currentSettings.theme.windowMaterial
+      : currentSettings.theme.windowMaterial;
 
-    State.settings.value = {
-      ...State.settings.value,
+    replaceSettings(mergeAppSettings(currentSettings, {
       ...saved,
       theme: {
-        ...State.settings.value.theme,
         ...savedTheme,
         windowMaterial: savedWindowMaterial,
         dynamicBgType:
           savedWindowMaterial !== 'none'
             ? 'none'
-            : (dynamicBgType || State.settings.value.theme.dynamicBgType),
-        customBackground: {
-          ...State.settings.value.theme.customBackground,
-          ...savedCustomBackground,
-        },
+            : (dynamicBgType || currentSettings.theme.dynamicBgType),
+        customBackground: savedCustomBackground,
       },
-      sidebar: {
-        ...State.settings.value.sidebar,
-        ...savedSidebar,
-      },
-    };
+      sidebar: savedSidebar,
+    }));
   } catch (error) {
     console.error('Failed to parse settings:', error);
   }
@@ -193,6 +192,9 @@ export const createPlayerLifecycle = ({
   lastSongPathKey,
   legacyLastSongKey,
 }: CreatePlayerLifecycleDeps) => {
+  const settingsStore = useSettingsStore();
+  const { settings } = storeToRefs(settingsStore);
+
   onMounted(async () => {
     await bootstrapLibrary();
   });
@@ -256,7 +258,7 @@ export const createPlayerLifecycle = ({
         State.watchedFolders,
         State.favoritePaths,
         State.playlists,
-        State.settings,
+        settings,
         () => State.playQueue.value.map(song => song.path),
         State.artistCustomOrder,
         State.albumCustomOrder,
@@ -337,7 +339,7 @@ export const createPlayerLifecycle = ({
       State.playlists.value = playerStorage.readPlaylists();
 
       restoreSortSettings();
-      restoreAppSettings();
+      restoreAppSettings(settings.value, settingsStore.replaceSettings);
 
       await restorePathBackedState();
       await restoreRecentHistory();

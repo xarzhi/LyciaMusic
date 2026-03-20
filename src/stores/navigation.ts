@@ -1,5 +1,7 @@
+import { ref } from 'vue';
 import { defineStore } from 'pinia';
-import * as State from '../composables/playerState';
+
+import { useLibraryStore } from './library';
 
 export type NavigationViewMode =
   | 'all'
@@ -19,101 +21,123 @@ interface SwitchLocalTabOptions {
 }
 
 const resetViewFilter = (mode: NavigationViewMode, filter = '') => {
-  State.currentViewMode.value = mode;
-  State.filterCondition.value = filter;
-  State.searchQuery.value = '';
+  return {
+    currentViewMode: mode,
+    filterCondition: filter,
+    searchQuery: '',
+  };
 };
 
 export const useNavigationStore = defineStore('navigation', () => {
-  const switchToFolderView = (fallbackFolder?: string) => {
-    State.currentViewMode.value = 'folder';
-    State.searchQuery.value = '';
+  const libraryStore = useLibraryStore();
 
-    if (!State.currentFolderFilter.value) {
-      State.currentFolderFilter.value = fallbackFolder || State.watchedFolders.value[0] || '';
+  const currentViewMode = ref<NavigationViewMode>('all');
+  const filterCondition = ref('');
+  const searchQuery = ref('');
+  const localMusicTab = ref<'default' | 'artist' | 'album'>('default');
+  const currentArtistFilter = ref('');
+  const currentAlbumFilter = ref('');
+  const currentFolderFilter = ref('');
+  const favTab = ref<'songs' | 'artists' | 'albums'>('songs');
+  const favDetailFilter = ref<{ type: 'artist' | 'album'; name: string } | null>(null);
+  const recentTab = ref<'songs' | 'playlists' | 'albums'>('songs');
+  const activeRootPath = ref<string | null>(null);
+
+  const applyViewFilter = (mode: NavigationViewMode, filter = '') => {
+    const next = resetViewFilter(mode, filter);
+    currentViewMode.value = next.currentViewMode;
+    filterCondition.value = next.filterCondition;
+    searchQuery.value = next.searchQuery;
+  };
+
+  const switchToFolderView = (fallbackFolder?: string) => {
+    applyViewFilter('folder');
+
+    if (!currentFolderFilter.value) {
+      currentFolderFilter.value = fallbackFolder || libraryStore.watchedFolders[0] || '';
     }
   };
 
   const viewArtist = (name: string) => {
-    resetViewFilter('artist', name);
+    applyViewFilter('artist', name);
   };
 
   const viewAlbum = (name: string) => {
-    resetViewFilter('album', name);
+    applyViewFilter('album', name);
   };
 
   const viewGenre = (name: string) => {
-    resetViewFilter('genre', name);
+    applyViewFilter('genre', name);
   };
 
   const viewYear = (name: string) => {
-    resetViewFilter('year', name);
+    applyViewFilter('year', name);
   };
 
   const viewPlaylist = (id: string) => {
-    resetViewFilter('playlist', id);
+    applyViewFilter('playlist', id);
   };
 
   const switchViewToAll = () => {
-    resetViewFilter('all');
+    applyViewFilter('all');
   };
 
   const switchViewToFolder = (path: string) => {
-    resetViewFilter('folder', path);
+    applyViewFilter('folder', path);
   };
 
   const switchToRecent = () => {
-    State.currentViewMode.value = 'recent';
-    State.searchQuery.value = '';
+    currentViewMode.value = 'recent';
+    searchQuery.value = '';
   };
 
   const switchToFavorites = () => {
-    State.currentViewMode.value = 'favorites';
-    State.searchQuery.value = '';
+    currentViewMode.value = 'favorites';
+    searchQuery.value = '';
   };
 
   const switchToStatistics = () => {
-    State.currentViewMode.value = 'statistics';
-    State.searchQuery.value = '';
+    currentViewMode.value = 'statistics';
+    searchQuery.value = '';
   };
 
   const setSearch = (query: string) => {
-    State.searchQuery.value = query;
+    searchQuery.value = query;
   };
 
   const switchLocalTab = (
     tab: 'default' | 'artist' | 'album',
     options: SwitchLocalTabOptions = {},
   ) => {
-    State.localMusicTab.value = tab;
-    State.currentArtistFilter.value = '';
-    State.currentAlbumFilter.value = '';
+    localMusicTab.value = tab;
+    currentArtistFilter.value = '';
+    currentAlbumFilter.value = '';
 
     if (tab === 'artist') {
-      State.currentArtistFilter.value = options.firstArtistName || '';
+      currentArtistFilter.value = options.firstArtistName || '';
     }
 
     if (tab === 'album') {
-      State.currentAlbumFilter.value = options.firstAlbumKey || '';
+      currentAlbumFilter.value = options.firstAlbumKey || '';
     }
   };
 
   const switchFavTab = (tab: 'songs' | 'artists' | 'albums') => {
-    State.favTab.value = tab;
+    favTab.value = tab;
   };
 
   return {
-    currentViewMode: State.currentViewMode,
-    filterCondition: State.filterCondition,
-    searchQuery: State.searchQuery,
-    localMusicTab: State.localMusicTab,
-    currentArtistFilter: State.currentArtistFilter,
-    currentAlbumFilter: State.currentAlbumFilter,
-    currentFolderFilter: State.currentFolderFilter,
-    favTab: State.favTab,
-    favDetailFilter: State.favDetailFilter,
-    recentTab: State.recentTab,
-    activeRootPath: State.activeRootPath,
+    currentViewMode,
+    filterCondition,
+    searchQuery,
+    localMusicTab,
+    currentArtistFilter,
+    currentAlbumFilter,
+    currentFolderFilter,
+    favTab,
+    favDetailFilter,
+    recentTab,
+    activeRootPath,
     switchToFolderView,
     viewArtist,
     viewAlbum,

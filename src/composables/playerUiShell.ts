@@ -1,6 +1,9 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { storeToRefs } from 'pinia';
+
 import * as State from './playerState';
 import { playbackApi } from '../services/tauri/playbackApi';
+import { useNavigationStore } from '../stores/navigation';
 
 interface CreatePlayerUiShellDeps {
   addFolder: () => void | Promise<void>;
@@ -11,6 +14,9 @@ export const createPlayerUiShell = ({
   addFolder,
   removeFromHistory,
 }: CreatePlayerUiShellDeps) => {
+  const navigationStore = useNavigationStore();
+  const { currentViewMode } = storeToRefs(navigationStore);
+
   const handleVolume = async (event: Event) => {
     const volume = parseInt((event.target as HTMLInputElement).value, 10);
     State.volume.value = volume;
@@ -45,17 +51,17 @@ export const createPlayerUiShell = ({
   };
 
   const removeSongFromList = async (song: State.Song) => {
-    if (State.currentViewMode.value === 'all') {
+    if (currentViewMode.value === 'all') {
       State.songList.value = State.songList.value.filter(item => item.path !== song.path);
       return;
     }
 
-    if (State.currentViewMode.value === 'favorites') {
+    if (currentViewMode.value === 'favorites') {
       State.favoritePaths.value = State.favoritePaths.value.filter(path => path !== song.path);
       return;
     }
 
-    if (State.currentViewMode.value === 'recent') {
+    if (currentViewMode.value === 'recent') {
       await removeFromHistory([song.path]);
     }
   };

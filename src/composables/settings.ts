@@ -1,51 +1,50 @@
 import { watch } from 'vue';
-import { AUDIO_DELAY, settings, defaultAppSettings } from './playerState';
-import { playerStorage, playerStorageKeys } from '../services/storage/playerStorage';
+import { storeToRefs } from 'pinia';
 
-const migrateLegacySettings = () => {
+import { AUDIO_DELAY } from './playerState';
+import { playerStorage, playerStorageKeys } from '../services/storage/playerStorage';
+import {
+  defaultAppSettings,
+  mergeAppSettings,
+  useSettingsStore,
+} from '../stores/settings';
+
+let didMigrateLegacySettings = false;
+
+const migrateLegacySettings = (mergeSettings: (partialSettings: Partial<typeof defaultAppSettings>) => void) => {
+  if (didMigrateLegacySettings) {
+    return;
+  }
+
+  didMigrateLegacySettings = true;
   const legacyRaw = playerStorage.getString(playerStorageKeys.legacyAppSettings);
   if (!legacyRaw) return;
 
   try {
     const parsed = JSON.parse(legacyRaw) as Partial<typeof defaultAppSettings>;
-    settings.value = {
-      ...settings.value,
-      ...parsed,
-      theme: {
-        ...settings.value.theme,
-        ...(parsed.theme ?? {}),
-        customBackground: {
-          ...settings.value.theme.customBackground,
-          ...(parsed.theme?.customBackground ?? {}),
-        },
-      },
-      sidebar: {
-        ...settings.value.sidebar,
-        ...(parsed.sidebar ?? {}),
-      },
-    };
+    mergeSettings(parsed);
 
     if (!playerStorage.getString(playerStorageKeys.settings)) {
-      playerStorage.writeSettings(settings.value);
+      playerStorage.writeSettings(mergeAppSettings(defaultAppSettings, parsed));
     }
   } catch (error) {
     console.error('Failed to parse legacy app settings', error);
   }
 };
 
-migrateLegacySettings();
-AUDIO_DELAY.value = settings.value.lyricsSyncOffset;
-
-watch(
-  settings,
-  nextSettings => {
-    AUDIO_DELAY.value = nextSettings.lyricsSyncOffset;
-  },
-  { deep: true }
-);
-
 export function useSettings() {
+  const settingsStore = useSettingsStore();
+  const { settings, audioDelay } = storeToRefs(settingsStore);
+
+  migrateLegacySettings(settingsStore.patchSettings);
+  AUDIO_DELAY.value = audioDelay.value;
+
+  watch(audioDelay, nextAudioDelay => {
+    AUDIO_DELAY.value = nextAudioDelay;
+  }, { immediate: true });
+
   return {
     settings,
+    audioDelay,
   };
 }

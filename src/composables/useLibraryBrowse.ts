@@ -1,7 +1,10 @@
 import { computed } from 'vue';
+import { storeToRefs } from 'pinia';
+
 import * as State from './playerState';
 import type { Song, Playlist } from './playerState';
 import { compareByAlphabetIndex } from '../utils/alphabetIndex';
+import { useNavigationStore } from '../stores/navigation';
 
 export interface ArtistListItem {
   name: string;
@@ -45,6 +48,15 @@ const getSongAlbumKey = (song: Song) =>
   song.album_key || `${song.album || 'Unknown'}::${song.album_artist || song.artist || 'Unknown'}`;
 
 export function useLibraryBrowse() {
+  const navigationStore = useNavigationStore();
+  const {
+    searchQuery,
+    localMusicTab,
+    currentViewMode,
+    currentFolderFilter,
+    activeRootPath,
+  } = storeToRefs(navigationStore);
+
   const artistList = computed<ArtistListItem[]>(() => {
     const map = new Map<string, { count: number; firstSongPath: string }>();
 
@@ -129,7 +141,7 @@ export function useLibraryBrowse() {
   });
 
   const filteredArtistList = computed(() => {
-    const query = State.searchQuery.value.trim().toLowerCase();
+    const query = searchQuery.value.trim().toLowerCase();
     if (!query) {
       return artistList.value;
     }
@@ -138,7 +150,7 @@ export function useLibraryBrowse() {
   });
 
   const filteredAlbumList = computed(() => {
-    const query = State.searchQuery.value.trim().toLowerCase();
+    const query = searchQuery.value.trim().toLowerCase();
     if (!query) {
       return albumList.value;
     }
@@ -271,11 +283,11 @@ export function useLibraryBrowse() {
   };
 
   return {
-    searchQuery: State.searchQuery,
-    localMusicTab: State.localMusicTab,
-    currentViewMode: State.currentViewMode,
-    currentFolderFilter: State.currentFolderFilter,
-    activeRootPath: State.activeRootPath,
+    searchQuery,
+    localMusicTab,
+    currentViewMode,
+    currentFolderFilter,
+    activeRootPath,
     folderTree: State.folderTree,
     libraryFolders: State.libraryFolders,
     librarySongs: State.librarySongs,

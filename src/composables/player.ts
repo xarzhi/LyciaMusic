@@ -185,6 +185,18 @@ function createPlayerService() {
   const libraryRefs = storeToRefs(libraryStore);
   const navigationRefs = storeToRefs(navigationStore);
   const {
+    currentViewMode,
+    filterCondition,
+    searchQuery,
+    localMusicTab,
+    currentArtistFilter,
+    currentAlbumFilter,
+    currentFolderFilter,
+    favTab,
+    favDetailFilter,
+    activeRootPath,
+  } = navigationRefs;
+  const {
     applyLibraryScanBatch,
     flushBufferedLibraryScanBatch,
     refreshStateSongReferences,
@@ -315,9 +327,9 @@ function createPlayerService() {
 
   // Computed state.
 
-  const isLocalMusic = computed(() => State.currentViewMode.value === 'all' || State.currentViewMode.value === 'artist' || State.currentViewMode.value === 'album');
+  const isLocalMusic = computed(() => currentViewMode.value === 'all' || currentViewMode.value === 'artist' || currentViewMode.value === 'album');
 
-  const isFolderMode = computed(() => State.currentViewMode.value === 'folder');
+  const isFolderMode = computed(() => currentViewMode.value === 'folder');
 
 
 
@@ -749,13 +761,13 @@ function createPlayerService() {
   });
 
   const filteredArtistList = computed(() => {
-    const query = State.searchQuery.value.trim().toLowerCase();
+    const query = searchQuery.value.trim().toLowerCase();
     if (!query) return artistList.value;
     return artistList.value.filter(artist => (artist.name || '').toLowerCase().includes(query));
   });
 
   const filteredAlbumList = computed(() => {
-    const query = State.searchQuery.value.trim().toLowerCase();
+    const query = searchQuery.value.trim().toLowerCase();
     if (!query) return albumList.value;
     return albumList.value.filter(album =>
       (album.name || '').toLowerCase().includes(query) ||
@@ -909,15 +921,15 @@ function createPlayerService() {
 
   const displaySongList = computed(() => {
 
-    if (State.searchQuery.value.trim()) {
+    if (searchQuery.value.trim()) {
 
-      const q = State.searchQuery.value.toLowerCase();
+      const q = searchQuery.value.toLowerCase();
 
-      if (State.currentViewMode.value === 'favorites') return favoriteSongList.value.filter(s => s.name.toLowerCase().includes(q) || getSongArtistSearchText(s).includes(q));
+      if (currentViewMode.value === 'favorites') return favoriteSongList.value.filter(s => s.name.toLowerCase().includes(q) || getSongArtistSearchText(s).includes(q));
 
-      if (State.currentViewMode.value === 'recent') return State.recentSongs.value.map(h => h.song).filter(s => s.name.toLowerCase().includes(q));
+      if (currentViewMode.value === 'recent') return State.recentSongs.value.map(h => h.song).filter(s => s.name.toLowerCase().includes(q));
 
-      if (State.currentViewMode.value === 'all') {
+      if (currentViewMode.value === 'all') {
         return sortItemsByAlphabetIndex(
           librarySongs.value.filter(s =>
             s.name.toLowerCase().includes(q) ||
@@ -928,7 +940,7 @@ function createPlayerService() {
         );
       }
 
-      if (State.currentViewMode.value === 'folder') {
+      if (currentViewMode.value === 'folder') {
         return sortItemsByAlphabetIndex(
           State.songList.value.filter(s =>
             s.name.toLowerCase().includes(q) ||
@@ -944,12 +956,12 @@ function createPlayerService() {
 
     }
 
-    if (State.currentViewMode.value === 'all') {
+    if (currentViewMode.value === 'all') {
       let base = [...librarySongs.value];
-      if (State.localMusicTab.value === 'artist' && State.currentArtistFilter.value) {
-        base = base.filter(s => songHasArtist(s, State.currentArtistFilter.value));
-      } else if (State.localMusicTab.value === 'album' && State.currentAlbumFilter.value) {
-        base = base.filter(s => matchesAlbumKey(s, State.currentAlbumFilter.value));
+      if (localMusicTab.value === 'artist' && currentArtistFilter.value) {
+        base = base.filter(s => songHasArtist(s, currentArtistFilter.value));
+      } else if (localMusicTab.value === 'album' && currentAlbumFilter.value) {
+        base = base.filter(s => matchesAlbumKey(s, currentAlbumFilter.value));
       }
 
       // 馃煝 搴旂敤鏈湴闊充箰鎺掑簭
@@ -976,9 +988,9 @@ function createPlayerService() {
     }
 
     // ???????????????????????
-    if (State.currentViewMode.value === 'folder') {
-      if (State.currentFolderFilter.value) {
-        let songs = State.songList.value.filter(s => isDirectParent(State.currentFolderFilter.value, s.path));
+    if (currentViewMode.value === 'folder') {
+      if (currentFolderFilter.value) {
+        let songs = State.songList.value.filter(s => isDirectParent(currentFolderFilter.value, s.path));
 
         // 馃煝 娣诲姞鎺掑簭閫昏緫
         if (State.folderSortMode.value === 'title') {
@@ -993,7 +1005,7 @@ function createPlayerService() {
           songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
         } else if (State.folderSortMode.value === 'custom') {
           // 鑷畾涔夋帓锟?鎷栨嫿鍚庣殑椤哄簭)
-          const customOrder = State.folderCustomOrder.value[State.currentFolderFilter.value] || [];
+          const customOrder = State.folderCustomOrder.value[currentFolderFilter.value] || [];
           if (customOrder.length > 0) {
             const orderMap = new Map(customOrder.map((path, i) => [path, i]));
             songs.sort((a, b) => {
@@ -1012,7 +1024,7 @@ function createPlayerService() {
 
 
 
-    if (State.currentViewMode.value === 'recent') {
+    if (currentViewMode.value === 'recent') {
       let songs = State.recentSongs.value.map(h => h.song);
 
       // 馃煝 搴旂敤鎺掑簭 (涓庢湰鍦伴煶涔愬叡浜ā锟?
@@ -1029,14 +1041,14 @@ function createPlayerService() {
       return songs;
     }
 
-    if (State.currentViewMode.value === 'favorites') {
+    if (currentViewMode.value === 'favorites') {
       let songs = [];
-      if (State.favTab.value === 'songs') {
+      if (favTab.value === 'songs') {
         songs = [...favoriteSongList.value];
-      } else if (State.favTab.value === 'artists') {
-        songs = State.favDetailFilter.value?.type === 'artist' ? favoriteSongList.value.filter(s => songHasArtist(s, State.favDetailFilter.value!.name)) : [];
-      } else if (State.favTab.value === 'albums') {
-        songs = State.favDetailFilter.value?.type === 'album' ? favoriteSongList.value.filter(s => matchesAlbumKey(s, State.favDetailFilter.value!.name)) : [];
+      } else if (favTab.value === 'artists') {
+        songs = favDetailFilter.value?.type === 'artist' ? favoriteSongList.value.filter(s => songHasArtist(s, favDetailFilter.value!.name)) : [];
+      } else if (favTab.value === 'albums') {
+        songs = favDetailFilter.value?.type === 'album' ? favoriteSongList.value.filter(s => matchesAlbumKey(s, favDetailFilter.value!.name)) : [];
       } else {
         songs = [...favoriteSongList.value];
       }
@@ -1055,8 +1067,8 @@ function createPlayerService() {
       return songs;
     }
 
-    if (State.currentViewMode.value === 'playlist') {
-      const pl = State.playlists.value.find(p => p.id === State.filterCondition.value);
+    if (currentViewMode.value === 'playlist') {
+      const pl = State.playlists.value.find(p => p.id === filterCondition.value);
       if (!pl) return [];
 
       const songMap = new Map();
@@ -1084,10 +1096,10 @@ function createPlayerService() {
     }
 
     return librarySongs.value.filter(s =>
-      songHasArtist(s, State.filterCondition.value) ||
-      matchesAlbumKey(s, State.filterCondition.value) ||
-      (s.genre || 'Unknown') === State.filterCondition.value ||
-      ((s.year?.substring(0, 4)) || 'Unknown') === State.filterCondition.value
+      songHasArtist(s, filterCondition.value) ||
+      matchesAlbumKey(s, filterCondition.value) ||
+      (s.genre || 'Unknown') === filterCondition.value ||
+      ((s.year?.substring(0, 4)) || 'Unknown') === filterCondition.value
     );
 
   });
@@ -1112,7 +1124,7 @@ function createPlayerService() {
 
   watch(displaySongList, async (newList) => {
 
-    if (State.currentViewMode.value === 'favorites' && (State.favTab.value === 'artists' || State.favTab.value === 'albums') && !State.favDetailFilter.value) return;
+    if (currentViewMode.value === 'favorites' && (favTab.value === 'artists' || favTab.value === 'albums') && !favDetailFilter.value) return;
 
     if (newList.length > 0) { try { const cover = await invoke<string>('get_song_cover', { path: newList[0].path }); State.playlistCover.value = cover; } catch { State.playlistCover.value = ''; } } else { State.playlistCover.value = ''; }
 
@@ -1301,6 +1313,7 @@ function createPlayerService() {
     ...State,
     ...libraryRefs,
     ...navigationRefs,
+    settings: appSettings,
     artistList, albumList, filteredArtistList, filteredAlbumList, genreList, yearList, folderList, favoriteSongList, favArtistList, favAlbumList, recentAlbumList, recentPlaylistList, displaySongList, isLocalMusic, isFolderMode,
     init, formatDuration, formatTimeAgo,
     // Library
@@ -1358,7 +1371,7 @@ function createPlayerService() {
 
     // Sidebar (Decoupled)
     folderTree: State.folderTree,
-    activeRootPath: State.activeRootPath,
+    activeRootPath,
     deleteFolder,
     moveFilePhysical,
     fetchFolderTree: fetchSidebarTree,

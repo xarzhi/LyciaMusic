@@ -1,7 +1,7 @@
 import { ref, reactive } from 'vue';
-import { Song, Playlist, HistoryItem, AppSettings } from '../types';
+import { Song, Playlist, HistoryItem } from '../types';
 
-export type { Song, Playlist, HistoryItem, AppSettings };
+export type { Song, Playlist, HistoryItem };
 
 export interface LibraryFolder {
   path: string;
@@ -103,65 +103,3 @@ export const folderCustomOrder = ref<Record<string, string[]>>({});
 export const localSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'custom' | 'default'>('default');
 export const localCustomOrder = ref<string[]>([]);
 export const playlistSortMode = ref<'title' | 'name' | 'artist' | 'added_at' | 'custom'>('custom');
-
-export const defaultAppSettings: AppSettings = {
-  minimizeToTray: false,
-  closeToTray: false,
-  showQualityBadges: true,
-  linkFoldersToLibrary: false,
-  lyricsSyncOffset: 0,
-  organizeRoot: 'D:\\Music',
-  enableAutoOrganize: true,
-  organizeRule: '{Artist}/{Album}/{Title}',
-  theme: {
-    mode: 'light',
-    dynamicBgType: 'flow',
-    windowMaterial: 'none',
-    customBgPath: '',
-    opacity: 0.8,
-    blur: 20,
-    customBackground: {
-      imagePath: '',
-      blur: 20,
-      opacity: 1,
-      maskColor: '#000000',
-      maskAlpha: 0.4,
-      scale: 1,
-      foregroundStyle: 'auto',
-    },
-  },
-  sidebar: {
-    showLocalMusic: true,
-    showArtists: true,
-    showAlbums: true,
-    showFavorites: true,
-    showRecent: true,
-    showFolders: true,
-    showStatistics: true,
-  },
-};
-
-export const settings = ref<AppSettings>({
-  ...defaultAppSettings,
-  theme: {
-    ...defaultAppSettings.theme,
-    customBackground: {
-      ...defaultAppSettings.theme.customBackground,
-    },
-  },
-  sidebar: {
-    ...defaultAppSettings.sidebar,
-  },
-});
-
-export const currentViewMode = ref<'all' | 'folder' | 'artist' | 'album' | 'genre' | 'year' | 'playlist' | 'recent' | 'favorites' | 'statistics'>('all');
-export const filterCondition = ref<string>('');
-export const searchQuery = ref<string>('');
-export const localMusicTab = ref<'default' | 'artist' | 'album'>('default');
-export const currentArtistFilter = ref<string>('');
-export const currentAlbumFilter = ref<string>('');
-export const currentFolderFilter = ref<string>('');
-export const favTab = ref<'songs' | 'artists' | 'albums'>('songs');
-export const favDetailFilter = ref<{ type: 'artist' | 'album'; name: string } | null>(null);
-export const recentTab = ref<'songs' | 'playlists' | 'albums'>('songs');
-export const activeRootPath = ref<string | null>(null);

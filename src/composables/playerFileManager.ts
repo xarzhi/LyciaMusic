@@ -1,5 +1,7 @@
 import * as State from './playerState';
 import { fileApi } from '../services/tauri/fileApi';
+import { useNavigationStore } from '../stores/navigation';
+import { useSettingsStore } from '../stores/settings';
 
 interface CreatePlayerFileManagerDeps {
   removeSidebarFolderLinked: (
@@ -109,6 +111,9 @@ export const createPlayerFileManager = ({
   removeFromHistory,
   showToast,
 }: CreatePlayerFileManagerDeps) => {
+  const navigationStore = useNavigationStore();
+  const settingsStore = useSettingsStore();
+
   const deleteFolder = async (path: string) => {
     await fileApi.deleteFolder(path);
 
@@ -223,15 +228,15 @@ export const createPlayerFileManager = ({
   const removeFolder = (folderPath: string) => {
     State.watchedFolders.value = State.watchedFolders.value.filter(path => path !== folderPath);
 
-    if (State.currentFolderFilter.value === folderPath) {
-      State.currentFolderFilter.value =
+    if (navigationStore.currentFolderFilter === folderPath) {
+      navigationStore.currentFolderFilter =
         State.watchedFolders.value.length > 0 ? State.watchedFolders.value[0] : '';
     }
   };
 
   const generateOrganizedPath = (song: State.Song): string => {
-    const root = State.settings.value.organizeRoot || 'D:\\Music';
-    if (!State.settings.value.enableAutoOrganize) return '';
+    const root = settingsStore.settings.organizeRoot || 'D:\\Music';
+    if (!settingsStore.settings.enableAutoOrganize) return '';
 
     const separator = root.includes('/') ? '/' : '\\';
     const artist = sanitizePathSegment(
@@ -243,7 +248,7 @@ export const createPlayerFileManager = ({
     const title = sanitizePathSegment(song.title || song.name);
     const year = sanitizePathSegment(song.year ? song.year.substring(0, 4) : '0000');
 
-    let relativePath = State.settings.value.organizeRule
+    let relativePath = settingsStore.settings.organizeRule
       .replace('{Artist}', artist)
       .replace('{Album}', album)
       .replace('{Title}', title)

@@ -187,10 +187,10 @@ const handleGlobalAdd = (playlistId: string) => {
     </transition>
 
     <div v-if="!isMiniMode && isFooterVisible" class="relative z-[60]">
-      <!-- Player Detail (鍨簳婊戝姩灞? -->
+      <!-- Player detail panel -->
       <PlayerDetail />
-      
-      <!-- Player Footer (鎮诞瑕嗙洊灞? -->
+
+      <!-- Persistent player footer -->
       <transition name="footer-slide">
         <PlayerFooter />
       </transition>
@@ -227,7 +227,6 @@ html.mini-mode-active,
   box-shadow: none !important;
 }
 
-
 .page-fade-enter-active,
 .page-fade-leave-active {
   transition: opacity 0.3s ease, transform 0.3s ease;
@@ -263,7 +262,7 @@ html.mini-mode-active,
   opacity: 1;
 }
 
-/* 绐楀彛杩樺師杩囨浮鍔ㄧ敾 */
+/* Window restore transition */
 .window-restore-enter-active {
   transition: opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }

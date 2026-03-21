@@ -43,10 +43,10 @@ const isOpenModel = computed({
     <div class="px-4 pr-3 py-2 flex items-center justify-between group">
       <div class="flex items-center gap-1 cursor-pointer text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors" @click.stop="isOpenModel = !isOpenModel">
         <svg xmlns="http://www.w3.org/2000/svg" :class="['h-3 w-3 transition-transform duration-200', isOpen ? 'rotate-90' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-        <span class="text-xs font-bold tracking-wide">鎴戠殑姝屽崟</span>
+        <span class="text-xs font-bold tracking-wide">我的歌单</span>
         <span class="text-xs text-gray-500 dark:text-gray-400 font-normal ml-0.5">{{ playlists.length }}</span>
       </div>
-      <button @click.stop="$emit('createPlaylist')" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded p-0.5 transition-colors" title="鏂板缓姝屽崟"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg></button>
+      <button @click.stop="$emit('createPlaylist')" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded p-0.5 transition-colors" title="新建歌单"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg></button>
     </div>
 
     <Transition name="playlist-list">
@@ -76,9 +76,9 @@ const isOpenModel = computed({
             </div>
             <div class="flex-1 min-w-0 flex flex-col justify-center">
               <span class="text-sm truncate leading-tight mb-0.5">{{ list.name }}</span>
-              <span class="text-[10px] text-gray-400 dark:text-white/40 leading-tight">{{ list.songPaths.length }} 棣?/span>
+              <span class="text-[10px] text-gray-400 dark:text-white/40 leading-tight">{{ list.songPaths.length }} 首</span>
             </div>
-            <button @click.stop="$emit('deletePlaylist', list.id, list.name)" class="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-gray-400 dark:text-white/60 hover:text-red-500 transition-all p-1" title="鍒犻櫎姝屽崟"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+            <button @click.stop="$emit('deletePlaylist', list.id, list.name)" class="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-gray-400 dark:text-white/60 hover:text-red-500 transition-all p-1" title="删除歌单"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
           </li>
         </TransitionGroup>
       </ul>
@@ -91,6 +91,7 @@ const isOpenModel = computed({
 .playlist-item-leave-active {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 .playlist-item-enter-from,
 .playlist-item-leave-to {
   opacity: 0;
@@ -103,6 +104,7 @@ const isOpenModel = computed({
   max-height: 500px;
   overflow: hidden;
 }
+
 .playlist-list-enter-from,
 .playlist-list-leave-to {
   max-height: 0;

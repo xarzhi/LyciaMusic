@@ -163,13 +163,13 @@ export const createPlayerQueue = ({
 
   const addSongToQueue = (song: Song) => {
     playQueue.value.push(song);
-    showToast('宸叉坊鍔犲埌闃熷垪', 'success');
+    showToast('已添加到播放队列', 'success');
   };
 
   const addSongsToQueue = (songs: Song[]) => {
     if (songs.length === 0) return;
     playQueue.value.push(...songs);
-    showToast(`宸叉坊鍔?${songs.length} 棣栨瓕鏇插埌闃熷垪`, 'success');
+    showToast(`已添加 ${songs.length} 首歌曲到播放队列`, 'success');
   };
 
   const toggleMode = () => {

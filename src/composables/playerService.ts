@@ -529,30 +529,30 @@ function createPlayerService() {
     }
   }
 
-  // 馃煝 Helper: Recursively remove node from tree for Optimistic UI
+  // Helper: recursively remove a node from the tree for optimistic UI
 
 
-  // 馃煝 Physical Folder Deletion (Management Mode)
+  // Physical folder deletion in management mode
   async function deleteFolder(path: string) {
     return playerFileManager.deleteFolder(path);
   }
 
-  // 馃煝 Helper: Recursively increment song count for a folder
+  // Helper: recursively increment the song count for a folder
 
 
-  // 馃煝 Helper: Recursively decrement song count for a folder
+  // Helper: recursively decrement the song count for a folder
 
 
-  // 馃煝 Helper: Update folder cover when first song changes
+  // Helper: update folder cover when the first song changes
 
 
 
-  // 馃煝 Physical File Move (Management Mode)
+  // Physical file move in management mode
   async function moveFilePhysical(sourcePath: string, targetFolderPath: string) {
     return playerFileManager.moveFilePhysical(sourcePath, targetFolderPath);
   }
 
-  // 馃煝 Helper: Find a node in the tree
+  // Helper: find a node in the tree
 
 
   async function scanLibrary(options: ScanLibraryOptions = {}) {
@@ -560,9 +560,9 @@ function createPlayerService() {
     /*
 
         libraryStore.setLastLibraryScanError(errorMessage);
-        finalizeLibraryScanProgress([], true, errorMessage || '鎵弿闊充箰搴撴椂鍑虹幇闂');
+        finalizeLibraryScanProgress([], true, errorMessage || '扫描音乐库时出现问题');
         if (session.visibility === 'silent') {
-          useToast().showToast("鍚庡彴鎵弿澶辫触锛岃鍦ㄩ煶涔愬簱璁剧疆涓噸锟?, "error");
+          useToast().showToast('后台扫描失败，请在音乐库设置中重试', 'error');
         }
       } finally {
         libraryRefreshPromise = null;
@@ -635,7 +635,7 @@ function createPlayerService() {
 
 
 
-    // 馃煝 鎺掑簭閫昏緫
+    // Sorting logic
 
 
 
@@ -737,7 +737,7 @@ function createPlayerService() {
 
 
 
-    // 馃煝 鎺掑簭閫昏緫
+    // Sorting logic
 
 
 
@@ -814,14 +814,14 @@ function createPlayerService() {
 
 
 
-    // folderList 椤哄簭鐩存帴锟?watchedFolders 鏁扮粍椤哄簭鍐冲畾锛屽洜姝ゆ敮鎸佹墜鍔ㄦ帓锟?
+      // folderList order follows watchedFolders so manual reordering is preserved
 
 
     return watchedFolders.value.map(folderPath => {
 
 
 
-      // 馃煝 鍏抽敭淇敼锛氫粎缁熻鐩村睘璇ョ洰褰曠殑姝屾洸 (闈為€掑綊)
+      // Only count songs directly under the folder, not recursively
 
 
 
@@ -980,7 +980,7 @@ function createPlayerService() {
         );
       }
 
-      // 馃煝 鎼滅储閫昏緫锛氫紭鍏堟悳搴擄紝涔熷彲浠ユ悳褰撳墠鏂囦欢澶圭殑
+      // Search local library first, then fall back to the current folder subset
       return librarySongs.value.filter(s => s.name.toLowerCase().includes(q) || getSongArtistSearchText(s).includes(q) || s.album.toLowerCase().includes(q));
 
     }
@@ -993,7 +993,7 @@ function createPlayerService() {
         base = base.filter(s => matchesAlbumKey(s, currentAlbumFilter.value));
       }
 
-      // 馃煝 搴旂敤鏈湴闊充箰鎺掑簭
+      // Apply local music sorting
       if (State.localSortMode.value === 'title') {
         base = sortItemsByAlphabetIndex(base, getSongTitleLabel);
       } else if (State.localSortMode.value === 'name') {
@@ -1021,19 +1021,19 @@ function createPlayerService() {
       if (currentFolderFilter.value) {
         let songs = songList.value.filter(s => isDirectParent(currentFolderFilter.value, s.path));
 
-        // 馃煝 娣诲姞鎺掑簭閫昏緫
+        // Apply folder sorting
         if (State.folderSortMode.value === 'title') {
           songs = sortItemsByAlphabetIndex(songs, getSongTitleLabel);
         } else if (State.folderSortMode.value === 'name') {
           songs = sortItemsByAlphabetIndex(songs, getSongFileNameLabel);
         } else if (State.folderSortMode.value === 'artist') {
-          // 鎸夋瓕鎵嬪悕鎺掑簭
+          // Sort by artist name
           songs.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
         } else if (State.folderSortMode.value === 'added_at') {
-          // 馃煝 娣诲姞鏃堕棿鎺掑簭 (闄嶅簭)
+          // Sort by added time in descending order
           songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
         } else if (State.folderSortMode.value === 'custom') {
-          // 鑷畾涔夋帓锟?鎷栨嫿鍚庣殑椤哄簭)
+          // Preserve custom drag-and-drop order
           const customOrder = State.folderCustomOrder.value[currentFolderFilter.value] || [];
           if (customOrder.length > 0) {
             const orderMap = new Map(customOrder.map((path, i) => [path, i]));
@@ -1047,7 +1047,7 @@ function createPlayerService() {
 
         return songs;
       } else {
-        return []; // 馃煝 No folder selected = empty list
+        return []; // No folder selected means an empty list
       }
     }
 
@@ -1056,7 +1056,7 @@ function createPlayerService() {
     if (currentViewMode.value === 'recent') {
       let songs = recentSongs.value.map(h => h.song);
 
-      // 馃煝 搴旂敤鎺掑簭 (涓庢湰鍦伴煶涔愬叡浜ā锟?
+      // Apply sorting shared with local music views
       if (State.localSortMode.value === 'title') {
         songs.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'zh-CN'));
       } else if (State.localSortMode.value === 'name') {
@@ -1064,7 +1064,8 @@ function createPlayerService() {
       } else if (State.localSortMode.value === 'artist') {
         songs.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
       } else if (State.localSortMode.value === 'added_at') {
-        // 鏈€杩戞挱鏀炬湰韬氨鏄寜鏃堕棿鎺掔殑,浣嗗鏋滅敤鎴烽€変簡娣诲姞鏃堕棿,鍒欐寜鎵弿鍏ュ簱鏃堕棿锟?        songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
+        // Recent plays are already time-ordered, but added_at should still sort by import time
+        songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
       }
 
       return songs;
@@ -1082,7 +1083,7 @@ function createPlayerService() {
         songs = [...favoriteSongList.value];
       }
 
-      // 馃煝 搴旂敤鎺掑簭
+      // Apply sorting
       if (State.localSortMode.value === 'title') {
         songs.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'zh-CN'));
       } else if (State.localSortMode.value === 'name') {
@@ -1110,7 +1111,7 @@ function createPlayerService() {
         .map(path => songMap.get(path))
         .filter((s): s is State.Song => !!s);
 
-      // 馃煝 搴旂敤姝屽崟鎺掑簭
+      // Apply playlist sorting
       if (State.playlistSortMode.value === 'title') {
         songs.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'zh-CN'));
       } else if (State.playlistSortMode.value === 'name') {
@@ -1120,7 +1121,7 @@ function createPlayerService() {
       } else if (State.playlistSortMode.value === 'added_at') {
         songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
       }
-      // 'custom' 妯″紡涓嶉渶瑕佹帓锟?鍥犱负瀹冨凡缁忛€氳繃 map(path => ...) 缁存寔锟?songPaths 鐨勯『锟?
+      // Custom mode keeps the playlist's stored songPaths order
       return songs;
     }
 

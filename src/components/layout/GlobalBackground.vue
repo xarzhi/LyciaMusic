@@ -2,33 +2,34 @@
 import { computed } from 'vue';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { usePlayer } from '../../composables/player';
+import { useThemeSettings } from '../../composables/useThemeSettings';
 import { useWindowMaterial } from '../../composables/windowMaterial';
 
-const { settings, currentCover, dominantColors, showPlayerDetail } = usePlayer();
+const { currentCover, dominantColors, showPlayerDetail } = usePlayer();
+const { theme, isDarkTheme } = useThemeSettings();
 const { activeWindowMaterial } = useWindowMaterial();
 
 const hasWindowMaterial = computed(() => activeWindowMaterial.value !== 'none');
 const isMicaWindowMaterial = computed(() => activeWindowMaterial.value === 'mica');
 const reduceDynamicEffects = computed(() => showPlayerDetail.value);
-const isDarkTheme = computed(() => settings.value.theme.mode === 'dark');
 
 const activeBackgroundInfo = computed(() => {
-  const theme = settings.value.theme;
+  const currentTheme = theme.value;
 
-  if (theme.mode === 'custom' && theme.customBackground.imagePath) {
+  if (currentTheme.mode === 'custom' && currentTheme.customBackground.imagePath) {
     return {
-      src: theme.customBackground.imagePath,
-      blur: theme.customBackground.blur,
-      opacity: theme.customBackground.opacity,
-      maskColor: theme.customBackground.maskColor,
-      maskAlpha: theme.customBackground.maskAlpha,
-      scale: theme.customBackground.scale,
+      src: currentTheme.customBackground.imagePath,
+      blur: currentTheme.customBackground.blur,
+      opacity: currentTheme.customBackground.opacity,
+      maskColor: currentTheme.customBackground.maskColor,
+      maskAlpha: currentTheme.customBackground.maskAlpha,
+      scale: currentTheme.customBackground.scale,
       isDynamic: false,
       type: 'custom' as const,
     };
   }
 
-  if (theme.dynamicBgType === 'flow') {
+  if (currentTheme.dynamicBgType === 'flow') {
     return {
       src: currentCover.value,
       blur: 60,
@@ -38,7 +39,7 @@ const activeBackgroundInfo = computed(() => {
     };
   }
 
-  if (theme.dynamicBgType === 'blur') {
+  if (currentTheme.dynamicBgType === 'blur') {
     return {
       src: currentCover.value,
       blur: 50,
@@ -109,7 +110,7 @@ const materialScrimStyle = computed(() => {
   <div
     class="fixed inset-0 z-0 overflow-hidden pointer-events-none transition-colors duration-500"
     :class="[
-      settings.theme.mode === 'custom'
+      theme.mode === 'custom'
         ? 'bg-black'
         : hasWindowMaterial
           ? 'bg-transparent'

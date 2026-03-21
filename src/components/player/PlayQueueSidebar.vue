@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { usePlayer } from '../../composables/player';
+import { useThemeSettings } from '../../composables/useThemeSettings';
 import ModernModal from '../common/ModernModal.vue';
 
-// 🟢 核心修改：解构出 playQueue 和新的操作函数
-const { 
-  playQueue, // 替换 songList
+// 馃煝 鏍稿績淇敼锛氳В鏋勫嚭 playQueue 鍜屾柊鐨勬搷浣滃嚱鏁?
+const {
+  playQueue, // 鏇挎崲 songList
   currentSong, showPlaylist, togglePlaylist, playSong, formatDuration,
-  clearQueue, removeSongFromQueue, // 新增函数
-  settings
+  clearQueue, removeSongFromQueue, // 鏂板鍑芥暟
 } = usePlayer();
+const { theme } = useThemeSettings();
 
 const showClearModal = ref(false);
 
@@ -23,14 +24,14 @@ const confirmClear = () => {
 };
 
 const handleRemove = (song: any, e: Event) => {
-  e.stopPropagation(); // 防止触发播放
+  e.stopPropagation(); // 闃叉瑙﹀彂鎾斁
   removeSongFromQueue(song);
 };
 </script>
 
 <template>
   <Teleport to="body">
-    <!-- 遮罩层：点击空白处关闭 -->
+    <!-- 閬僵灞傦細鐐瑰嚮绌虹櫧澶勫叧闂?-->
     <transition name="fade">
       <div v-if="showPlaylist" class="fixed inset-0 z-[90] bg-black/20 backdrop-blur-[2px]" @click="togglePlaylist"></div>
     </transition>
@@ -40,7 +41,7 @@ const handleRemove = (song: any, e: Event) => {
         v-if="showPlaylist"
         class="fixed right-0 rounded-l-2xl shadow-[0_8px_40px_rgba(0,0,0,0.15)] border-l border-t border-b border-white/40 dark:border-white/10 z-[100] flex flex-col overflow-hidden font-sans select-none bg-white/80 dark:bg-gray-900/80 transition-all duration-300"
         :class="[
-          (settings.theme.dynamicBgType === 'none' && settings.theme.mode === 'custom') ? '' : 'backdrop-blur-2xl',
+          (theme.dynamicBgType === 'none' && theme.mode === 'custom') ? '' : 'backdrop-blur-2xl',
           playQueue.length > 0 ? 'bottom-24 w-[340px]' : 'bottom-5 w-[340px]'
         ]"
         :style="{ height: playQueue.length > 0 ? 'calc(100vh - 180px)' : 'calc(100vh - 40px)', 'min-height': '200px' }" 
@@ -49,19 +50,19 @@ const handleRemove = (song: any, e: Event) => {
         <!-- Header -->
         <div 
           class="px-5 py-4 border-b border-black/5 dark:border-white/5 flex justify-between items-center bg-white/50 dark:bg-black/20 z-10"
-          :class="[(settings.theme.dynamicBgType === 'none' && settings.theme.mode === 'custom') ? '' : 'backdrop-blur-sm']"
+          :class="[(theme.dynamicBgType === 'none' && theme.mode === 'custom') ? '' : 'backdrop-blur-sm']"
         >
           <div class="flex items-center gap-3">
-            <h3 class="font-bold text-gray-800 dark:text-gray-100 text-lg tracking-tight">播放列表</h3>
+            <h3 class="font-bold text-gray-800 dark:text-gray-100 text-lg tracking-tight">鎾斁鍒楄〃</h3>
             <span class="text-xs text-gray-500 dark:text-white/40 font-medium bg-gray-200/60 dark:bg-white/10 px-2 py-0.5 rounded-full">{{ playQueue.length }}</span>
           </div>
           <button 
             @click="handleClearClick" 
             class="text-gray-400 hover:text-[#EC4141] text-sm hover:bg-red-50 dark:hover:bg-red-500/10 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 active:scale-95"
-            title="清空列表"
+            title="娓呯┖鍒楄〃"
           >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-            <span>清空</span>
+            <span>娓呯┖</span>
           </button>
         </div>
         
@@ -71,10 +72,10 @@ const handleRemove = (song: any, e: Event) => {
              <div class="w-20 h-20 rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center">
                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
              </div>
-             <span class="text-sm">播放队列为空</span>
+             <span class="text-sm">鎾斁闃熷垪涓虹┖</span>
           </div>
 
-          <!-- 遍历 playQueue -->
+          <!-- 閬嶅巻 playQueue -->
           <div 
             v-for="(song, index) in playQueue" 
             :key="song.path + index"
@@ -111,11 +112,11 @@ const handleRemove = (song: any, e: Event) => {
                <div class="text-xs font-mono shrink-0 group-hover:hidden" :class="currentSong?.path === song.path ? 'text-[#EC4141]/70' : 'text-gray-400 dark:text-white/30'">
                   {{ formatDuration(song.duration) }}
                </div>
-               <!-- 删除按钮 (Hover显示) -->
+               <!-- 鍒犻櫎鎸夐挳 (Hover鏄剧ず) -->
                <button 
                  @click="handleRemove(song, $event)"
                  class="hidden group-hover:flex w-6 h-6 items-center justify-center text-gray-400 dark:text-white/40 hover:text-red-500 transition-colors rounded-full hover:bg-black/5 dark:hover:bg-white/10 active:scale-90"
-                 title="从队列移除"
+                 title="浠庨槦鍒楃Щ闄?
                >
                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                </button>
@@ -125,13 +126,13 @@ const handleRemove = (song: any, e: Event) => {
       </div>
     </transition>
 
-    <!-- 🟢 统一模态框：清空确认 -->
+    <!-- 馃煝 缁熶竴妯℃€佹锛氭竻绌虹‘璁?-->
     <ModernModal 
       v-model:visible="showClearModal"
-      title="清空播放列表"
-      content="确定要清空当前的播放队列吗？此操作不会影响本地文件。"
+      title="娓呯┖鎾斁鍒楄〃"
+      content="纭畾瑕佹竻绌哄綋鍓嶇殑鎾斁闃熷垪鍚楋紵姝ゆ搷浣滀笉浼氬奖鍝嶆湰鍦版枃浠躲€?
       type="danger"
-      confirm-text="清空"
+      confirm-text="娓呯┖"
       @confirm="confirmClear"
     />
   </Teleport>

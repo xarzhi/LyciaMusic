@@ -14,6 +14,34 @@ export interface AppSettingsPatch extends Partial<Omit<AppSettings, 'theme' | 's
   sidebar?: SidebarSettingsPatch;
 }
 
+export const defaultThemeSettings: ThemeSettings = {
+  mode: 'light',
+  dynamicBgType: 'flow',
+  windowMaterial: 'none',
+  customBgPath: '',
+  opacity: 0.8,
+  blur: 20,
+  customBackground: {
+    imagePath: '',
+    blur: 20,
+    opacity: 1,
+    maskColor: '#000000',
+    maskAlpha: 0.4,
+    scale: 1,
+    foregroundStyle: 'auto',
+  },
+};
+
+export const defaultSidebarSettings: SidebarSettings = {
+  showLocalMusic: true,
+  showArtists: true,
+  showAlbums: true,
+  showFavorites: true,
+  showRecent: true,
+  showFolders: true,
+  showStatistics: true,
+};
+
 export const defaultAppSettings: AppSettings = {
   minimizeToTray: false,
   closeToTray: false,
@@ -23,45 +51,45 @@ export const defaultAppSettings: AppSettings = {
   organizeRoot: 'D:\\Music',
   enableAutoOrganize: true,
   organizeRule: '{Artist}/{Album}/{Title}',
-  theme: {
-    mode: 'light',
-    dynamicBgType: 'flow',
-    windowMaterial: 'none',
-    customBgPath: '',
-    opacity: 0.8,
-    blur: 20,
-    customBackground: {
-      imagePath: '',
-      blur: 20,
-      opacity: 1,
-      maskColor: '#000000',
-      maskAlpha: 0.4,
-      scale: 1,
-      foregroundStyle: 'auto',
-    },
-  },
-  sidebar: {
-    showLocalMusic: true,
-    showArtists: true,
-    showAlbums: true,
-    showFavorites: true,
-    showRecent: true,
-    showFolders: true,
-    showStatistics: true,
-  },
+  theme: defaultThemeSettings,
+  sidebar: defaultSidebarSettings,
 };
+
+export const createDefaultThemeSettings = (): ThemeSettings => ({
+  ...defaultThemeSettings,
+  customBackground: {
+    ...defaultThemeSettings.customBackground,
+  },
+});
+
+export const createDefaultSidebarSettings = (): SidebarSettings => ({
+  ...defaultSidebarSettings,
+});
 
 export const createDefaultAppSettings = (): AppSettings => ({
   ...defaultAppSettings,
-  theme: {
-    ...defaultAppSettings.theme,
-    customBackground: {
-      ...defaultAppSettings.theme.customBackground,
-    },
+  theme: createDefaultThemeSettings(),
+  sidebar: createDefaultSidebarSettings(),
+});
+
+export const mergeThemeSettings = (
+  base: ThemeSettings,
+  patch: ThemeSettingsPatch,
+): ThemeSettings => ({
+  ...base,
+  ...patch,
+  customBackground: {
+    ...base.customBackground,
+    ...(patch.customBackground ?? {}),
   },
-  sidebar: {
-    ...defaultAppSettings.sidebar,
-  },
+});
+
+export const mergeSidebarSettings = (
+  base: SidebarSettings,
+  patch: SidebarSettingsPatch,
+): SidebarSettings => ({
+  ...base,
+  ...patch,
 });
 
 export const mergeAppSettings = (
@@ -70,23 +98,31 @@ export const mergeAppSettings = (
 ): AppSettings => ({
   ...base,
   ...patch,
-  theme: {
-    ...base.theme,
-    ...(patch.theme ?? {}),
-    customBackground: {
-      ...base.theme.customBackground,
-      ...(patch.theme?.customBackground ?? {}),
-    },
-  },
-  sidebar: {
-    ...base.sidebar,
-    ...(patch.sidebar ?? {}),
-  },
+  theme: mergeThemeSettings(base.theme, patch.theme ?? {}),
+  sidebar: mergeSidebarSettings(base.sidebar, patch.sidebar ?? {}),
 });
 
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<AppSettings>(createDefaultAppSettings());
   const audioDelay = computed(() => settings.value.lyricsSyncOffset);
+  const theme = computed<ThemeSettings>({
+    get: () => settings.value.theme,
+    set: (nextTheme) => {
+      settings.value = {
+        ...settings.value,
+        theme: mergeThemeSettings(createDefaultThemeSettings(), nextTheme),
+      };
+    },
+  });
+  const sidebar = computed<SidebarSettings>({
+    get: () => settings.value.sidebar,
+    set: (nextSidebar) => {
+      settings.value = {
+        ...settings.value,
+        sidebar: mergeSidebarSettings(createDefaultSidebarSettings(), nextSidebar),
+      };
+    },
+  });
 
   const replaceSettings = (nextSettings: AppSettings) => {
     settings.value = mergeAppSettings(createDefaultAppSettings(), nextSettings);
@@ -100,11 +136,39 @@ export const useSettingsStore = defineStore('settings', () => {
     settings.value = createDefaultAppSettings();
   };
 
+  const replaceTheme = (nextTheme: ThemeSettings) => {
+    theme.value = nextTheme;
+  };
+
+  const patchTheme = (partialTheme: ThemeSettingsPatch) => {
+    settings.value = {
+      ...settings.value,
+      theme: mergeThemeSettings(settings.value.theme, partialTheme),
+    };
+  };
+
+  const replaceSidebar = (nextSidebar: SidebarSettings) => {
+    sidebar.value = nextSidebar;
+  };
+
+  const patchSidebar = (partialSidebar: SidebarSettingsPatch) => {
+    settings.value = {
+      ...settings.value,
+      sidebar: mergeSidebarSettings(settings.value.sidebar, partialSidebar),
+    };
+  };
+
   return {
     settings,
     audioDelay,
+    theme,
+    sidebar,
     replaceSettings,
     patchSettings,
     resetSettings,
+    replaceTheme,
+    patchTheme,
+    replaceSidebar,
+    patchSidebar,
   };
 });

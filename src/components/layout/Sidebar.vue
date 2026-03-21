@@ -10,6 +10,7 @@ import { useHomeNavigation } from '../../composables/useHomeNavigation';
 import { useLibraryCollections } from '../../composables/useLibraryCollections';
 import { usePlayer, dragSession } from '../../composables/player';
 import { usePlayerViewState } from '../../composables/usePlayerViewState';
+import { useSettings } from '../../composables/settings';
 import { useSidebarPlaylistContextMenu } from '../../composables/useSidebarPlaylistContextMenu';
 import { useSidebarPlaylistCovers } from '../../composables/useSidebarPlaylistCovers';
 import { useSidebarPlaylistDragDrop } from '../../composables/useSidebarPlaylistDragDrop';
@@ -24,8 +25,8 @@ const {
   playSong,
   addSongsToQueue,
   clearQueue,
-  settings,
 } = usePlayer();
+const { settings } = useSettings();
 
 const {
   currentViewMode,

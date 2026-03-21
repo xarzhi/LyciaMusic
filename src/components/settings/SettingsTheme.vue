@@ -1,80 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { usePlayer } from '../../composables/player';
 import CustomSkinModal from './CustomSkinModal.vue';
-import {
-  useWindowMaterial,
-  type WindowMaterialMode,
-} from '../../composables/windowMaterial';
+import { useSettingsThemeControls } from '../../composables/useSettingsThemeControls';
 
-const { settings } = usePlayer();
-const { capabilities, loadWindowMaterialCapabilities } = useWindowMaterial();
-
-const showCustomModal = ref(false);
-
-const colorScheme = computed({
-  get: () => settings.value.theme.mode,
-  set: (value: 'light' | 'dark' | 'custom') => {
-    settings.value.theme.mode = value;
-  },
-});
-
-const isWindows11 = computed(
-  () => capabilities.value.isWindows && (capabilities.value.windowsBuildNumber ?? 0) >= 22000,
-);
-
-const materialMode = computed({
-  get: () => settings.value.theme.windowMaterial,
-  set: (value: WindowMaterialMode) => {
-    settings.value.theme.windowMaterial = value;
-  },
-});
-
-const hasWindowMaterialSelected = computed(() => materialMode.value !== 'none');
-const isWindowMaterialDisabled = computed(() => colorScheme.value === 'custom');
-const isDynamicBgDisabled = computed(
-  () => colorScheme.value === 'custom' || hasWindowMaterialSelected.value,
-);
-
-function setColorScheme(mode: 'light' | 'dark' | 'custom') {
-  colorScheme.value = mode;
-  if (mode === 'custom') {
-    settings.value.theme.dynamicBgType = 'none';
-    settings.value.theme.windowMaterial = 'none';
-  }
-}
-
-function setDynamicType(type: 'none' | 'flow' | 'blur') {
-  if (isDynamicBgDisabled.value) return;
-  settings.value.theme.dynamicBgType = type;
-}
-
-function toggleWindowMaterial(mode: Exclude<WindowMaterialMode, 'none'>) {
-  if (!isWindows11.value || isWindowMaterialDisabled.value) return;
-
-  if (materialMode.value === mode) {
-    materialMode.value = 'none';
-    return;
-  }
-
-  materialMode.value = mode;
-  settings.value.theme.dynamicBgType = 'none';
-}
-
-function openCustomModal() {
-  showCustomModal.value = true;
-}
-
-onMounted(() => {
-  void loadWindowMaterialCapabilities();
-});
-
-watch(colorScheme, (mode) => {
-  if (mode === 'custom' && materialMode.value !== 'none') {
-    materialMode.value = 'none';
-  }
-});
+const {
+  theme,
+  showCustomModal,
+  colorScheme,
+  materialMode,
+  isWindows11,
+  isWindowMaterialDisabled,
+  isDynamicBgDisabled,
+  setColorScheme,
+  setDynamicType,
+  toggleWindowMaterial,
+  openCustomModal,
+} = useSettingsThemeControls();
 </script>
 
 <template>
@@ -132,8 +73,8 @@ watch(colorScheme, (mode) => {
           >
             <div class="aspect-[4/3] relative bg-gradient-to-br from-rose-100 to-amber-100 dark:from-rose-900/30 dark:to-amber-900/30">
               <img
-                v-if="settings.theme.customBackground.imagePath"
-                :src="convertFileSrc(settings.theme.customBackground.imagePath)"
+                v-if="theme.customBackground.imagePath"
+                :src="convertFileSrc(theme.customBackground.imagePath)"
                 class="absolute inset-0 w-full h-full object-cover opacity-65"
               />
               <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
@@ -171,7 +112,7 @@ watch(colorScheme, (mode) => {
           <button
             type="button"
             class="rounded-xl border px-4 py-3 text-left transition-all"
-            :class="settings.theme.dynamicBgType === 'none'
+            :class="theme.dynamicBgType === 'none'
               ? 'border-[#EC4141] bg-[#EC4141]/8 shadow-sm'
               : 'border-gray-200/70 dark:border-white/10 hover:border-[#EC4141]/40 hover:bg-white/40 dark:hover:bg-white/5'"
             @click="setDynamicType('none')"
@@ -183,7 +124,7 @@ watch(colorScheme, (mode) => {
           <button
             type="button"
             class="rounded-xl border px-4 py-3 text-left transition-all"
-            :class="settings.theme.dynamicBgType === 'flow'
+            :class="theme.dynamicBgType === 'flow'
               ? 'border-[#EC4141] bg-[#EC4141]/8 shadow-sm'
               : 'border-gray-200/70 dark:border-white/10 hover:border-[#EC4141]/40 hover:bg-white/40 dark:hover:bg-white/5'"
             @click="setDynamicType('flow')"
@@ -195,7 +136,7 @@ watch(colorScheme, (mode) => {
           <button
             type="button"
             class="rounded-xl border px-4 py-3 text-left transition-all"
-            :class="settings.theme.dynamicBgType === 'blur'
+            :class="theme.dynamicBgType === 'blur'
               ? 'border-[#EC4141] bg-[#EC4141]/8 shadow-sm'
               : 'border-gray-200/70 dark:border-white/10 hover:border-[#EC4141]/40 hover:bg-white/40 dark:hover:bg-white/5'"
             @click="setDynamicType('blur')"

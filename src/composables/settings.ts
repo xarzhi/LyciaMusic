@@ -34,7 +34,7 @@ const migrateLegacySettings = (mergeSettings: (partialSettings: Partial<typeof d
 
 export function useSettings() {
   const settingsStore = useSettingsStore();
-  const { settings, audioDelay } = storeToRefs(settingsStore);
+  const { settings, audioDelay, theme, sidebar } = storeToRefs(settingsStore);
 
   migrateLegacySettings(settingsStore.patchSettings);
   AUDIO_DELAY.value = audioDelay.value;
@@ -46,5 +46,11 @@ export function useSettings() {
   return {
     settings,
     audioDelay,
+    theme,
+    sidebar,
+    patchSettings: settingsStore.patchSettings,
+    patchTheme: settingsStore.patchTheme,
+    replaceTheme: settingsStore.replaceTheme,
+    patchSidebar: settingsStore.patchSidebar,
   };
 }

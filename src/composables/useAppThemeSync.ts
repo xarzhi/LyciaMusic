@@ -1,37 +1,17 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { computed, nextTick, watch, type Ref } from 'vue';
-import type { AppSettings } from '../types';
+import { computed, nextTick, watch } from 'vue';
 import { useWindowMaterial } from './windowMaterial';
+import { useThemeSettings } from './useThemeSettings';
 
-interface UseAppThemeSyncOptions {
-  settings: Ref<AppSettings>;
-}
-
-export function useAppThemeSync({ settings }: UseAppThemeSyncOptions) {
+export function useAppThemeSync() {
   const { activeWindowMaterial, applyWindowMaterial, loadWindowMaterialCapabilities } = useWindowMaterial();
+  const { theme, isDarkTheme } = useThemeSettings();
 
   const hasWindowMaterial = computed(() => activeWindowMaterial.value !== 'none');
   const isMicaWindowMaterial = computed(() => activeWindowMaterial.value === 'mica');
 
   const applyTheme = async () => {
-    const theme = settings.value.theme;
-    const isDarkSystem = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    let isDarkMode = false;
-
-    if (theme.mode === 'custom') {
-      const style = theme.customBackground.foregroundStyle || 'auto';
-      if (style === 'light') {
-        isDarkMode = true;
-      } else if (style === 'dark') {
-        isDarkMode = false;
-      } else {
-        isDarkMode = isDarkSystem;
-      }
-    } else {
-      isDarkMode = theme.mode === 'dark';
-    }
-
-    if (isDarkMode) {
+    if (isDarkTheme.value) {
       document.documentElement.classList.add('dark');
       try {
         await getCurrentWindow().setTheme('dark');
@@ -52,7 +32,7 @@ export function useAppThemeSync({ settings }: UseAppThemeSyncOptions) {
   const syncWindowMaterial = async () => {
     await nextTick();
     await applyWindowMaterial(
-      settings.value.theme.windowMaterial,
+      theme.value.windowMaterial,
       document.documentElement.classList.contains('dark'),
     );
   };
@@ -60,7 +40,7 @@ export function useAppThemeSync({ settings }: UseAppThemeSyncOptions) {
   void loadWindowMaterialCapabilities();
 
   watch(
-    settings,
+    theme,
     async () => {
       await applyTheme();
       await syncWindowMaterial();

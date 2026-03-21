@@ -4,6 +4,7 @@ import { usePlayer } from './composables/player';
 import { useLibraryCollections } from './composables/useLibraryCollections';
 import { useAppThemeSync } from './composables/useAppThemeSync';
 import { useExternalPathBridge } from './composables/useExternalPathBridge';
+import { useAppShellTheme } from './composables/useAppShellTheme';
 import { useMiniModeWindow } from './composables/useMiniModeWindow';
 import Sidebar from './components/layout/Sidebar.vue';
 import TitleBar from './components/layout/TitleBar.vue';
@@ -18,7 +19,6 @@ const MiniPlayer = defineAsyncComponent(() => import('./components/layout/MiniPl
 
 const {
   init,
-  settings,
   playQueue,
   isMiniMode,
   showPlayerDetail,
@@ -35,7 +35,12 @@ const {
   addSongsToPlaylist,
 } = useLibraryCollections();
 
-const { hasWindowMaterial, isMicaWindowMaterial, syncWindowMaterial } = useAppThemeSync({ settings });
+const { hasWindowMaterial, isMicaWindowMaterial, syncWindowMaterial } = useAppThemeSync();
+const { mainBlurStyle, mainContainerClass } = useAppShellTheme({
+  showPlayerDetail,
+  hasWindowMaterial,
+  isMicaWindowMaterial,
+});
 const { isExternalDragActive } = useExternalPathBridge({ handleExternalPaths });
 
 useMiniModeWindow({
@@ -84,39 +89,6 @@ const handleGlobalAdd = (playlistId: string) => {
   addSongsToPlaylist(playlistId, playlistAddTargetSongs.value);
   showAddToPlaylistModal.value = false;
 };
-
-const mainBlurStyle = computed(() => {
-  if (showPlayerDetail.value) {
-    return 'none';
-  }
-
-  const { dynamicBgType, mode, customBackground } = settings.value.theme;
-
-  if (isMicaWindowMaterial.value) {
-    if (dynamicBgType === 'flow') {
-      return 'none';
-    }
-
-    if (dynamicBgType === 'blur') {
-      return 'blur(6px)';
-    }
-
-    if (mode === 'custom') {
-      return customBackground.blur <= 0 ? 'none' : `blur(${Math.min(customBackground.blur, 8)}px)`;
-    }
-  }
-
-  if (dynamicBgType === 'flow' || dynamicBgType === 'blur') {
-    return hasWindowMaterial.value ? 'blur(20px)' : 'blur(40px)';
-  }
-
-  if (mode === 'custom') {
-    const blur = hasWindowMaterial.value ? Math.min(customBackground.blur, 16) : customBackground.blur;
-    return blur <= 0 ? 'none' : `blur(${blur}px)`;
-  }
-
-  return 'none';
-});
 </script>
 
 <template>
@@ -186,11 +158,7 @@ const mainBlurStyle = computed(() => {
       <div
         v-if="!isMiniMode"
         class="flex-1 flex overflow-hidden relative z-10 transition-colors duration-500"
-        :class="[
-          settings.theme.mode === 'custom' || hasWindowMaterial
-            ? 'bg-transparent'
-            : 'bg-white/30 dark:bg-black/60'
-        ]"
+        :class="mainContainerClass"
         :style="{ backdropFilter: mainBlurStyle }"
       >
         <Sidebar />

@@ -1261,7 +1261,6 @@ function createPlayerService() {
     ...navigationRefs,
     ...playbackRefs,
     ...uiRefs,
-    settings: appSettings,
     artistList, albumList, filteredArtistList, filteredAlbumList, genreList, yearList, folderList, favoriteSongList, favArtistList, favAlbumList, recentAlbumList, recentPlaylistList, displaySongList, isLocalMusic, isFolderMode,
     init, formatDuration, formatTimeAgo,
     // Library

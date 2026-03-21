@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
-import { usePlayer, dragSession } from '../../composables/player';
-import { useLibraryCollections } from '../../composables/useLibraryCollections';
-import { usePlayerViewState } from '../../composables/usePlayerViewState';
-import { useCoverCache } from '../../composables/useCoverCache';
-import { useHomeNavigation } from '../../composables/useHomeNavigation';
 import ModernInputModal from '../common/ModernInputModal.vue';
 import ModernModal from '../common/ModernModal.vue';
 import PlaylistContextMenu from '../overlays/PlaylistContextMenu.vue';
+import { useCoverCache } from '../../composables/useCoverCache';
+import { useHomeNavigation } from '../../composables/useHomeNavigation';
+import { useLibraryCollections } from '../../composables/useLibraryCollections';
+import { usePlayer, dragSession } from '../../composables/player';
+import { usePlayerViewState } from '../../composables/usePlayerViewState';
+import { useSidebarPlaylistContextMenu } from '../../composables/useSidebarPlaylistContextMenu';
+import { useSidebarPlaylistCovers } from '../../composables/useSidebarPlaylistCovers';
+import { useSidebarPlaylistDragDrop } from '../../composables/useSidebarPlaylistDragDrop';
+import { useSidebarPlaylistSelection } from '../../composables/useSidebarPlaylistSelection';
 import SidebarNavigation from './SidebarNavigation.vue';
 import SidebarPlaylists from './SidebarPlaylists.vue';
 
@@ -21,11 +25,13 @@ const {
   clearQueue,
   settings,
 } = usePlayer();
+
 const {
   currentViewMode,
   filterCondition,
   currentFolderFilter,
 } = usePlayerViewState();
+
 const {
   playlists,
   createPlaylist,
@@ -46,94 +52,77 @@ const {
 const { preloadCovers, loadCover } = useCoverCache();
 
 const isPlaylistOpen = ref(true);
-const dragOverId = ref<string | null>(null);
-const dragPosition = ref<'top' | 'bottom' | null>(null);
-
-const showContextMenu = ref(false);
-const contextMenuX = ref(0);
-const contextMenuY = ref(0);
-const targetPlaylist = ref<{ id: string; name: string } | null>(null);
-const selectedPlaylistIds = ref<Set<string>>(new Set());
-const lastSelectedPlaylistId = ref<string | null>(null);
-
 const showCreateModal = ref(false);
-const showDeleteModal = ref(false);
-const playlistsToDelete = ref<string[]>([]);
-const deleteModalContent = ref('');
-
-const playlistCoverCache = ref<Map<string, string>>(new Map());
-const playlistRealFirstSongMap = new Map<string, string>();
-let playlistCoverRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-let playlistCoverRefreshIdleId: number | null = null;
 
 const handleHoverArtists = () => {
   if (artistList.value.length > 0) {
-    preloadCovers(artistList.value.slice(0, 30).map(a => a.firstSongPath).filter(Boolean));
+    preloadCovers(artistList.value.slice(0, 30).map(artist => artist.firstSongPath).filter(Boolean));
   }
 };
 
 const handleHoverAlbums = () => {
   if (albumList.value.length > 0) {
-    preloadCovers(albumList.value.slice(0, 30).map(a => a.firstSongPath).filter(Boolean));
+    preloadCovers(albumList.value.slice(0, 30).map(album => album.firstSongPath).filter(Boolean));
   }
 };
 
-let mouseDownInfo: { x: number; y: number; index: number; playlist: any } | null = null;
+const {
+  selectedPlaylistIds,
+  ensurePlaylistSelected,
+  handlePlaylistClick,
+  handleBackgroundClick,
+} = useSidebarPlaylistSelection({
+  playlists,
+  currentViewMode,
+  filterCondition,
+  openHomePlaylist,
+});
 
-const handleMouseDown = (e: MouseEvent, index: number, playlist: any) => {
-  if (e.button !== 0) return;
-  mouseDownInfo = { x: e.clientX, y: e.clientY, index, playlist };
+const clearPlaylistSelection = () => {
+  selectedPlaylistIds.value.clear();
 };
 
-const handleGlobalMouseMove = (e: MouseEvent) => {
-  if (mouseDownInfo && !dragSession.active) {
-    const dist = Math.sqrt(Math.pow(e.clientX - mouseDownInfo.x, 2) + Math.pow(e.clientY - mouseDownInfo.y, 2));
-    if (dist > 5) {
-      dragSession.active = true;
-      dragSession.type = 'playlist';
-      dragSession.data = { index: mouseDownInfo.index, id: mouseDownInfo.playlist.id, name: mouseDownInfo.playlist.name };
-    }
-  }
-};
+const {
+  showContextMenu,
+  contextMenuX,
+  contextMenuY,
+  targetPlaylist,
+  showDeleteModal,
+  deleteModalContent,
+  handleDeletePlaylist,
+  confirmDeletePlaylist,
+  handlePlaylistContextMenu,
+  handleMenuPlay,
+  handleMenuAddToQueue,
+  handleMenuDelete,
+} = useSidebarPlaylistContextMenu({
+  selectedPlaylistIds,
+  ensurePlaylistSelected,
+  viewPlaylist,
+  getSongsFromPlaylist,
+  addSongsToQueue,
+  clearQueue,
+  playSong,
+  openHomePlaylist,
+  deletePlaylist,
+  clearSelection: clearPlaylistSelection,
+});
 
-const handleGlobalMouseUp = () => {
-  if (dragSession.active && dragSession.type === 'playlist' && dragOverId.value && mouseDownInfo) {
-    const fromIndex = mouseDownInfo.index;
-    const targetIndex = playlists.value.findIndex(p => p.id === dragOverId.value);
+const {
+  dragOverId,
+  dragPosition,
+  handleMouseDown,
+  handleItemMouseMove,
+} = useSidebarPlaylistDragDrop({
+  playlists,
+  dragSession,
+  reorderPlaylists,
+});
 
-    if (targetIndex !== -1) {
-      let toIndex = targetIndex;
-      if (dragPosition.value === 'bottom') {
-        toIndex += 1;
-      }
-      if (fromIndex < toIndex) {
-        toIndex -= 1;
-      }
-      if (fromIndex !== toIndex) {
-        reorderPlaylists(fromIndex, toIndex);
-      }
-    }
-  }
-
-  mouseDownInfo = null;
-  if (dragSession.type === 'playlist') {
-    dragSession.active = false;
-    dragSession.type = 'song';
-    dragSession.data = null;
-    dragOverId.value = null;
-    dragPosition.value = null;
-  }
-};
-
-const handleItemMouseMove = (e: MouseEvent, playlistId: string) => {
-  if (dragSession.active && dragSession.type === 'playlist') {
-    const target = e.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    const mid = rect.top + rect.height / 2;
-    dragOverId.value = playlistId;
-    dragPosition.value = e.clientY < mid ? 'top' : 'bottom';
-  }
-};
+const { playlistCoverCache } = useSidebarPlaylistCovers({
+  playlists,
+  loadCover,
+});
 
 const handleCreatePlaylist = () => {
   showCreateModal.value = true;
@@ -143,94 +132,6 @@ const confirmCreatePlaylist = (name: string) => {
   if (name) {
     createPlaylist(name);
   }
-};
-
-const handleDeletePlaylist = (id: string, name: string) => {
-  playlistsToDelete.value = [id];
-  deleteModalContent.value = `Delete playlist "${name}"?`;
-  showDeleteModal.value = true;
-};
-
-const handleDeletePlaylistBatch = (ids: string[], count: number) => {
-  playlistsToDelete.value = ids;
-  deleteModalContent.value = `Delete ${count} playlists?`;
-  showDeleteModal.value = true;
-};
-
-const confirmDeletePlaylist = () => {
-  playlistsToDelete.value.forEach(id => deletePlaylist(id));
-  selectedPlaylistIds.value.clear();
-  playlistsToDelete.value = [];
-  showDeleteModal.value = false;
-};
-
-const handlePlaylistClick = (e: MouseEvent, id: string) => {
-  e.stopPropagation();
-  void openHomePlaylist(id);
-
-  if (e.shiftKey && lastSelectedPlaylistId.value) {
-    const list = playlists.value;
-    const lastIndex = list.findIndex(p => p.id === lastSelectedPlaylistId.value);
-    const currentIndex = list.findIndex(p => p.id === id);
-    if (lastIndex !== -1 && currentIndex !== -1) {
-      const start = Math.min(lastIndex, currentIndex);
-      const end = Math.max(lastIndex, currentIndex);
-      for (let i = start; i <= end; i++) {
-        selectedPlaylistIds.value.add(list[i].id);
-      }
-    }
-  } else if (e.ctrlKey || e.metaKey) {
-    if (selectedPlaylistIds.value.has(id)) {
-      selectedPlaylistIds.value.delete(id);
-    } else {
-      selectedPlaylistIds.value.add(id);
-    }
-    lastSelectedPlaylistId.value = id;
-  } else {
-    selectedPlaylistIds.value.clear();
-    selectedPlaylistIds.value.add(id);
-    lastSelectedPlaylistId.value = id;
-  }
-};
-
-const handleBackgroundClick = () => {
-  if (currentViewMode.value === 'playlist' && filterCondition.value) {
-    selectedPlaylistIds.value.clear();
-    selectedPlaylistIds.value.add(filterCondition.value);
-  }
-};
-
-const handlePlaylistContextMenu = (e: MouseEvent, list: { id: string; name: string }) => {
-  e.preventDefault();
-  e.stopPropagation();
-  targetPlaylist.value = list;
-
-  if (!selectedPlaylistIds.value.has(list.id)) {
-    selectedPlaylistIds.value.clear();
-    selectedPlaylistIds.value.add(list.id);
-    lastSelectedPlaylistId.value = list.id;
-    viewPlaylist(list.id);
-  }
-
-  contextMenuX.value = e.clientX;
-  contextMenuY.value = e.clientY;
-  showContextMenu.value = true;
-};
-
-const handleMenuPlay = () => {
-  if (!targetPlaylist.value) {
-    return;
-  }
-
-  const songs = getSongsFromPlaylist(targetPlaylist.value.id);
-  if (songs.length > 0) {
-    clearQueue();
-    void openHomePlaylist(targetPlaylist.value.id);
-    setTimeout(() => {
-      playSong(songs[0]);
-    }, 50);
-  }
-  showContextMenu.value = false;
 };
 
 const handleOpenAllView = () => {
@@ -260,105 +161,6 @@ const handleOpenFolderView = () => {
 const handleOpenStatisticsView = () => {
   void openHomeStatistics();
 };
-
-const handleMenuAddToQueue = () => {
-  if (selectedPlaylistIds.value.size > 1) {
-    selectedPlaylistIds.value.forEach(id => {
-      addSongsToQueue(getSongsFromPlaylist(id));
-    });
-  } else if (targetPlaylist.value) {
-    addSongsToQueue(getSongsFromPlaylist(targetPlaylist.value.id));
-  }
-  showContextMenu.value = false;
-};
-
-const handleMenuDelete = () => {
-  if (selectedPlaylistIds.value.size > 0) {
-    handleDeletePlaylistBatch(Array.from(selectedPlaylistIds.value), selectedPlaylistIds.value.size);
-  } else if (targetPlaylist.value) {
-    handleDeletePlaylist(targetPlaylist.value.id, targetPlaylist.value.name);
-  }
-  showContextMenu.value = false;
-};
-
-const updateCoverIfChanged = async (playlistId: string, firstSongPath: string) => {
-  if (playlistRealFirstSongMap.get(playlistId) === firstSongPath && playlistCoverCache.value.has(playlistId)) {
-    return;
-  }
-
-  playlistRealFirstSongMap.set(playlistId, firstSongPath);
-  try {
-    const assetUrl = await loadCover(firstSongPath);
-    if (assetUrl) {
-      playlistCoverCache.value.set(playlistId, assetUrl);
-    } else {
-      playlistCoverCache.value.delete(playlistId);
-    }
-  } catch {
-    playlistCoverCache.value.delete(playlistId);
-  }
-};
-
-const calculatePlaylistCovers = async () => {
-  await Promise.all(playlists.value.map(async (pl) => {
-    if (pl.songPaths.length > 0) {
-      await updateCoverIfChanged(pl.id, pl.songPaths[0]);
-      return;
-    }
-
-    if (playlistCoverCache.value.has(pl.id)) {
-      playlistCoverCache.value.delete(pl.id);
-      playlistRealFirstSongMap.delete(pl.id);
-    }
-  }));
-};
-
-const schedulePlaylistCoverRefresh = () => {
-  if (playlistCoverRefreshTimer) {
-    clearTimeout(playlistCoverRefreshTimer);
-  }
-  if (playlistCoverRefreshIdleId !== null && 'cancelIdleCallback' in window) {
-    window.cancelIdleCallback(playlistCoverRefreshIdleId);
-    playlistCoverRefreshIdleId = null;
-  }
-
-  const runRefresh = () => {
-    playlistCoverRefreshIdleId = null;
-    playlistCoverRefreshTimer = null;
-    void calculatePlaylistCovers();
-  };
-
-  if ('requestIdleCallback' in window) {
-    playlistCoverRefreshIdleId = window.requestIdleCallback(runRefresh, { timeout: 500 });
-    return;
-  }
-
-  playlistCoverRefreshTimer = setTimeout(runRefresh, 180);
-};
-
-watch(
-  () => playlists.value.map(pl => `${pl.id}:${pl.songPaths[0] ?? ''}:${pl.songPaths.length}`).join('|'),
-  () => {
-    schedulePlaylistCoverRefresh();
-  },
-  { immediate: true }
-);
-
-onMounted(() => {
-  window.addEventListener('mousemove', handleGlobalMouseMove);
-  window.addEventListener('mouseup', handleGlobalMouseUp);
-});
-
-onUnmounted(() => {
-  window.removeEventListener('mousemove', handleGlobalMouseMove);
-  window.removeEventListener('mouseup', handleGlobalMouseUp);
-  if (playlistCoverRefreshTimer) {
-    clearTimeout(playlistCoverRefreshTimer);
-  }
-  if (playlistCoverRefreshIdleId !== null && 'cancelIdleCallback' in window) {
-    window.cancelIdleCallback(playlistCoverRefreshIdleId);
-  }
-});
 </script>
 
 <template>
@@ -422,18 +224,18 @@ onUnmounted(() => {
 
     <ModernModal
       v-model:visible="showDeleteModal"
-      title="鍒犻櫎姝屽崟"
+      title="Delete Playlist"
       :content="deleteModalContent"
       type="danger"
-      confirm-text="鍒犻櫎"
+      confirm-text="Delete"
       @confirm="confirmDeletePlaylist"
     />
 
     <ModernInputModal
       v-model:visible="showCreateModal"
-      title="鏂板缓姝屽崟"
-      placeholder="璇疯緭鍏ユ瓕鍗曞悕绉?"
-      confirm-text="鍒涘缓"
+      title="Create Playlist"
+      placeholder="Enter playlist name"
+      confirm-text="Create"
       @confirm="confirmCreatePlaylist"
     />
   </aside>

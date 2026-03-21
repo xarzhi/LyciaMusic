@@ -119,25 +119,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { usePlayer, Song } from '../composables/player';
-import { useToast } from '../composables/toast';
-import { useCoverCache } from '../composables/useCoverCache';
-import { useHomeBatchActions } from '../composables/useHomeBatchActions';
-import { useHomeFolderManagement } from '../composables/useHomeFolderManagement';
-import { useHomeNavigation } from '../composables/useHomeNavigation';
-import { useHomeRouteSync } from '../composables/useHomeRouteSync';
-import { useLibraryCollections } from '../composables/useLibraryCollections';
+
 import DragGhost from '../components/common/DragGhost.vue';
 import HomeViewPane from '../components/home/HomeViewPane.vue';
+import ModernInputModal from '../components/common/ModernInputModal.vue';
+import ModernModal from '../components/common/ModernModal.vue';
 import AddToPlaylistModal from '../components/overlays/AddToPlaylistModal.vue';
 import MoveToFolderModal from '../components/overlays/MoveToFolderModal.vue';
 import SongContextMenu from '../components/overlays/SongContextMenu.vue';
-import ModernModal from '../components/common/ModernModal.vue';
-import ModernInputModal from '../components/common/ModernInputModal.vue';
+import { useCoverCache } from '../composables/useCoverCache';
+import { useHomeArtistAlbums } from '../composables/useHomeArtistAlbums';
+import { useHomeBatchActions } from '../composables/useHomeBatchActions';
+import { useHomeFolderManagement } from '../composables/useHomeFolderManagement';
+import { useHomeNavigation } from '../composables/useHomeNavigation';
+import { useHomePlaylistRename } from '../composables/useHomePlaylistRename';
+import { useHomeRouteSync } from '../composables/useHomeRouteSync';
+import { useHomeViewState } from '../composables/useHomeViewState';
+import { useLibraryCollections } from '../composables/useLibraryCollections';
+import { usePlayer } from '../composables/player';
+import { useSongContextActions } from '../composables/useSongContextActions';
 import { useSongDrag } from '../composables/useSongDrag';
-import { compareByAlphabetIndex } from '../utils/alphabetIndex';
+import { useToast } from '../composables/toast';
 
 const route = useRoute();
 const router = useRouter();
@@ -168,6 +172,7 @@ const {
   albumSortMode,
   albumCustomOrder,
 } = usePlayer();
+
 const {
   addSongsToPlaylist,
   favoritePaths,
@@ -177,33 +182,50 @@ const {
 
 const { coverCache, loadingSet, preloadCovers } = useCoverCache();
 
-const localViewMode = ref(currentViewMode.value);
-const localFilterCondition = ref(filterCondition.value);
-const localSongList = computed(() => displaySongList.value);
-const selectedAlbumSong = computed(() => localSongList.value[0] || null);
-const songHasArtistName = (song: Song, artistName: string) =>
-  (song.effective_artist_names?.length ? song.effective_artist_names : song.artist_names || [song.artist]).includes(artistName);
-
 const isBatchMode = ref(false);
 const isManagementMode = ref(false);
 const selectedPaths = ref<Set<string>>(new Set());
 const songTableRef = ref<any>(null);
-const artistActiveTab = ref<'songs' | 'albums' | 'details'>('songs');
-const viewTransitionKey = computed(() => `${localViewMode.value}:${localFilterCondition.value}:${artistActiveTab.value}`);
 
-const { handleTableDragStart } = useSongDrag(localSongList, isBatchMode, selectedPaths, songTableRef);
+const {
+  localViewMode,
+  localFilterCondition,
+  artistActiveTab,
+  viewTransitionKey,
+} = useHomeViewState({
+  currentViewMode,
+  filterCondition,
+  isManagementMode,
+});
+
+const localSongList = computed(() => displaySongList.value);
+const selectedAlbumSong = computed(() => localSongList.value[0] || null);
+
+const { handleTableDragStart } = useSongDrag(
+  localSongList,
+  isBatchMode,
+  selectedPaths,
+  songTableRef,
+);
 
 const showAddToPlaylistModal = ref(false);
-const showContextMenu = ref(false);
-const contextMenuX = ref(0);
-const contextMenuY = ref(0);
-const contextMenuTargetSong = ref<Song | null>(null);
-const showRenameModal = ref(false);
-const renameInitialValue = ref('');
-const showSongPhysicalDeleteConfirm = ref(false);
-const songToPhysicalDelete = ref<any>(null);
 
-watch(isBatchMode, (value) => {
+const {
+  showContextMenu,
+  contextMenuX,
+  contextMenuY,
+  contextMenuTargetSong,
+  showSongPhysicalDeleteConfirm,
+  songToPhysicalDelete,
+  handleContextMenu,
+  handleSongPhysicalDelete,
+  executeSongPhysicalDelete,
+} = useSongContextActions({
+  isBatchMode,
+  deleteFromDisk,
+});
+
+watch(isBatchMode, value => {
   if (!value) {
     selectedPaths.value.clear();
   }
@@ -279,166 +301,64 @@ useHomeRouteSync({
   searchQuery,
 });
 
+const {
+  showRenameModal,
+  renameInitialValue,
+  handleRenamePlaylist,
+  confirmRename,
+} = useHomePlaylistRename({
+  currentViewMode,
+  filterCondition,
+  playlists,
+  showToast,
+});
+
 const playlistDetail = computed(() => {
-  if (localViewMode.value === 'playlist') {
-    const playlist = playlists.value.find((item) => item.id === localFilterCondition.value);
-    if (playlist) {
-      return {
-        name: playlist.name,
-        date: (playlist as any).createdAt || '',
-      };
-    }
+  if (localViewMode.value !== 'playlist') {
+    return null;
   }
 
-  return null;
+  const playlist = playlists.value.find(item => item.id === localFilterCondition.value);
+  if (!playlist) {
+    return null;
+  }
+
+  return {
+    name: playlist.name,
+    date: (playlist as any).createdAt || '',
+  };
 });
 
-const artistAlbumList = computed(() => {
-  const artistName = localFilterCondition.value || filterCondition.value;
-  if (!artistName) {
-    return [];
-  }
-
-  const albumMap = new Map<string, { key: string; name: string; count: number; artist: string; firstSongPath: string }>();
-
-  librarySongs.value.forEach((song) => {
-    if (!songHasArtistName(song, artistName)) {
-      return;
-    }
-
-    const albumKey = song.album_key || `${song.album || 'Unknown'}::${song.album_artist || song.artist || 'Unknown'}`;
-    const albumName = song.album || 'Unknown';
-    const existing = albumMap.get(albumKey);
-
-    if (existing) {
-      existing.count += 1;
-      return;
-    }
-
-    albumMap.set(albumKey, {
-      key: albumKey,
-      name: albumName,
-      count: 1,
-      artist: song.album_artist || song.artist || 'Unknown',
-      firstSongPath: song.path,
-    });
-  });
-
-  const albums = Array.from(albumMap.values());
-
-  if (albumSortMode.value === 'name') {
-    albums.sort((left, right) => compareByAlphabetIndex(left.name, right.name));
-  } else if (albumSortMode.value === 'custom') {
-    const orderMap = new Map(albumCustomOrder.value.map((key, index) => [key, index]));
-    albums.sort((left, right) => {
-      const leftIndex = orderMap.has(left.key) ? orderMap.get(left.key)! : Number.MAX_SAFE_INTEGER;
-      const rightIndex = orderMap.has(right.key) ? orderMap.get(right.key)! : Number.MAX_SAFE_INTEGER;
-      return leftIndex - rightIndex;
-    });
-  } else if (albumSortMode.value === 'artist') {
-    albums.sort((left, right) => {
-      const artistDiff = compareByAlphabetIndex(left.artist, right.artist);
-      return artistDiff !== 0 ? artistDiff : compareByAlphabetIndex(left.name, right.name);
-    });
-  } else {
-    albums.sort((left, right) => right.count - left.count || compareByAlphabetIndex(left.artist, right.artist));
-  }
-
-  return albums;
+const { artistAlbumList } = useHomeArtistAlbums({
+  localFilterCondition,
+  filterCondition,
+  librarySongs,
+  albumSortMode,
+  albumCustomOrder,
+  preloadCovers,
 });
-
-watch(artistAlbumList, (albums) => {
-  preloadCovers(albums.map((album) => album.firstSongPath).filter(Boolean));
-}, { immediate: true });
 
 const handlePlayAll = () => {
   if (localSongList.value.length > 0) {
-    playSong(localSongList.value[0]);
+    void playSong(localSongList.value[0]);
   }
 };
 
 const handleBatchPlay = () => {
-  const selected = localSongList.value.filter((song) => selectedPaths.value.has(song.path));
-  if (selected.length > 0) {
-    playSong(selected[0]);
+  const selectedSongs = localSongList.value.filter(song => selectedPaths.value.has(song.path));
+  if (selectedSongs.length > 0) {
+    void playSong(selectedSongs[0]);
   }
 };
 
 const handleRefreshAll = async () => {
   await refreshAllFolders();
-  showToast('鍒锋柊瀹屾垚', 'success');
-};
-
-const handleRenamePlaylist = () => {
-  if (currentViewMode.value !== 'playlist') return;
-
-  const playlist = playlists.value.find((item) => item.id === filterCondition.value);
-  if (playlist) {
-    renameInitialValue.value = playlist.name;
-    showRenameModal.value = true;
-  }
-};
-
-const confirmRename = (newName: string) => {
-  if (currentViewMode.value !== 'playlist') return;
-
-  const playlist = playlists.value.find((item) => item.id === filterCondition.value);
-  if (playlist && newName.trim()) {
-    playlist.name = newName.trim();
-    showToast('Playlist renamed', 'success');
-    showRenameModal.value = false;
-  }
-};
-
-const handleContextMenu = (event: MouseEvent, song: Song) => {
-  if (isBatchMode.value) return;
-
-  contextMenuTargetSong.value = song;
-  contextMenuX.value = event.clientX;
-  const menuHeight = 250;
-  contextMenuY.value =
-    event.clientY + menuHeight > window.innerHeight
-      ? event.clientY - menuHeight
-      : event.clientY;
-  showContextMenu.value = true;
-};
-
-const handleSongPhysicalDelete = (song: Song) => {
-  songToPhysicalDelete.value = song;
-  showSongPhysicalDeleteConfirm.value = true;
-  showContextMenu.value = false;
-};
-
-const executeSongPhysicalDelete = async () => {
-  if (!songToPhysicalDelete.value) {
-    return;
-  }
-
-  await deleteFromDisk(songToPhysicalDelete.value);
-  showSongPhysicalDeleteConfirm.value = false;
-  songToPhysicalDelete.value = null;
+  showToast('Refresh completed', 'success');
 };
 
 const handleArtistAlbumClick = (albumKey: string) => {
   void openHomeAlbum(albumKey);
 };
-
-watch(currentViewMode, (newMode) => {
-  localViewMode.value = newMode;
-  if (newMode !== 'artist') {
-    artistActiveTab.value = 'songs';
-  }
-}, { immediate: true });
-
-watch(filterCondition, (newFilter) => {
-  localFilterCondition.value = newFilter;
-}, { immediate: true });
-
-watch(currentViewMode, (newMode) => {
-  if (newMode !== 'folder') {
-    isManagementMode.value = false;
-  }
-});
 </script>
 
 <style scoped>

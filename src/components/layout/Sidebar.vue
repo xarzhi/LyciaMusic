@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+
 import { usePlayer, dragSession } from '../../composables/player';
 import { useLibraryCollections } from '../../composables/useLibraryCollections';
 import { usePlayerViewState } from '../../composables/usePlayerViewState';
 import { useCoverCache } from '../../composables/useCoverCache';
 import { useHomeNavigation } from '../../composables/useHomeNavigation';
-
-import ModernModal from '../common/ModernModal.vue';
 import ModernInputModal from '../common/ModernInputModal.vue';
+import ModernModal from '../common/ModernModal.vue';
 import PlaylistContextMenu from '../overlays/PlaylistContextMenu.vue';
+import SidebarNavigation from './SidebarNavigation.vue';
+import SidebarPlaylists from './SidebarPlaylists.vue';
 
 const {
   artistList,
@@ -33,6 +35,7 @@ const {
   getSongsFromPlaylist,
 } = useLibraryCollections();
 
+const route = useRoute();
 const router = useRouter();
 const {
   openHomeAll,
@@ -62,10 +65,6 @@ const playlistCoverCache = ref<Map<string, string>>(new Map());
 const playlistRealFirstSongMap = new Map<string, string>();
 let playlistCoverRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let playlistCoverRefreshIdleId: number | null = null;
-
-const baseNavClasses = 'px-3 py-2 mx-2 rounded-md cursor-pointer flex items-center transition-all duration-300 text-sm font-medium active:scale-[0.97]';
-const activeNavClasses = 'bg-black/10 dark:bg-white/10 text-black dark:text-white font-semibold shadow-sm translate-x-1';
-const inactiveNavClasses = 'text-gray-600 dark:text-white/60 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white hover:translate-x-1';
 
 const handleHoverArtists = () => {
   if (artistList.value.length > 0) {
@@ -148,13 +147,13 @@ const confirmCreatePlaylist = (name: string) => {
 
 const handleDeletePlaylist = (id: string, name: string) => {
   playlistsToDelete.value = [id];
-  deleteModalContent.value = `确定要删除歌单“${name}”吗？此操作不可恢复。`;
+  deleteModalContent.value = `Delete playlist "${name}"?`;
   showDeleteModal.value = true;
 };
 
 const handleDeletePlaylistBatch = (ids: string[], count: number) => {
   playlistsToDelete.value = ids;
-  deleteModalContent.value = `确定要删除选中的 ${count} 个歌单吗？此操作不可恢复。`;
+  deleteModalContent.value = `Delete ${count} playlists?`;
   showDeleteModal.value = true;
 };
 
@@ -236,6 +235,22 @@ const handleMenuPlay = () => {
 
 const handleOpenAllView = () => {
   void openHomeAll();
+};
+
+const handleOpenArtistsView = () => {
+  void router.push('/artists');
+};
+
+const handleOpenAlbumsView = () => {
+  void router.push('/albums');
+};
+
+const handleOpenFavoritesView = () => {
+  void router.push('/favorites');
+};
+
+const handleOpenRecentView = () => {
+  void router.push('/recent');
 };
 
 const handleOpenFolderView = () => {
@@ -359,102 +374,37 @@ onUnmounted(() => {
     </div>
 
     <nav class="flex-1 overflow-y-auto custom-scrollbar px-2 pb-4" @click="handleBackgroundClick">
-      <ul class="space-y-1 transition-all duration-200" :class="{ 'opacity-30 grayscale pointer-events-none': dragSession.active }">
-        <template v-if="settings.sidebar.showLocalMusic">
-          <li @click="handleOpenAllView" :class="[baseNavClasses, (currentViewMode === 'all' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
-            <span>本地音乐</span>
-          </li>
-        </template>
+      <SidebarNavigation
+        :sidebar="settings.sidebar"
+        :currentViewMode="currentViewMode"
+        :currentPath="route.path"
+        :isDragActive="dragSession.active"
+        @openAll="handleOpenAllView"
+        @openArtists="handleOpenArtistsView"
+        @openAlbums="handleOpenAlbumsView"
+        @openFavorites="handleOpenFavoritesView"
+        @openRecent="handleOpenRecentView"
+        @openFolder="handleOpenFolderView"
+        @openStatistics="handleOpenStatisticsView"
+        @hoverArtists="handleHoverArtists"
+        @hoverAlbums="handleHoverAlbums"
+      />
 
-        <router-link to="/artists" custom v-slot="{ navigate, isActive }" v-if="settings.sidebar.showArtists">
-          <li @click="navigate" @mouseenter="handleHoverArtists" :class="[baseNavClasses, isActive ? activeNavClasses : inactiveNavClasses]">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-            <span>歌手</span>
-          </li>
-        </router-link>
-
-        <router-link to="/albums" custom v-slot="{ navigate, isActive }" v-if="settings.sidebar.showAlbums">
-          <li @click="navigate" @mouseenter="handleHoverAlbums" :class="[baseNavClasses, isActive ? activeNavClasses : inactiveNavClasses]">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="10" stroke-width="2" /><circle cx="12" cy="12" r="3" stroke-width="2" /></svg>
-            <span>专辑</span>
-          </li>
-        </router-link>
-
-        <router-link to="/favorites" custom v-slot="{ navigate, isActive }" v-if="settings.sidebar.showFavorites">
-          <li @click="navigate" :class="[baseNavClasses, isActive ? activeNavClasses : inactiveNavClasses]">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
-            <span>我的收藏</span>
-          </li>
-        </router-link>
-
-        <router-link to="/recent" custom v-slot="{ navigate, isActive }" v-if="settings.sidebar.showRecent">
-          <li @click="navigate" :class="[baseNavClasses, isActive ? activeNavClasses : inactiveNavClasses]">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <span>最近播放</span>
-          </li>
-        </router-link>
-
-        <template v-if="settings.sidebar.showFolders">
-          <li @click="handleOpenFolderView" :class="[baseNavClasses, (currentViewMode === 'folder' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
-            <span>文件夹</span>
-          </li>
-        </template>
-
-        <template v-if="settings.sidebar.showStatistics">
-          <li @click="handleOpenStatisticsView" :class="[baseNavClasses, (currentViewMode === 'statistics' && $route.path === '/') ? activeNavClasses : inactiveNavClasses]">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-            <span>统计</span>
-          </li>
-        </template>
-      </ul>
-
-      <div class="mt-6">
-        <div class="px-4 pr-3 py-2 flex items-center justify-between group">
-          <div class="flex items-center gap-1 cursor-pointer text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors" @click.stop="isPlaylistOpen = !isPlaylistOpen">
-            <svg xmlns="http://www.w3.org/2000/svg" :class="['h-3 w-3 transition-transform duration-200', isPlaylistOpen ? 'rotate-90' : '']" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-            <span class="text-xs font-bold tracking-wide">我的歌单</span>
-            <span class="text-xs text-gray-500 dark:text-gray-400 font-normal ml-0.5">{{ playlists.length }}</span>
-          </div>
-          <button @click.stop="handleCreatePlaylist" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded p-0.5 transition-colors" title="新建歌单"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg></button>
-        </div>
-
-        <Transition name="playlist-list">
-          <ul v-show="isPlaylistOpen" class="space-y-0.5 mt-1 overflow-hidden">
-            <TransitionGroup name="playlist-item">
-              <li
-                v-for="(list, index) in playlists"
-                :key="list.id"
-                @mousedown="handleMouseDown($event, index, list)"
-                @mousemove="handleItemMouseMove($event, list.id)"
-                @click.stop="handlePlaylistClick($event, list.id)"
-                @contextmenu="handlePlaylistContextMenu($event, list)"
-                :data-playlist-id="list.id"
-                :data-playlist-name="list.name"
-                class="playlist-drop-target px-3 py-2 mx-2 rounded-md cursor-pointer flex items-center transition-all duration-300 group relative border-t-2 border-transparent border-b-2 select-none active:scale-[0.98]"
-                :class="[
-                  selectedPlaylistIds.has(list.id) ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white font-medium shadow-sm translate-x-1' : 'hover:bg-black/5 dark:hover:bg-white/5 text-gray-600 dark:text-gray-300 hover:translate-x-1',
-                  (dragSession.active && dragSession.type === 'playlist' && dragSession.data?.id === list.id) ? 'opacity-50 bg-gray-100 dark:bg-white/5' : '',
-                  (dragSession.active && dragSession.targetPlaylist?.id === list.id && dragSession.type === 'song') ? '!bg-red-500/10 !ring-2 !ring-[#EC4141] ring-inset' : '',
-                  (dragSession.type === 'playlist' && dragOverId === list.id && dragPosition === 'top') ? '!border-t-[#EC4141]' : '',
-                  (dragSession.type === 'playlist' && dragOverId === list.id && dragPosition === 'bottom') ? '!border-b-[#EC4141]' : ''
-                ]"
-              >
-                <div class="w-9 h-9 rounded bg-gray-200/50 border border-gray-100/50 shrink-0 overflow-hidden mr-3 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                  <img v-if="playlistCoverCache.get(list.id)" :src="playlistCoverCache.get(list.id)" class="w-full h-full object-cover" alt="Cover" />
-                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400 dark:text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
-                </div>
-                <div class="flex-1 min-w-0 flex flex-col justify-center">
-                  <span class="text-sm truncate leading-tight mb-0.5">{{ list.name }}</span>
-                  <span class="text-[10px] text-gray-400 dark:text-white/40 leading-tight">{{ list.songPaths.length }} 首</span>
-                </div>
-                <button @click.stop="handleDeletePlaylist(list.id, list.name)" class="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-gray-400 dark:text-white/60 hover:text-red-500 transition-all p-1" title="删除歌单"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
-              </li>
-            </TransitionGroup>
-          </ul>
-        </Transition>
-      </div>
+      <SidebarPlaylists
+        v-model:isOpen="isPlaylistOpen"
+        :playlists="playlists"
+        :selectedPlaylistIds="selectedPlaylistIds"
+        :playlistCoverCache="playlistCoverCache"
+        :dragState="dragSession"
+        :dragOverId="dragOverId"
+        :dragPosition="dragPosition"
+        @createPlaylist="handleCreatePlaylist"
+        @mouseDown="handleMouseDown"
+        @itemMouseMove="handleItemMouseMove"
+        @playlistClick="handlePlaylistClick"
+        @playlistContextMenu="handlePlaylistContextMenu"
+        @deletePlaylist="handleDeletePlaylist"
+      />
     </nav>
 
     <PlaylistContextMenu
@@ -472,18 +422,18 @@ onUnmounted(() => {
 
     <ModernModal
       v-model:visible="showDeleteModal"
-      title="删除歌单"
+      title="鍒犻櫎姝屽崟"
       :content="deleteModalContent"
       type="danger"
-      confirm-text="删除"
+      confirm-text="鍒犻櫎"
       @confirm="confirmDeletePlaylist"
     />
 
     <ModernInputModal
       v-model:visible="showCreateModal"
-      title="新建歌单"
-      placeholder="请输入歌单名称"
-      confirm-text="创建"
+      title="鏂板缓姝屽崟"
+      placeholder="璇疯緭鍏ユ瓕鍗曞悕绉?"
+      confirm-text="鍒涘缓"
       @confirm="confirmCreatePlaylist"
     />
   </aside>
@@ -502,27 +452,5 @@ onUnmounted(() => {
 }
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
-}
-
-.playlist-item-enter-active,
-.playlist-item-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.playlist-item-enter-from,
-.playlist-item-leave-to {
-  opacity: 0;
-  transform: translateX(-10px);
-}
-
-.playlist-list-enter-active,
-.playlist-list-leave-active {
-  transition: all 0.3s ease-in-out;
-  max-height: 500px;
-  overflow: hidden;
-}
-.playlist-list-enter-from,
-.playlist-list-leave-to {
-  max-height: 0;
-  opacity: 0;
 }
 </style>

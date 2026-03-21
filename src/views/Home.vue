@@ -1,173 +1,47 @@
 <template>
   <div class="flex flex-col h-full">
-    <transition name="home-view-fade" mode="out-in">
-      <div :key="viewTransitionKey" class="flex flex-1 flex-col min-h-0 min-w-0">
-        <FoldersHeader
-          v-if="localViewMode === 'folder'"
-          v-model:isBatchMode="isBatchMode"
-          :activeRootPath="activeRootPath"
-          :selectedCount="selectedPaths.size"
-          :folderTree="folderTree"
-          :currentFolderFilter="currentFolderFilter"
-          @playAll="handlePlayAll"
-          @batchPlay="handleBatchPlay"
-          @addToPlaylist="showAddToPlaylistModal = true"
-          @batchDelete="handleFolderBatchDelete"
-          @batchMove="handleBatchMove"
-          @addFolder="handleAddFolder"
-          @refreshFolder="handleRefreshFolder"
-          @removeFolder="handleRemoveFolderWithConfirm"
-          @newFolder="handleRootCreateFolderRequest"
-          @deleteFolderDisk="handleRootDeleteFolderRequest"
-          @update:activeRootPath="handleActiveRootChange"
-          v-model:isManagementMode="isManagementMode"
-        />
-        <DetailHeader
-          v-else-if="localViewMode === 'playlist'"
-          v-model:isBatchMode="isBatchMode"
-          :title="playlistDetail?.name || ''"
-          :subtitle="playlistDetail?.date ? `${playlistDetail.date} 创建` : ''"
-          :songs="localSongList"
-          :selectedCount="selectedPaths.size"
-          :showRename="true"
-          @playAll="handlePlayAll"
-          @batchPlay="handleBatchPlay"
-          @addToPlaylist="showAddToPlaylistModal = true"
-          @batchDelete="requestBatchDelete"
-          @rename="handleRenamePlaylist"
-        />
-
-        <LocalMusicHeader
-          v-else-if="!['statistics', 'artist', 'album'].includes(localViewMode)"
-          v-model:isBatchMode="isBatchMode"
-          :selectedCount="selectedPaths.size"
-          @playAll="handlePlayAll"
-          @batchPlay="handleBatchPlay"
-          @addToPlaylist="showAddToPlaylistModal = true"
-          @batchDelete="requestBatchDelete"
-          @batchMove="handleBatchMove"
-          @refreshAll="handleRefreshAll"
-        />
-
-        <div class="flex-1 flex overflow-hidden relative min-w-0">
-          <MasterPanel
-            v-if="localViewMode === 'folder'"
-            :isManagementMode="isManagementMode"
-          />
-
-          <section class="flex-1 min-w-0 flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar relative">
-            <ArtistDetailHeader
-              v-if="localViewMode === 'artist'"
-              v-model:isBatchMode="isBatchMode"
-              v-model:activeTab="artistActiveTab"
-              :artistName="localFilterCondition || '未知歌手'"
-              :songs="localSongList"
-              :selectedCount="selectedPaths.size"
-              @playAll="handlePlayAll"
-              @batchPlay="handleBatchPlay"
-              @addToPlaylist="showAddToPlaylistModal = true"
-              @batchDelete="requestBatchDelete"
-              @batchMove="handleBatchMove"
-            />
-
-            <AlbumDetailHeader
-              v-else-if="localViewMode === 'album'"
-              v-model:isBatchMode="isBatchMode"
-              :albumName="selectedAlbumSong?.album || '未知专辑'"
-              :albumArtist="selectedAlbumSong?.album_artist || selectedAlbumSong?.artist || '未知歌手'"
-              :songs="localSongList"
-              :selectedCount="selectedPaths.size"
-              @playAll="handlePlayAll"
-              @batchPlay="handleBatchPlay"
-              @addToPlaylist="showAddToPlaylistModal = true"
-              @batchDelete="requestBatchDelete"
-              @batchMove="handleBatchMove"
-            />
-
-            <StatisticsPage v-if="localViewMode === 'statistics'" />
-
-            <section
-              v-else-if="localViewMode === 'artist' && artistActiveTab === 'albums'"
-              class="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 custom-scrollbar relative z-0"
-            >
-              <div
-                v-if="artistAlbumList.length > 0"
-                class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-x-6 gap-y-10"
-              >
-                <div
-                  v-for="album in artistAlbumList"
-                  :key="album.key"
-                  @click="handleArtistAlbumClick(album.key)"
-                  class="group cursor-pointer rounded-xl p-2 md:p-3 transition-all duration-300 flex flex-col relative select-none hover:bg-white/40 dark:hover:bg-white/5"
-                >
-                  <div class="relative w-full aspect-square mb-3 mt-4">
-                    <div class="absolute inset-x-2 top-0 bottom-1/2 bg-[#1c1c1c] rounded-t-full shadow-inner origin-bottom translate-y-[-10%] group-hover:translate-y-[-24%] transition-transform duration-500 ease-out z-0 flex items-center justify-center overflow-hidden border border-[#333]">
-                      <div class="absolute inset-0 rounded-t-full border border-white/5 scale-90"></div>
-                      <div class="absolute inset-0 rounded-t-full border border-white/5 scale-75"></div>
-                      <div class="absolute inset-0 rounded-t-full border border-white/5 scale-50"></div>
-                    </div>
-
-                    <div class="absolute inset-0 z-10 bg-white dark:bg-gray-800 rounded-md shadow-md border border-gray-100 dark:border-white/10 p-1 flex items-center justify-center overflow-hidden group-hover:shadow-xl transition-shadow duration-300">
-                      <div
-                        v-if="coverCache.get(album.firstSongPath)"
-                        class="w-full h-full bg-cover bg-center rounded-sm"
-                        :style="{ backgroundImage: `url(${coverCache.get(album.firstSongPath)})` }"
-                      ></div>
-
-                      <div
-                        v-else
-                        class="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-white/5 dark:to-white/10 rounded-sm flex items-center justify-center text-4xl font-bold text-gray-300 dark:text-gray-600 shadow-inner"
-                        :class="{ 'animate-pulse': loadingSet.has(album.firstSongPath) }"
-                      >
-                        {{ album.name ? album.name.substring(0, 1).toUpperCase() : 'A' }}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="flex flex-col items-start px-1 z-20">
-                    <h3 class="font-bold text-sm md:text-base text-gray-800 dark:text-gray-200 truncate w-full group-hover:text-[#EC4141] transition-colors leading-tight">
-                      {{ album.name }}
-                    </h3>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 truncate w-full mt-1.5 flex items-center gap-1.5 opacity-80">
-                      <span class="font-medium">{{ album.count }}首</span>
-                      <span class="w-0.5 h-0.5 rounded-full bg-gray-400"></span>
-                      <span>{{ album.artist }}</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div v-else class="flex min-h-[400px] flex-col items-center justify-center text-gray-400 dark:text-gray-500">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                <p class="text-sm">暂无专辑数据</p>
-              </div>
-            </section>
-
-            <div v-else-if="localViewMode === 'artist' && artistActiveTab === 'details'" class="flex-1 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 min-h-[400px]">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p class="text-sm">歌手详情敬请期待</p>
-            </div>
-
-            <SongTable
-              v-else
-              ref="songTableRef"
-              :songs="localSongList"
-              :isBatchMode="isBatchMode"
-              :selectedPaths="selectedPaths"
-              class="min-h-[500px]"
-              @play="playSong"
-              @contextmenu="handleContextMenu"
-              @update:selectedPaths="selectedPaths = $event"
-              @drag-start="handleTableDragStart"
-            />
-          </section>
-        </div>
-      </div>
-    </transition>
+    <HomeViewPane
+      :viewTransitionKey="viewTransitionKey"
+      :localViewMode="localViewMode"
+      :isBatchMode="isBatchMode"
+      :isManagementMode="isManagementMode"
+      :activeRootPath="activeRootPath || ''"
+      :selectedCount="selectedPaths.size"
+      :folderTree="folderTree"
+      :currentFolderFilter="currentFolderFilter"
+      :playlistDetail="playlistDetail"
+      :localSongList="localSongList"
+      :artistActiveTab="artistActiveTab"
+      :localFilterCondition="localFilterCondition"
+      :selectedAlbumSong="selectedAlbumSong"
+      :artistAlbumList="artistAlbumList"
+      :coverCache="coverCache"
+      :loadingSet="loadingSet"
+      :selectedPaths="selectedPaths"
+      :songTableRef="songTableRef"
+      @update:isBatchMode="isBatchMode = $event"
+      @update:isManagementMode="isManagementMode = $event"
+      @update:artistActiveTab="artistActiveTab = $event"
+      @update:selectedPaths="selectedPaths = $event"
+      @playAll="handlePlayAll"
+      @batchPlay="handleBatchPlay"
+      @showAddToPlaylist="showAddToPlaylistModal = true"
+      @batchDelete="requestBatchDelete"
+      @folderBatchDelete="handleFolderBatchDelete"
+      @batchMove="handleBatchMove"
+      @addFolder="handleAddFolder"
+      @refreshFolder="handleRefreshFolder"
+      @removeFolder="handleRemoveFolderWithConfirm"
+      @rootCreateFolder="handleRootCreateFolderRequest"
+      @rootDeleteFolder="handleRootDeleteFolderRequest"
+      @activeRootChange="handleActiveRootChange"
+      @renamePlaylist="handleRenamePlaylist"
+      @refreshAll="handleRefreshAll"
+      @playSong="playSong"
+      @contextMenuSong="handleContextMenu"
+      @tableDragStart="handleTableDragStart"
+      @artistAlbumClick="handleArtistAlbumClick"
+    />
 
     <DragGhost />
 
@@ -209,34 +83,34 @@
 
     <ModernModal
       v-model:visible="showSongPhysicalDeleteConfirm"
-      title="⚠️ 永久删除文件"
-      :content="`确定要从磁盘中永久删除歌曲 '${songToPhysicalDelete?.title}' 吗？此操作不可恢复！`"
+      title="Delete File Permanently"
+      :content="`Are you sure you want to permanently delete '${songToPhysicalDelete?.title}' from disk? This cannot be undone.`"
       type="danger"
-      confirm-text="永久删除"
+      confirm-text="Delete Permanently"
       @confirm="executeSongPhysicalDelete"
     />
 
     <ModernModal
       v-model:visible="showFolderDeleteConfirm"
-      title="删除文件夹"
-      :content="`确定要删除文件夹 '${folderToDeletePath}' 吗？这会同时删除该文件夹及其内部所有本地文件。`"
+      title="Delete Folder"
+      :content="`Are you sure you want to delete folder '${folderToDeletePath}'? This will also remove local files inside it.`"
       type="danger"
-      confirm-text="删除文件夹"
+      confirm-text="Delete Folder"
       @confirm="executeDeleteFolder"
     />
 
     <ModernInputModal
       :visible="showCreateFolderModal"
-      title="新建文件夹"
-      placeholder="输入文件夹名称"
-      confirm-text="创建"
+      title="Create Folder"
+      placeholder="Enter folder name"
+      confirm-text="Create"
       @cancel="showCreateFolderModal = false"
       @confirm="confirmCreateFolder"
     />
 
     <ModernInputModal
       :visible="showRenameModal"
-      title="重命名歌单"
+      title="Rename Playlist"
       :initial-value="renameInitialValue"
       @cancel="showRenameModal = false"
       @confirm="confirmRename"
@@ -255,20 +129,13 @@ import { useHomeFolderManagement } from '../composables/useHomeFolderManagement'
 import { useHomeNavigation } from '../composables/useHomeNavigation';
 import { useHomeRouteSync } from '../composables/useHomeRouteSync';
 import { useLibraryCollections } from '../composables/useLibraryCollections';
-import LocalMusicHeader from '../components/headers/LocalMusicHeader.vue';
-import FoldersHeader from '../components/headers/FoldersHeader.vue';
-import DetailHeader from '../components/headers/DetailHeader.vue';
-import ArtistDetailHeader from '../components/headers/ArtistDetailHeader.vue';
-import AlbumDetailHeader from '../components/headers/AlbumDetailHeader.vue';
-import MasterPanel from '../components/song-list/MasterPanel.vue';
-import SongTable from '../components/song-list/SongTable.vue';
 import DragGhost from '../components/common/DragGhost.vue';
+import HomeViewPane from '../components/home/HomeViewPane.vue';
 import AddToPlaylistModal from '../components/overlays/AddToPlaylistModal.vue';
 import MoveToFolderModal from '../components/overlays/MoveToFolderModal.vue';
 import SongContextMenu from '../components/overlays/SongContextMenu.vue';
 import ModernModal from '../components/common/ModernModal.vue';
 import ModernInputModal from '../components/common/ModernInputModal.vue';
-import StatisticsPage from '../components/statistics/StatisticsPage.vue';
 import { useSongDrag } from '../composables/useSongDrag';
 import { compareByAlphabetIndex } from '../utils/alphabetIndex';
 
@@ -499,7 +366,7 @@ const handleBatchPlay = () => {
 
 const handleRefreshAll = async () => {
   await refreshAllFolders();
-  showToast('刷新完成', 'success');
+  showToast('鍒锋柊瀹屾垚', 'success');
 };
 
 const handleRenamePlaylist = () => {
@@ -518,7 +385,7 @@ const confirmRename = (newName: string) => {
   const playlist = playlists.value.find((item) => item.id === filterCondition.value);
   if (playlist && newName.trim()) {
     playlist.name = newName.trim();
-    showToast('歌单重命名成功', 'success');
+    showToast('Playlist renamed', 'success');
     showRenameModal.value = false;
   }
 };

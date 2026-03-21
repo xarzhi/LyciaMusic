@@ -711,7 +711,107 @@ fn detect_audio_identity(path: &Path, ext: &str) -> AudioIdentity {
 
 #[cfg(test)]
 mod tests {
-    use super::preferred_parse_workers_for_available;
+    use super::{
+        apply_scan_changes, collect_scan_diff, preferred_parse_workers_for_available,
+        song_identity_missing, song_metadata_incomplete, DbSongSnapshot,
+    };
+    use crate::music::types::Song;
+    use rusqlite::{params, Connection};
+    use std::collections::HashMap;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn make_song(path: &str) -> Song {
+        Song {
+            id: None,
+            name: PathBuf::from(path)
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.to_string()),
+            title: "Demo".to_string(),
+            path: path.to_string(),
+            artist: "Artist".to_string(),
+            artist_names: vec!["Artist".to_string()],
+            effective_artist_names: vec!["Artist".to_string()],
+            album: "Album".to_string(),
+            album_artist: "Artist".to_string(),
+            album_key: "album::artist".to_string(),
+            is_various_artists_album: false,
+            collapse_artist_credits: false,
+            duration: 180,
+            cover: None,
+            bitrate: 320,
+            sample_rate: 48_000,
+            bit_depth: Some(24),
+            format: "flac".to_string(),
+            container: Some("flac".to_string()),
+            codec: Some("flac".to_string()),
+            file_size: 1024,
+            added_at: Some(1),
+            file_modified_at: Some(10),
+        }
+    }
+
+    fn setup_test_db() -> Connection {
+        let conn = Connection::open_in_memory().expect("open in-memory db");
+        conn.pragma_update(None, "foreign_keys", "ON")
+            .expect("enable foreign keys");
+        conn.execute_batch(
+            "
+            CREATE TABLE songs (
+                id INTEGER PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                title TEXT,
+                artist TEXT,
+                artist_names TEXT,
+                effective_artist_names TEXT,
+                album TEXT,
+                album_artist TEXT,
+                album_key TEXT,
+                is_various_artists_album INTEGER DEFAULT 0,
+                collapse_artist_credits INTEGER DEFAULT 0,
+                duration INTEGER,
+                cover_path TEXT,
+                bitrate INTEGER,
+                sample_rate INTEGER,
+                bit_depth INTEGER,
+                format TEXT,
+                container TEXT,
+                codec TEXT,
+                file_size INTEGER,
+                added_at INTEGER,
+                file_modified_at INTEGER
+            );
+            CREATE TABLE artists (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                avatar_path TEXT
+            );
+            CREATE TABLE song_artists (
+                song_id INTEGER NOT NULL,
+                artist_id INTEGER NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (song_id, artist_id),
+                FOREIGN KEY(song_id) REFERENCES songs(id) ON DELETE CASCADE,
+                FOREIGN KEY(artist_id) REFERENCES artists(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_song_artists_artist_id ON song_artists(artist_id);
+            ",
+        )
+        .expect("create scanner test schema");
+        conn
+    }
+
+    fn create_empty_temp_dir() -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("lycia_scanner_test_{unique}"));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
 
     #[test]
     fn parse_workers_return_one_for_single_task() {
@@ -733,6 +833,117 @@ mod tests {
     #[test]
     fn parse_workers_never_exceed_task_count() {
         assert_eq!(preferred_parse_workers_for_available(3, 16), 3);
+    }
+
+    #[test]
+    fn flags_incomplete_or_identity_less_songs_for_rescan() {
+        let mut song = make_song("/music/demo.flac");
+        assert!(!song_metadata_incomplete(&song));
+        assert!(!song_identity_missing(&song));
+
+        song.title.clear();
+        assert!(song_metadata_incomplete(&song));
+
+        song = make_song("/music/demo.flac");
+        song.format.clear();
+        song.container = None;
+        assert!(song_identity_missing(&song));
+    }
+
+    #[test]
+    fn collect_scan_diff_marks_missing_disk_songs_for_deletion() {
+        let temp_dir = create_empty_temp_dir();
+        let stale_path = temp_dir.join("stale.flac");
+        let normalized_folder = temp_dir.to_string_lossy().replace('\\', "/");
+        let normalized_song_path = stale_path.to_string_lossy().replace('\\', "/");
+        let mut db_snapshot = HashMap::new();
+        db_snapshot.insert(
+            normalized_song_path.clone(),
+            DbSongSnapshot {
+                song: make_song(&normalized_song_path),
+                file_modified_at: Some(10),
+                file_size: 1024,
+            },
+        );
+
+        let diff = collect_scan_diff(&normalized_folder, db_snapshot, None).expect("collect diff");
+
+        assert_eq!(diff.songs.len(), 0);
+        assert_eq!(diff.to_add.len(), 0);
+        assert_eq!(diff.to_update.len(), 0);
+        assert_eq!(diff.to_delete, vec![normalized_song_path]);
+        assert!(!diff.has_disk_songs);
+
+        fs::remove_dir_all(temp_dir).expect("remove temp dir");
+    }
+
+    #[test]
+    fn apply_scan_changes_writes_and_syncs_artist_relations() {
+        let mut conn = setup_test_db();
+        let added_song = make_song("/music/first.flac");
+
+        apply_scan_changes(&mut conn, &[added_song.clone()], &[], &[], None).expect("insert batch");
+
+        let inserted_title: String = conn
+            .query_row(
+                "SELECT title FROM songs WHERE path = ?1",
+                params![added_song.path],
+                |row| row.get(0),
+            )
+            .expect("read inserted song");
+        let inserted_artist_links: i64 = conn
+            .query_row("SELECT COUNT(*) FROM song_artists", [], |row| row.get(0))
+            .expect("count artist links after insert");
+        assert_eq!(inserted_title, "Demo");
+        assert_eq!(inserted_artist_links, 1);
+
+        let mut updated_song = added_song.clone();
+        updated_song.title = "Updated Demo".to_string();
+        updated_song.artist = "Updated Artist".to_string();
+        updated_song.artist_names = vec!["Updated Artist".to_string(), "Guest".to_string()];
+        updated_song.effective_artist_names = updated_song.artist_names.clone();
+        updated_song.album_artist = "Updated Artist".to_string();
+        updated_song.album_key = "album::updated artist".to_string();
+
+        apply_scan_changes(&mut conn, &[], &[updated_song.clone()], &[], None).expect("update batch");
+
+        let updated_title: String = conn
+            .query_row(
+                "SELECT title FROM songs WHERE path = ?1",
+                params![updated_song.path],
+                |row| row.get(0),
+            )
+            .expect("read updated song");
+        let linked_artist_names: Vec<String> = conn
+            .prepare(
+                "SELECT artists.name
+                 FROM song_artists
+                 JOIN artists ON artists.id = song_artists.artist_id
+                 ORDER BY song_artists.sort_order ASC",
+            )
+            .expect("prepare artist query")
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("query artist links")
+            .filter_map(Result::ok)
+            .collect();
+        assert_eq!(updated_title, "Updated Demo");
+        assert_eq!(linked_artist_names, vec!["Updated Artist".to_string(), "Guest".to_string()]);
+
+        apply_scan_changes(&mut conn, &[], &[], std::slice::from_ref(&updated_song.path), None)
+            .expect("delete batch");
+
+        let remaining_songs: i64 = conn
+            .query_row("SELECT COUNT(*) FROM songs", [], |row| row.get(0))
+            .expect("count songs after delete");
+        let remaining_artists: i64 = conn
+            .query_row("SELECT COUNT(*) FROM artists", [], |row| row.get(0))
+            .expect("count artists after delete");
+        let remaining_links: i64 = conn
+            .query_row("SELECT COUNT(*) FROM song_artists", [], |row| row.get(0))
+            .expect("count links after delete");
+        assert_eq!(remaining_songs, 0);
+        assert_eq!(remaining_artists, 0);
+        assert_eq!(remaining_links, 0);
     }
 }
 

@@ -1,7 +1,7 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { storeToRefs } from 'pinia';
 
-import * as State from './playerPreferencesState';
+import type { Song } from '../types';
 import { playbackApi } from '../services/tauri/playbackApi';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
@@ -60,7 +60,7 @@ export const createPlayerUiShell = ({
     await addFolder();
   };
 
-  const removeSongFromList = async (song: State.Song) => {
+  const removeSongFromList = async (song: Song) => {
     if (currentViewMode.value === 'all') {
       songList.value = songList.value.filter(item => item.path !== song.path);
       return;

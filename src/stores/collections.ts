@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 
+import type { PlaylistSortMode } from '../services/storage/playerStorage';
 import type { HistoryItem, Playlist, Song } from '../types';
 import { useLibraryStore } from './library';
 
@@ -13,6 +14,7 @@ export const useCollectionsStore = defineStore('collections', () => {
   const favoritePaths = ref<string[]>([]);
   const playlists = ref<Playlist[]>([]);
   const recentSongs = ref<HistoryItem[]>([]);
+  const playlistSortMode = ref<PlaylistSortMode>('custom');
 
   const setFavoritePaths = (paths: string[]) => {
     favoritePaths.value = paths;
@@ -174,6 +176,7 @@ export const useCollectionsStore = defineStore('collections', () => {
     favoritePaths,
     playlists,
     recentSongs,
+    playlistSortMode,
     setFavoritePaths,
     setPlaylists,
     setRecentSongs,

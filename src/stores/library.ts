@@ -2,6 +2,12 @@ import { ref } from 'vue';
 import { defineStore } from 'pinia';
 
 import type {
+  AlbumSortMode,
+  ArtistSortMode,
+  FolderSortMode,
+  LocalSortMode,
+} from '../services/storage/playerStorage';
+import type {
   FolderNode,
   LibraryFolder,
   LibraryScanProgress,
@@ -19,6 +25,14 @@ export const useLibraryStore = defineStore('library', () => {
   const libraryScanSession = ref<LibraryScanSession | null>(null);
   const lastLibraryScanError = ref<string | null>(null);
   const watchedFolders = ref<string[]>([]);
+  const artistSortMode = ref<ArtistSortMode>('count');
+  const albumSortMode = ref<AlbumSortMode>('artist');
+  const artistCustomOrder = ref<string[]>([]);
+  const albumCustomOrder = ref<string[]>([]);
+  const folderSortMode = ref<FolderSortMode>('title');
+  const folderCustomOrder = ref<Record<string, string[]>>({});
+  const localSortMode = ref<LocalSortMode>('default');
+  const localCustomOrder = ref<string[]>([]);
 
   const setSongList = (songs: Song[]) => {
     songList.value = songs;
@@ -77,6 +91,14 @@ export const useLibraryStore = defineStore('library', () => {
     libraryScanSession,
     lastLibraryScanError,
     watchedFolders,
+    artistSortMode,
+    albumSortMode,
+    artistCustomOrder,
+    albumCustomOrder,
+    folderSortMode,
+    folderCustomOrder,
+    localSortMode,
+    localCustomOrder,
     setSongList,
     setLibrarySongs,
     setLibraryFolders,

@@ -1,7 +1,6 @@
 import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 
-import * as State from './playerPreferencesState';
 import type { Song } from '../types';
 import { compareByAlphabetIndex, sortItemsByAlphabetIndex } from '../utils/alphabetIndex';
 import { useCollectionsStore } from '../stores/collections';
@@ -77,8 +76,16 @@ export function usePlayerLibraryView() {
     librarySongs,
     songList,
     watchedFolders,
+    artistSortMode,
+    albumSortMode,
+    artistCustomOrder,
+    albumCustomOrder,
+    folderSortMode,
+    folderCustomOrder,
+    localSortMode,
+    localCustomOrder,
   } = storeToRefs(libraryStore);
-  const { favoritePaths, playlists, recentSongs } = storeToRefs(collectionsStore);
+  const { favoritePaths, playlists, recentSongs, playlistSortMode } = storeToRefs(collectionsStore);
 
   const isLocalMusic = computed(() =>
     currentViewMode.value === 'all' ||
@@ -111,10 +118,10 @@ export function usePlayerLibraryView() {
       firstSongPath: value.firstSongPath,
     }));
 
-    if (State.artistSortMode.value === 'name') {
+    if (artistSortMode.value === 'name') {
       list.sort((a, b) => compareByAlphabetIndex(a.name, b.name));
-    } else if (State.artistSortMode.value === 'custom') {
-      const orderMap = new Map(State.artistCustomOrder.value.map((name, index) => [name, index]));
+    } else if (artistSortMode.value === 'custom') {
+      const orderMap = new Map(artistCustomOrder.value.map((name, index) => [name, index]));
       list.sort((a, b) => {
         const left = orderMap.has(a.name) ? orderMap.get(a.name)! : Number.MAX_SAFE_INTEGER;
         const right = orderMap.has(b.name) ? orderMap.get(b.name)! : Number.MAX_SAFE_INTEGER;
@@ -150,16 +157,16 @@ export function usePlayerLibraryView() {
 
     const list = Array.from(map.values());
 
-    if (State.albumSortMode.value === 'name') {
+    if (albumSortMode.value === 'name') {
       list.sort((a, b) => compareByAlphabetIndex(a.name, b.name));
-    } else if (State.albumSortMode.value === 'custom') {
-      const orderMap = new Map(State.albumCustomOrder.value.map((key, index) => [key, index]));
+    } else if (albumSortMode.value === 'custom') {
+      const orderMap = new Map(albumCustomOrder.value.map((key, index) => [key, index]));
       list.sort((a, b) => {
         const left = orderMap.has(a.key) ? orderMap.get(a.key)! : Number.MAX_SAFE_INTEGER;
         const right = orderMap.has(b.key) ? orderMap.get(b.key)! : Number.MAX_SAFE_INTEGER;
         return left - right;
       });
-    } else if (State.albumSortMode.value === 'count') {
+    } else if (albumSortMode.value === 'count') {
       list.sort((a, b) => b.count - a.count || compareByAlphabetIndex(a.artist, b.artist));
     } else {
       list.sort((a, b) => {
@@ -381,16 +388,16 @@ export function usePlayerLibraryView() {
         base = base.filter(song => matchesAlbumKey(song, currentAlbumFilter.value));
       }
 
-      if (State.localSortMode.value === 'title') {
+      if (localSortMode.value === 'title') {
         base = sortItemsByAlphabetIndex(base, getSongTitleLabel);
-      } else if (State.localSortMode.value === 'name') {
+      } else if (localSortMode.value === 'name') {
         base = sortItemsByAlphabetIndex(base, getSongFileNameLabel);
-      } else if (State.localSortMode.value === 'artist') {
+      } else if (localSortMode.value === 'artist') {
         base.sort((left, right) => (left.artist || '').localeCompare(right.artist || '', 'zh-CN'));
-      } else if (State.localSortMode.value === 'added_at') {
+      } else if (localSortMode.value === 'added_at') {
         base.sort((left, right) => (right.added_at || 0) - (left.added_at || 0));
-      } else if (State.localSortMode.value === 'custom') {
-        const orderMap = new Map(State.localCustomOrder.value.map((path, index) => [path, index]));
+      } else if (localSortMode.value === 'custom') {
+        const orderMap = new Map(localCustomOrder.value.map((path, index) => [path, index]));
         base.sort((left, right) => {
           const leftIndex = orderMap.has(left.path) ? orderMap.get(left.path)! : Number.MAX_SAFE_INTEGER;
           const rightIndex = orderMap.has(right.path) ? orderMap.get(right.path)! : Number.MAX_SAFE_INTEGER;
@@ -410,16 +417,16 @@ export function usePlayerLibraryView() {
 
       let songs = songList.value.filter(song => isDirectParent(currentFolderFilter.value, song.path));
 
-      if (State.folderSortMode.value === 'title') {
+      if (folderSortMode.value === 'title') {
         songs = sortItemsByAlphabetIndex(songs, getSongTitleLabel);
-      } else if (State.folderSortMode.value === 'name') {
+      } else if (folderSortMode.value === 'name') {
         songs = sortItemsByAlphabetIndex(songs, getSongFileNameLabel);
-      } else if (State.folderSortMode.value === 'artist') {
+      } else if (folderSortMode.value === 'artist') {
         songs.sort((left, right) => (left.artist || '').localeCompare(right.artist || '', 'zh-CN'));
-      } else if (State.folderSortMode.value === 'added_at') {
+      } else if (folderSortMode.value === 'added_at') {
         songs.sort((left, right) => (right.added_at || 0) - (left.added_at || 0));
-      } else if (State.folderSortMode.value === 'custom') {
-        const customOrder = State.folderCustomOrder.value[currentFolderFilter.value] || [];
+      } else if (folderSortMode.value === 'custom') {
+        const customOrder = folderCustomOrder.value[currentFolderFilter.value] || [];
         if (customOrder.length > 0) {
           const orderMap = new Map(customOrder.map((path, index) => [path, index]));
           songs.sort((left, right) => {
@@ -436,13 +443,13 @@ export function usePlayerLibraryView() {
     if (currentViewMode.value === 'recent') {
       const songs = [...recentSongs.value.map(item => item.song)];
 
-      if (State.localSortMode.value === 'title') {
+      if (localSortMode.value === 'title') {
         songs.sort((left, right) => (left.title || left.name).localeCompare(right.title || right.name, 'zh-CN'));
-      } else if (State.localSortMode.value === 'name') {
+      } else if (localSortMode.value === 'name') {
         songs.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'));
-      } else if (State.localSortMode.value === 'artist') {
+      } else if (localSortMode.value === 'artist') {
         songs.sort((left, right) => (left.artist || '').localeCompare(right.artist || '', 'zh-CN'));
-      } else if (State.localSortMode.value === 'added_at') {
+      } else if (localSortMode.value === 'added_at') {
         songs.sort((left, right) => (right.added_at || 0) - (left.added_at || 0));
       }
 
@@ -465,13 +472,13 @@ export function usePlayerLibraryView() {
         songs = [...favoriteSongList.value];
       }
 
-      if (State.localSortMode.value === 'title') {
+      if (localSortMode.value === 'title') {
         songs.sort((left, right) => (left.title || left.name).localeCompare(right.title || right.name, 'zh-CN'));
-      } else if (State.localSortMode.value === 'name') {
+      } else if (localSortMode.value === 'name') {
         songs.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'));
-      } else if (State.localSortMode.value === 'artist') {
+      } else if (localSortMode.value === 'artist') {
         songs.sort((left, right) => (left.artist || '').localeCompare(right.artist || '', 'zh-CN'));
-      } else if (State.localSortMode.value === 'added_at') {
+      } else if (localSortMode.value === 'added_at') {
         songs.sort((left, right) => (right.added_at || 0) - (left.added_at || 0));
       }
 
@@ -496,13 +503,13 @@ export function usePlayerLibraryView() {
         .map(path => songMap.get(path))
         .filter((song): song is Song => !!song);
 
-      if (State.playlistSortMode.value === 'title') {
+      if (playlistSortMode.value === 'title') {
         songs.sort((left, right) => (left.title || left.name).localeCompare(right.title || right.name, 'zh-CN'));
-      } else if (State.playlistSortMode.value === 'name') {
+      } else if (playlistSortMode.value === 'name') {
         songs.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'));
-      } else if (State.playlistSortMode.value === 'artist') {
+      } else if (playlistSortMode.value === 'artist') {
         songs.sort((left, right) => (left.artist || '').localeCompare(right.artist || '', 'zh-CN'));
-      } else if (State.playlistSortMode.value === 'added_at') {
+      } else if (playlistSortMode.value === 'added_at') {
         songs.sort((left, right) => (right.added_at || 0) - (left.added_at || 0));
       }
 

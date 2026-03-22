@@ -1,6 +1,6 @@
-import * as State from './playerPreferencesState';
 import { getLibraryAddScanOptions, resolveScanLibraryOptions } from './playerLibraryScan';
 import type { ScanLibraryOptions } from './playerLibraryScan';
+import type { Song } from '../types';
 import { fileApi } from '../services/tauri/fileApi';
 import { libraryApi } from '../services/tauri/libraryApi';
 import { useLibraryStore } from '../stores/library';
@@ -24,9 +24,9 @@ interface CreatePlayerLibraryManagerDeps {
   appSettings: AppSettingsRef;
   fetchSidebarTree: () => Promise<void>;
   scanLibrary: (options?: ScanLibraryOptions) => Promise<void>;
-  playSong: (song: State.Song, options?: PlaySongOptions) => Promise<void>;
+  playSong: (song: Song, options?: PlaySongOptions) => Promise<void>;
   dedupePaths: (paths: string[]) => string[];
-  dedupeSongs: (songs: State.Song[]) => State.Song[];
+  dedupeSongs: (songs: Song[]) => Song[];
   resetShuffleState: () => void;
 }
 
@@ -68,7 +68,7 @@ export interface ProcessExternalPathsResult {
   source: 'drop' | 'open';
   importedFolderCount: number;
   skippedFolderCount: number;
-  playableSongs: State.Song[];
+  playableSongs: Song[];
   ignoredFileCount: number;
 }
 
@@ -184,7 +184,7 @@ export const createPlayerLibraryManager = ({
     return { removedLibrary };
   };
 
-  const playExternalSongs = async (songs: State.Song[]) => {
+  const playExternalSongs = async (songs: Song[]) => {
     const queue = dedupeSongs(songs);
     if (queue.length === 0) return;
 

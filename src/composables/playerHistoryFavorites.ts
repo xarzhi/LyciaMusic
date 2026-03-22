@@ -1,4 +1,4 @@
-import * as State from './playerPreferencesState';
+import type { Song } from '../types';
 import { useLibraryCollections } from './useLibraryCollections';
 
 interface CreatePlayerHistoryFavoritesDeps {
@@ -10,16 +10,16 @@ export const createPlayerHistoryFavorites = ({
 }: CreatePlayerHistoryFavoritesDeps) => {
   const libraryCollections = useLibraryCollections();
 
-  const isFavorite = (song: State.Song | null) => {
+  const isFavorite = (song: Song | null) => {
     if (!song) return false;
     return libraryCollections.isFavorite(song.path);
   };
 
-  const toggleFavorite = (song: State.Song) => {
+  const toggleFavorite = (song: Song) => {
     libraryCollections.toggleFavorite(song.path);
   };
 
-  const addToHistory = async (song: State.Song) => {
+  const addToHistory = async (song: Song) => {
     await libraryCollections.addToHistory(song);
   };
 

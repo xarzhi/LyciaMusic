@@ -1,7 +1,6 @@
 ﻿import { computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { open } from '@tauri-apps/plugin-dialog';
-import * as State from './playerPreferencesState';
 import { useLyrics } from './lyrics';
 import { useSettings as useAppSettings } from './settings';
 import { useToast } from './toast';
@@ -29,6 +28,7 @@ import {
   getLibraryAddScanOptions,
 } from './playerLibraryScan';
 import type { ScanLibraryOptions } from './playerLibraryScan';
+import type { HistoryItem, Song } from '../types';
 import { compareByAlphabetIndex, sortItemsByAlphabetIndex } from '../utils/alphabetIndex';
 import { playerStorage } from '../services/storage/playerStorage';
 import { playbackApi } from '../services/tauri/playbackApi';
@@ -94,7 +94,7 @@ const LEGACY_PLAYER_QUEUE_KEY = 'player_queue';
 const LEGACY_PLAYER_HISTORY_KEY = 'player_history';
 const LEGACY_PLAYER_LAST_SONG_KEY = 'player_last_song';
 
-const finalizeLibraryScanProgress = (songs: State.Song[], failed = false, message?: string) => {
+const finalizeLibraryScanProgress = (songs: Song[], failed = false, message?: string) => {
   const libraryStore = useLibraryStore();
   const existing = libraryStore.libraryScanProgress;
   libraryStore.setLibraryScanProgress({
@@ -114,19 +114,19 @@ const readStoredStringArray = (key: string): string[] | null => {
   return playerStorage.readStringArray(key);
 };
 
-const readStoredSongArray = (key: string): State.Song[] => {
+const readStoredSongArray = (key: string): Song[] => {
   return playerStorage.readSongArray(key);
 };
 
-const readStoredSong = (key: string): State.Song | null => {
+const readStoredSong = (key: string): Song | null => {
   return playerStorage.readSong(key);
 };
 
-const readStoredHistory = (key: string): State.HistoryItem[] => {
+const readStoredHistory = (key: string): HistoryItem[] => {
   return playerStorage.readHistory(key);
 };
 
-const getSongArtistNames = (song: State.Song) => {
+const getSongArtistNames = (song: Song) => {
   if (Array.isArray(song.effective_artist_names) && song.effective_artist_names.length > 0) {
     return song.effective_artist_names;
   }
@@ -136,20 +136,20 @@ const getSongArtistNames = (song: State.Song) => {
   return [song.artist || 'Unknown'];
 };
 
-const songHasArtist = (song: State.Song, artistName: string) =>
+const songHasArtist = (song: Song, artistName: string) =>
   getSongArtistNames(song).some(name => name === artistName);
 
-const getSongAlbumKey = (song: State.Song) =>
+const getSongAlbumKey = (song: Song) =>
   song.album_key || `${song.album || 'Unknown'}::${song.album_artist || song.artist || 'Unknown'}`;
 
-const matchesAlbumKey = (song: State.Song, albumKey: string) => getSongAlbumKey(song) === albumKey;
-const getSongArtistSearchText = (song: State.Song) =>
+const matchesAlbumKey = (song: Song, albumKey: string) => getSongAlbumKey(song) === albumKey;
+const getSongArtistSearchText = (song: Song) =>
   [song.artist, song.album_artist, ...getSongArtistNames(song)].join(' ').toLowerCase();
 
-const getSongTitleLabel = (song: State.Song) => song.title || song.name;
-const getSongFileNameLabel = (song: State.Song) => song.name;
+const getSongTitleLabel = (song: Song) => song.title || song.name;
+const getSongFileNameLabel = (song: Song) => song.name;
 const dedupePaths = (paths: string[]) => Array.from(new Set(paths.map(path => path.trim()).filter(Boolean)));
-const dedupeSongs = (songs: State.Song[]) => {
+const dedupeSongs = (songs: Song[]) => {
   const seen = new Set<string>();
   return songs.filter(song => {
     if (seen.has(song.path)) return false;
@@ -158,9 +158,9 @@ const dedupeSongs = (songs: State.Song[]) => {
   });
 };
 
-const createSongLookup = (fallbackSongs: State.Song[] = []) => {
+const createSongLookup = (fallbackSongs: Song[] = []) => {
   const libraryStore = useLibraryStore();
-  const lookup = new Map<string, State.Song>();
+  const lookup = new Map<string, Song>();
 
   for (const song of fallbackSongs) {
     if (song?.path && !lookup.has(song.path)) {
@@ -177,11 +177,11 @@ const createSongLookup = (fallbackSongs: State.Song[] = []) => {
   return lookup;
 };
 
-const resolveSongsFromPaths = (paths: string[], fallbackSongs: State.Song[] = []) => {
+const resolveSongsFromPaths = (paths: string[], fallbackSongs: Song[] = []) => {
   const lookup = createSongLookup(fallbackSongs);
   return paths
     .map(path => lookup.get(path))
-    .filter((song): song is State.Song => !!song);
+    .filter((song): song is Song => !!song);
 };
 
 function createPlayerService() {
@@ -200,12 +200,20 @@ function createPlayerService() {
   const navigationRefs = storeToRefs(navigationStore);
   const playbackRefs = storeToRefs(playbackStore);
   const uiRefs = storeToRefs(uiStore);
-  const { favoritePaths, playlists, recentSongs } = collectionsRefs;
+  const { favoritePaths, playlists, recentSongs, playlistSortMode } = collectionsRefs;
   const {
     songList,
     librarySongs,
     folderTree,
     watchedFolders,
+    artistSortMode,
+    albumSortMode,
+    artistCustomOrder,
+    albumCustomOrder,
+    folderSortMode,
+    folderCustomOrder,
+    localSortMode,
+    localCustomOrder,
   } = libraryRefs;
   const {
     currentViewMode,
@@ -638,7 +646,7 @@ function createPlayerService() {
 
 
 
-    if (State.artistSortMode.value === 'name') {
+    if (artistSortMode.value === 'name') {
 
 
 
@@ -646,11 +654,11 @@ function createPlayerService() {
 
 
 
-    } else if (State.artistSortMode.value === 'custom') {
+    } else if (artistSortMode.value === 'custom') {
 
 
 
-      const orderMap = new Map(State.artistCustomOrder.value.map((name, index) => [name, index]));
+      const orderMap = new Map(artistCustomOrder.value.map((name, index) => [name, index]));
 
 
 
@@ -740,7 +748,7 @@ function createPlayerService() {
 
 
 
-    if (State.albumSortMode.value === 'name') {
+    if (albumSortMode.value === 'name') {
 
 
 
@@ -748,11 +756,11 @@ function createPlayerService() {
 
 
 
-    } else if (State.albumSortMode.value === 'custom') {
+    } else if (albumSortMode.value === 'custom') {
 
 
 
-      const orderMap = new Map(State.albumCustomOrder.value.map((key, index) => [key, index]));
+      const orderMap = new Map(albumCustomOrder.value.map((key, index) => [key, index]));
 
 
 
@@ -771,7 +779,7 @@ function createPlayerService() {
 
 
 
-    } else if (State.albumSortMode.value === 'count') {
+    } else if (albumSortMode.value === 'count') {
       list.sort((a, b) => b.count - a.count || compareByAlphabetIndex(a.artist, b.artist));
     } else {
       list.sort((a, b) => {
@@ -993,16 +1001,16 @@ function createPlayerService() {
       }
 
       // Apply local music sorting
-      if (State.localSortMode.value === 'title') {
+      if (localSortMode.value === 'title') {
         base = sortItemsByAlphabetIndex(base, getSongTitleLabel);
-      } else if (State.localSortMode.value === 'name') {
+      } else if (localSortMode.value === 'name') {
         base = sortItemsByAlphabetIndex(base, getSongFileNameLabel);
-      } else if (State.localSortMode.value === 'artist') {
+      } else if (localSortMode.value === 'artist') {
         base.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
-      } else if (State.localSortMode.value === 'added_at') {
+      } else if (localSortMode.value === 'added_at') {
         base.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
-      } else if (State.localSortMode.value === 'custom') {
-        const orderMap = new Map(State.localCustomOrder.value.map((path, i) => [path, i]));
+      } else if (localSortMode.value === 'custom') {
+        const orderMap = new Map(localCustomOrder.value.map((path, i) => [path, i]));
         base.sort((a, b) => {
           const ia = orderMap.has(a.path) ? orderMap.get(a.path)! : 999999;
           const ib = orderMap.has(b.path) ? orderMap.get(b.path)! : 999999;
@@ -1021,19 +1029,19 @@ function createPlayerService() {
         let songs = songList.value.filter(s => isDirectParent(currentFolderFilter.value, s.path));
 
         // Apply folder sorting
-        if (State.folderSortMode.value === 'title') {
+        if (folderSortMode.value === 'title') {
           songs = sortItemsByAlphabetIndex(songs, getSongTitleLabel);
-        } else if (State.folderSortMode.value === 'name') {
+        } else if (folderSortMode.value === 'name') {
           songs = sortItemsByAlphabetIndex(songs, getSongFileNameLabel);
-        } else if (State.folderSortMode.value === 'artist') {
+        } else if (folderSortMode.value === 'artist') {
           // Sort by artist name
           songs.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
-        } else if (State.folderSortMode.value === 'added_at') {
+        } else if (folderSortMode.value === 'added_at') {
           // Sort by added time in descending order
           songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
-        } else if (State.folderSortMode.value === 'custom') {
+        } else if (folderSortMode.value === 'custom') {
           // Preserve custom drag-and-drop order
-          const customOrder = State.folderCustomOrder.value[currentFolderFilter.value] || [];
+          const customOrder = folderCustomOrder.value[currentFolderFilter.value] || [];
           if (customOrder.length > 0) {
             const orderMap = new Map(customOrder.map((path, i) => [path, i]));
             songs.sort((a, b) => {
@@ -1056,13 +1064,13 @@ function createPlayerService() {
       let songs = recentSongs.value.map(h => h.song);
 
       // Apply sorting shared with local music views
-      if (State.localSortMode.value === 'title') {
+      if (localSortMode.value === 'title') {
         songs.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'zh-CN'));
-      } else if (State.localSortMode.value === 'name') {
+      } else if (localSortMode.value === 'name') {
         songs.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
-      } else if (State.localSortMode.value === 'artist') {
+      } else if (localSortMode.value === 'artist') {
         songs.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
-      } else if (State.localSortMode.value === 'added_at') {
+      } else if (localSortMode.value === 'added_at') {
         // Recent plays are already time-ordered, but added_at should still sort by import time
         songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
       }
@@ -1083,13 +1091,13 @@ function createPlayerService() {
       }
 
       // Apply sorting
-      if (State.localSortMode.value === 'title') {
+      if (localSortMode.value === 'title') {
         songs.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'zh-CN'));
-      } else if (State.localSortMode.value === 'name') {
+      } else if (localSortMode.value === 'name') {
         songs.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
-      } else if (State.localSortMode.value === 'artist') {
+      } else if (localSortMode.value === 'artist') {
         songs.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
-      } else if (State.localSortMode.value === 'added_at') {
+      } else if (localSortMode.value === 'added_at') {
         songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
       }
 
@@ -1108,16 +1116,16 @@ function createPlayerService() {
 
       let songs = pl.songPaths
         .map(path => songMap.get(path))
-        .filter((s): s is State.Song => !!s);
+        .filter((s): s is Song => !!s);
 
       // Apply playlist sorting
-      if (State.playlistSortMode.value === 'title') {
+      if (playlistSortMode.value === 'title') {
         songs.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'zh-CN'));
-      } else if (State.playlistSortMode.value === 'name') {
+      } else if (playlistSortMode.value === 'name') {
         songs.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
-      } else if (State.playlistSortMode.value === 'artist') {
+      } else if (playlistSortMode.value === 'artist') {
         songs.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'zh-CN'));
-      } else if (State.playlistSortMode.value === 'added_at') {
+      } else if (playlistSortMode.value === 'added_at') {
         songs.sort((a, b) => (b.added_at || 0) - (a.added_at || 0));
       }
       // Custom mode keeps the playlist's stored songPaths order
@@ -1220,7 +1228,7 @@ function createPlayerService() {
     playerFileManager.removeFolder(folderPath);
   }
 
-  async function addToHistory(song: State.Song) {
+  async function addToHistory(song: Song) {
     return playerHistoryFavorites.addToHistory(song);
   }
 
@@ -1229,14 +1237,14 @@ function createPlayerService() {
   async function addFolder() {
     return playerFolderImport.addFolder();
   }
-  function generateOrganizedPath(song: State.Song): string { return playerFileManager.generateOrganizedPath(song); }
-  async function moveFile(song: State.Song, newPath: string) { return playerFileManager.moveFile(song, newPath); }
+  function generateOrganizedPath(song: Song): string { return playerFileManager.generateOrganizedPath(song); }
+  async function moveFile(song: Song, newPath: string) { return playerFileManager.moveFile(song, newPath); }
   async function openInFinder(path: string) { return playerFileManager.openInFinder(path); }
-  async function deleteFromDisk(song: State.Song) {
+  async function deleteFromDisk(song: Song) {
     return playerFileManager.deleteFromDisk(song);
   }
 
-  async function playSong(song: State.Song, options: PlaySongOptions = {}) {
+  async function playSong(song: Song, options: PlaySongOptions = {}) {
     return playerPlayback.playSong(song, options);
   }
   async function togglePlay() {
@@ -1255,7 +1263,6 @@ function createPlayerService() {
   }
 
   return {
-    ...State,
     ...collectionsRefs,
     ...libraryRefs,
     ...navigationRefs,
@@ -1278,29 +1285,32 @@ function createPlayerService() {
     reorderWatchedFolders: (from: number, to: number) => libraryStore.reorderWatchedFolders(from, to),
     reorderPlaylists: (from: number, to: number) => collectionsStore.reorderPlaylists(from, to),
     updateArtistOrder: (newOrder: string[]) => {
-      State.artistCustomOrder.value = newOrder;
-      if (State.artistSortMode.value !== 'custom') State.artistSortMode.value = 'custom';
+      artistCustomOrder.value = newOrder;
+      if (artistSortMode.value !== 'custom') artistSortMode.value = 'custom';
     },
     updateAlbumOrder: (newOrder: string[]) => {
-      State.albumCustomOrder.value = newOrder;
-      if (State.albumSortMode.value !== 'custom') State.albumSortMode.value = 'custom';
+      albumCustomOrder.value = newOrder;
+      if (albumSortMode.value !== 'custom') albumSortMode.value = 'custom';
     },
     updateFolderOrder: (folderPath: string, newOrder: string[]) => {
-      State.folderCustomOrder.value[folderPath] = newOrder;
-      if (State.folderSortMode.value !== 'custom') State.folderSortMode.value = 'custom';
+      folderCustomOrder.value = {
+        ...folderCustomOrder.value,
+        [folderPath]: newOrder,
+      };
+      if (folderSortMode.value !== 'custom') folderSortMode.value = 'custom';
     },
     updateLocalOrder: (newOrder: string[]) => {
-      State.localCustomOrder.value = newOrder;
-      if (State.localSortMode.value !== 'custom') State.localSortMode.value = 'custom';
+      localCustomOrder.value = newOrder;
+      if (localSortMode.value !== 'custom') localSortMode.value = 'custom';
     },
     setFolderSortMode: (mode: 'title' | 'name' | 'artist' | 'added_at' | 'custom') => {
-      State.folderSortMode.value = mode;
+      folderSortMode.value = mode;
     },
     setLocalSortMode: (mode: 'title' | 'name' | 'artist' | 'added_at' | 'custom' | 'default') => {
-      State.localSortMode.value = mode;
+      localSortMode.value = mode;
     },
     setPlaylistSortMode: (mode: 'title' | 'name' | 'artist' | 'added_at' | 'custom') => {
-      State.playlistSortMode.value = mode;
+      playlistSortMode.value = mode;
     },
 
     // Sidebar (Decoupled)
@@ -1317,11 +1327,6 @@ function createPlayerService() {
     expandFolderPath: (targetPath: string) => {
       playerFolderTree.expandFolderPath(targetPath);
     },
-
-    folderSortMode: computed(() => State.folderSortMode.value),
-    folderCustomOrder: computed(() => State.folderCustomOrder.value),
-    localSortMode: computed(() => State.localSortMode.value),
-    playlistSortMode: computed(() => State.playlistSortMode.value),
   };
 }
 

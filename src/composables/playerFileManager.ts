@@ -1,6 +1,5 @@
-import * as State from './playerPreferencesState';
 import { storeToRefs } from 'pinia';
-import type { FolderNode } from '../types';
+import type { FolderNode, Song } from '../types';
 
 import { fileApi } from '../services/tauri/fileApi';
 import { useCollectionsStore } from '../stores/collections';
@@ -245,7 +244,7 @@ export const createPlayerFileManager = ({
     }
   };
 
-  const generateOrganizedPath = (song: State.Song): string => {
+  const generateOrganizedPath = (song: Song): string => {
     const root = settingsStore.settings.organizeRoot || 'D:\\Music';
     if (!settingsStore.settings.enableAutoOrganize) return '';
 
@@ -269,7 +268,7 @@ export const createPlayerFileManager = ({
     return `${root}${separator}${relativePath}`;
   };
 
-  const moveFile = async (song: State.Song, newPath: string) => {
+  const moveFile = async (song: Song, newPath: string) => {
     try {
       await fileApi.moveMusicFile(song.path, newPath);
 
@@ -306,7 +305,7 @@ export const createPlayerFileManager = ({
     await fileApi.showInFolder(path);
   };
 
-  const deleteFromDisk = async (song: State.Song) => {
+  const deleteFromDisk = async (song: Song) => {
     try {
       await fileApi.deleteMusicFile(song.path);
       songList.value = songList.value.filter(item => item.path !== song.path);
@@ -342,7 +341,7 @@ export const createPlayerFileManager = ({
         return;
       }
 
-      let allNewSongs: State.Song[] = [];
+      let allNewSongs: Song[] = [];
       for (const folder of watchedFolders.value) {
         const songs = await fileApi.scanMusicFolder(folder);
         allNewSongs = allNewSongs.concat(songs);

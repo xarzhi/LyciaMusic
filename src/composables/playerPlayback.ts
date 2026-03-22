@@ -1,5 +1,5 @@
-import * as State from './playerPreferencesState';
 import { storeToRefs } from 'pinia';
+import type { Song } from '../types';
 import { playbackApi } from '../services/tauri/playbackApi';
 import { usePlaybackStore } from '../stores/playback';
 
@@ -15,11 +15,11 @@ interface SeekCompletedPayload {
 }
 
 interface CreatePlayerPlaybackDeps {
-  getDisplaySongList: () => State.Song[];
-  addToHistory: (song: State.Song) => void | Promise<void>;
+  getDisplaySongList: () => Song[];
+  addToHistory: (song: Song) => void | Promise<void>;
   loadLyrics: () => void | Promise<void>;
   handleAutoNext: () => void;
-  onBeforePlay?: (song: State.Song, options: PlaySongOptions) => void;
+  onBeforePlay?: (song: Song, options: PlaySongOptions) => void;
 }
 
 let progressFrameId: number | null = null;
@@ -117,7 +117,7 @@ export const createPlayerPlayback = ({
     sessionStartTime = null;
   };
 
-  const playSong = async (song: State.Song, options: PlaySongOptions = {}) => {
+  const playSong = async (song: Song, options: PlaySongOptions = {}) => {
     const requestId = ++playRequestId;
 
     flushPlaySession();

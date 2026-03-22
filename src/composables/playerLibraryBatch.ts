@@ -1,5 +1,5 @@
-import * as State from './playerPreferencesState';
 import { storeToRefs } from 'pinia';
+import type { HistoryItem, Song } from '../types';
 
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
@@ -8,7 +8,7 @@ import { usePlaybackStore } from '../stores/playback';
 const LIBRARY_SCAN_BATCH_FLUSH_MS = 120;
 
 interface CreatePlayerLibraryBatchDeps {
-  createSongLookup: (fallbackSongs?: State.Song[]) => Map<string, State.Song>;
+  createSongLookup: (fallbackSongs?: Song[]) => Map<string, Song>;
 }
 
 export const createPlayerLibraryBatch = ({
@@ -21,11 +21,11 @@ export const createPlayerLibraryBatch = ({
   const { recentSongs } = storeToRefs(collectionsStore);
   const { playQueue, currentSong } = storeToRefs(playbackStore);
   let libraryScanBatchFlushTimer: ReturnType<typeof setTimeout> | null = null;
-  const pendingLibraryScanSongs = new Map<string, State.Song>();
+  const pendingLibraryScanSongs = new Map<string, Song>();
   const pendingLibraryScanDeletedPaths = new Set<string>();
-  const pendingLibraryScanFallbackSongs = new Map<string, State.Song>();
+  const pendingLibraryScanFallbackSongs = new Map<string, Song>();
 
-  const refreshStateSongReferences = (fallbackSongs: State.Song[] = []) => {
+  const refreshStateSongReferences = (fallbackSongs: Song[] = []) => {
     const lookup = createSongLookup([
       ...fallbackSongs,
       ...songList.value,
@@ -36,16 +36,16 @@ export const createPlayerLibraryBatch = ({
 
     songList.value = songList.value
       .map(song => lookup.get(song.path) ?? song)
-      .filter((song): song is State.Song => !!song);
+      .filter((song): song is Song => !!song);
     playQueue.value = playQueue.value
       .map(song => lookup.get(song.path) ?? song)
-      .filter((song): song is State.Song => !!song);
+      .filter((song): song is Song => !!song);
     recentSongs.value = recentSongs.value
       .map(item => {
         const song = lookup.get(item.song.path) ?? item.song;
         return song ? { ...item, song } : null;
       })
-      .filter((item): item is State.HistoryItem => !!item);
+      .filter((item): item is HistoryItem => !!item);
 
     if (currentSong.value?.path) {
       currentSong.value = lookup.get(currentSong.value.path) ?? currentSong.value;
@@ -63,7 +63,7 @@ export const createPlayerLibraryBatch = ({
       return;
     }
 
-    const merged = new Map<string, State.Song>();
+    const merged = new Map<string, Song>();
     for (const song of librarySongs.value) {
       if (!pendingLibraryScanDeletedPaths.has(song.path)) {
         merged.set(song.path, song);
@@ -92,7 +92,7 @@ export const createPlayerLibraryBatch = ({
   };
 
   const applyLibraryScanBatch = (payload: {
-    songs: State.Song[];
+    songs: Song[];
     deleted_paths: string[];
   }) => {
     const incomingSongs = Array.isArray(payload.songs) ? payload.songs : [];

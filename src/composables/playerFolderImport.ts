@@ -2,13 +2,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { storeToRefs } from 'pinia';
 
-import * as State from './playerPreferencesState';
+import type { Song } from '../types';
 import { useLibraryStore } from '../stores/library';
 
 interface GeneratedFolder {
   name: string;
   path: string;
-  songs: State.Song[];
+  songs: Song[];
 }
 
 interface CreatePlayerFolderImportDeps {
@@ -51,7 +51,7 @@ export const createPlayerFolderImport = ({
       }
 
       let addedCount = 0;
-      const allNewSongs: State.Song[] = [];
+      const allNewSongs: Song[] = [];
 
       newFolders.forEach(folder => {
         if (!watchedFolders.value.includes(folder.path)) {
@@ -92,7 +92,7 @@ export const createPlayerFolderImport = ({
           watchedFolders.value.push(selected);
         }
 
-        const songs = await invoke<State.Song[]>('scan_music_folder', { folderPath: selected });
+        const songs = await invoke<Song[]>('scan_music_folder', { folderPath: selected });
         const existingPaths = new Set(songList.value.map(song => song.path));
         const uniqueSongs = songs.filter(song => !existingPaths.has(song.path));
         songList.value = [...songList.value, ...uniqueSongs];

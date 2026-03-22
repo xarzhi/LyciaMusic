@@ -1,7 +1,6 @@
 import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 
-import * as State from './playerPreferencesState';
 import type { Song, Playlist } from '../types';
 import { compareByAlphabetIndex } from '../utils/alphabetIndex';
 import { useCollectionsStore } from '../stores/collections';
@@ -66,6 +65,10 @@ export function useLibraryBrowse() {
     libraryFolders,
     folderTree,
     watchedFolders,
+    artistSortMode,
+    albumSortMode,
+    artistCustomOrder,
+    albumCustomOrder,
   } = storeToRefs(libraryStore);
   const { favoritePaths, playlists, recentSongs } = storeToRefs(collectionsStore);
 
@@ -92,10 +95,10 @@ export function useLibraryBrowse() {
       firstSongPath: value.firstSongPath,
     }));
 
-    if (State.artistSortMode.value === 'name') {
+    if (artistSortMode.value === 'name') {
       list.sort((a, b) => compareByAlphabetIndex(a.name, b.name));
-    } else if (State.artistSortMode.value === 'custom') {
-      const orderMap = new Map(State.artistCustomOrder.value.map((name, index) => [name, index]));
+    } else if (artistSortMode.value === 'custom') {
+      const orderMap = new Map(artistCustomOrder.value.map((name, index) => [name, index]));
       list.sort((a, b) => {
         const left = orderMap.has(a.name) ? orderMap.get(a.name)! : Number.MAX_SAFE_INTEGER;
         const right = orderMap.has(b.name) ? orderMap.get(b.name)! : Number.MAX_SAFE_INTEGER;
@@ -131,16 +134,16 @@ export function useLibraryBrowse() {
 
     const list = Array.from(map.values());
 
-    if (State.albumSortMode.value === 'name') {
+    if (albumSortMode.value === 'name') {
       list.sort((a, b) => compareByAlphabetIndex(a.name, b.name));
-    } else if (State.albumSortMode.value === 'custom') {
-      const orderMap = new Map(State.albumCustomOrder.value.map((key, index) => [key, index]));
+    } else if (albumSortMode.value === 'custom') {
+      const orderMap = new Map(albumCustomOrder.value.map((key, index) => [key, index]));
       list.sort((a, b) => {
         const left = orderMap.has(a.key) ? orderMap.get(a.key)! : Number.MAX_SAFE_INTEGER;
         const right = orderMap.has(b.key) ? orderMap.get(b.key)! : Number.MAX_SAFE_INTEGER;
         return left - right;
       });
-    } else if (State.albumSortMode.value === 'count') {
+    } else if (albumSortMode.value === 'count') {
       list.sort((a, b) => b.count - a.count || compareByAlphabetIndex(a.artist, b.artist));
     } else {
       list.sort((a, b) => {
@@ -270,16 +273,16 @@ export function useLibraryBrowse() {
   });
 
   const updateArtistOrder = (newOrder: string[]) => {
-    State.artistCustomOrder.value = newOrder;
-    if (State.artistSortMode.value !== 'custom') {
-      State.artistSortMode.value = 'custom';
+    artistCustomOrder.value = newOrder;
+    if (artistSortMode.value !== 'custom') {
+      artistSortMode.value = 'custom';
     }
   };
 
   const updateAlbumOrder = (newOrder: string[]) => {
-    State.albumCustomOrder.value = newOrder;
-    if (State.albumSortMode.value !== 'custom') {
-      State.albumSortMode.value = 'custom';
+    albumCustomOrder.value = newOrder;
+    if (albumSortMode.value !== 'custom') {
+      albumSortMode.value = 'custom';
     }
   };
 
@@ -303,8 +306,8 @@ export function useLibraryBrowse() {
     folderTree,
     libraryFolders,
     librarySongs,
-    artistSortMode: State.artistSortMode,
-    albumSortMode: State.albumSortMode,
+    artistSortMode,
+    albumSortMode,
     artistList,
     albumList,
     filteredArtistList,

@@ -5,7 +5,6 @@ import type { Song } from '../types';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
-import * as PlayerState from './playerPreferencesState';
 import { usePlayerLibraryView } from './usePlayerLibraryView';
 
 const makeSong = (overrides: Partial<Song> = {}): Song => ({
@@ -28,15 +27,17 @@ const makeSong = (overrides: Partial<Song> = {}): Song => ({
 describe('player library view', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    PlayerState.artistSortMode.value = 'count';
-    PlayerState.albumSortMode.value = 'artist';
-    PlayerState.artistCustomOrder.value = [];
-    PlayerState.albumCustomOrder.value = [];
-    PlayerState.folderSortMode.value = 'title';
-    PlayerState.folderCustomOrder.value = {};
-    PlayerState.localSortMode.value = 'default';
-    PlayerState.localCustomOrder.value = [];
-    PlayerState.playlistSortMode.value = 'custom';
+    const libraryStore = useLibraryStore();
+    const collectionsStore = useCollectionsStore();
+    libraryStore.artistSortMode = 'count';
+    libraryStore.albumSortMode = 'artist';
+    libraryStore.artistCustomOrder = [];
+    libraryStore.albumCustomOrder = [];
+    libraryStore.folderSortMode = 'title';
+    libraryStore.folderCustomOrder = {};
+    libraryStore.localSortMode = 'default';
+    libraryStore.localCustomOrder = [];
+    collectionsStore.playlistSortMode = 'custom';
   });
 
   it('filters folder songs to direct children and keeps custom folder order', () => {
@@ -49,8 +50,8 @@ describe('player library view', () => {
     libraryStore.songList = [firstSong, secondSong, nestedSong];
     navigationStore.currentViewMode = 'folder';
     navigationStore.currentFolderFilter = '/music/root';
-    PlayerState.folderSortMode.value = 'custom';
-    PlayerState.folderCustomOrder.value = {
+    libraryStore.folderSortMode = 'custom';
+    libraryStore.folderCustomOrder = {
       '/music/root': [secondSong.path, firstSong.path],
     };
 
@@ -98,7 +99,7 @@ describe('player library view', () => {
     navigationStore.currentViewMode = 'favorites';
     navigationStore.favTab = 'artists';
     navigationStore.favDetailFilter = { type: 'artist', name: 'Target Artist' };
-    PlayerState.localSortMode.value = 'title';
+    libraryStore.localSortMode = 'title';
 
     const { displaySongList, favArtistList } = usePlayerLibraryView();
 

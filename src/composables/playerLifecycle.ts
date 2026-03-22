@@ -1,9 +1,8 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { onMounted, onScopeDispose, watch } from 'vue';
+import { onMounted, onScopeDispose, watch, type Ref } from 'vue';
 import { storeToRefs } from 'pinia';
 
-import * as State from './playerPreferencesState';
 import { extractDominantColors } from './colorExtraction';
 import type { LibraryScanProgress, Song } from '../types';
 import {
@@ -62,6 +61,18 @@ interface CreatePlayerLifecycleDeps {
 let lifecycleInitDone = false;
 let dominantColorTaskId = 0;
 
+interface SortSettingsRefs {
+  artistSortMode: Ref<ArtistSortMode>;
+  albumSortMode: Ref<AlbumSortMode>;
+  artistCustomOrder: Ref<string[]>;
+  albumCustomOrder: Ref<string[]>;
+  folderSortMode: Ref<FolderSortMode>;
+  folderCustomOrder: Ref<Record<string, string[]>>;
+  localSortMode: Ref<LocalSortMode>;
+  localCustomOrder: Ref<string[]>;
+  playlistSortMode: Ref<PlaylistSortMode>;
+}
+
 const restoreOutputDevice = async () => {
   const storedOutputDevice = playerStorage.getString(playerStorageKeys.outputDevice);
   const storedOutputMode = playerStorage.getString(playerStorageKeys.outputDeviceMode);
@@ -78,50 +89,60 @@ const restoreOutputDevice = async () => {
   });
 };
 
-const restoreSortSettings = () => {
+const restoreSortSettings = ({
+  artistSortMode,
+  albumSortMode,
+  artistCustomOrder,
+  albumCustomOrder,
+  folderSortMode,
+  folderCustomOrder,
+  localSortMode,
+  localCustomOrder,
+  playlistSortMode,
+}: SortSettingsRefs) => {
   const storedArtistSort = playerStorage.getString(playerStorageKeys.artistSortMode);
   if (storedArtistSort) {
-    State.artistSortMode.value = storedArtistSort as ArtistSortMode;
+    artistSortMode.value = storedArtistSort as ArtistSortMode;
   }
 
   const storedAlbumSort = playerStorage.getString(playerStorageKeys.albumSortMode);
   if (storedAlbumSort && ['count', 'name', 'artist', 'custom'].includes(storedAlbumSort)) {
-    State.albumSortMode.value = storedAlbumSort as AlbumSortMode;
+    albumSortMode.value = storedAlbumSort as AlbumSortMode;
   }
 
   const storedArtistOrder = playerStorage.readStringArray(playerStorageKeys.artistCustomOrder);
   if (storedArtistOrder) {
-    State.artistCustomOrder.value = storedArtistOrder;
+    artistCustomOrder.value = storedArtistOrder;
   }
 
   const storedAlbumOrder = playerStorage.readStringArray(playerStorageKeys.albumCustomOrder);
   if (storedAlbumOrder) {
-    State.albumCustomOrder.value = storedAlbumOrder;
+    albumCustomOrder.value = storedAlbumOrder;
   }
 
   const storedFolderSort = playerStorage.getString(playerStorageKeys.folderSortMode);
   if (storedFolderSort && ['title', 'name', 'artist', 'added_at', 'custom'].includes(storedFolderSort)) {
-    State.folderSortMode.value = storedFolderSort as FolderSortMode;
+    folderSortMode.value = storedFolderSort as FolderSortMode;
   }
 
   const storedLocalSort = playerStorage.getString(playerStorageKeys.localSortMode);
   if (storedLocalSort && ['title', 'name', 'artist', 'added_at', 'custom', 'default'].includes(storedLocalSort)) {
-    State.localSortMode.value = storedLocalSort as LocalSortMode;
+    localSortMode.value = storedLocalSort as LocalSortMode;
   }
 
   const storedPlaylistSort = playerStorage.getString(playerStorageKeys.playlistSortMode);
   if (storedPlaylistSort && ['title', 'name', 'artist', 'added_at', 'custom'].includes(storedPlaylistSort)) {
-    State.playlistSortMode.value = storedPlaylistSort as PlaylistSortMode;
+    playlistSortMode.value = storedPlaylistSort as PlaylistSortMode;
   }
 
   const storedFolderOrder = playerStorage.readObject<Record<string, string[]>>(playerStorageKeys.folderCustomOrder);
   if (storedFolderOrder) {
-    State.folderCustomOrder.value = storedFolderOrder;
+    folderCustomOrder.value = storedFolderOrder;
   }
 
   const storedLocalOrder = playerStorage.readStringArray(playerStorageKeys.localCustomOrder);
   if (storedLocalOrder) {
-    State.localCustomOrder.value = storedLocalOrder;
+    localCustomOrder.value = storedLocalOrder;
   }
 };
 
@@ -204,8 +225,19 @@ export const createPlayerLifecycle = ({
   const settingsStore = useSettingsStore();
   const uiStore = useUiStore();
   const { settings } = storeToRefs(settingsStore);
-  const { songList, watchedFolders } = storeToRefs(libraryStore);
-  const { favoritePaths, playlists } = storeToRefs(collectionsStore);
+  const {
+    songList,
+    watchedFolders,
+    artistSortMode,
+    albumSortMode,
+    artistCustomOrder,
+    albumCustomOrder,
+    folderSortMode,
+    folderCustomOrder,
+    localSortMode,
+    localCustomOrder,
+  } = storeToRefs(libraryStore);
+  const { favoritePaths, playlists, playlistSortMode } = storeToRefs(collectionsStore);
   const {
     currentCover,
     currentSong,
@@ -282,10 +314,10 @@ export const createPlayerLifecycle = ({
         playlists,
         settings,
         () => playQueue.value.map(song => song.path),
-        State.artistCustomOrder,
-        State.albumCustomOrder,
-        State.folderCustomOrder,
-        State.localCustomOrder,
+        artistCustomOrder,
+        albumCustomOrder,
+        folderCustomOrder,
+        localCustomOrder,
       ],
       () => {
         schedulePersistedState();
@@ -293,19 +325,19 @@ export const createPlayerLifecycle = ({
       { deep: true }
     );
 
-    watch(State.artistSortMode, value => {
+    watch(artistSortMode, value => {
       playerStorage.setString(playerStorageKeys.artistSortMode, value);
     });
-    watch(State.albumSortMode, value => {
+    watch(albumSortMode, value => {
       playerStorage.setString(playerStorageKeys.albumSortMode, value);
     });
-    watch(State.folderSortMode, value => {
+    watch(folderSortMode, value => {
       playerStorage.setString(playerStorageKeys.folderSortMode, value);
     });
-    watch(State.localSortMode, value => {
+    watch(localSortMode, value => {
       playerStorage.setString(playerStorageKeys.localSortMode, value);
     });
-    watch(State.playlistSortMode, value => {
+    watch(playlistSortMode, value => {
       playerStorage.setString(playerStorageKeys.playlistSortMode, value);
     });
 
@@ -364,7 +396,17 @@ export const createPlayerLifecycle = ({
 
       collectionsStore.setPlaylists(playerStorage.readPlaylists());
 
-      restoreSortSettings();
+      restoreSortSettings({
+        artistSortMode,
+        albumSortMode,
+        artistCustomOrder,
+        albumCustomOrder,
+        folderSortMode,
+        folderCustomOrder,
+        localSortMode,
+        localCustomOrder,
+        playlistSortMode,
+      });
       restoreAppSettings(settings.value, settingsStore.replaceSettings);
 
       await restorePathBackedState();

@@ -1,4 +1,4 @@
-import * as State from './playerPreferencesState';
+import { storeToRefs } from 'pinia';
 import { playerStorage } from '../services/storage/playerStorage';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
@@ -17,6 +17,12 @@ export const createPlayerPersistence = ({ keys }: { keys: PlayerPersistenceKeys 
   const libraryStore = useLibraryStore();
   const playbackStore = usePlaybackStore();
   const settingsStore = useSettingsStore();
+  const {
+    artistCustomOrder,
+    albumCustomOrder,
+    folderCustomOrder,
+    localCustomOrder,
+  } = storeToRefs(libraryStore);
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
   const flushPersistedState = () => {
@@ -36,10 +42,10 @@ export const createPlayerPersistence = ({ keys }: { keys: PlayerPersistenceKeys 
       playlists: collectionsStore.playlists,
       settings: settingsStore.settings,
       playQueue: playbackStore.playQueue,
-      artistCustomOrder: State.artistCustomOrder.value,
-      albumCustomOrder: State.albumCustomOrder.value,
-      folderCustomOrder: State.folderCustomOrder.value,
-      localCustomOrder: State.localCustomOrder.value,
+      artistCustomOrder: artistCustomOrder.value,
+      albumCustomOrder: albumCustomOrder.value,
+      folderCustomOrder: folderCustomOrder.value,
+      localCustomOrder: localCustomOrder.value,
     });
   };
 

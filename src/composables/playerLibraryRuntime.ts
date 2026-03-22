@@ -1,11 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
-import * as State from './playerPreferencesState';
 import {
   beginLibraryScanProgress,
   resolveScanLibraryOptions,
   startLibraryScanSession,
 } from './playerLibraryScan';
 import type { ScanLibraryOptions } from './playerLibraryScan';
+import type { Song } from '../types';
 import { useLibraryStore } from '../stores/library';
 
 let hasBootstrappedLibrary = false;
@@ -17,9 +17,9 @@ let libraryRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 interface CreatePlayerLibraryRuntimeDeps {
   fetchLibraryFolders: () => Promise<void>;
   flushBufferedLibraryScanBatch: () => void;
-  refreshStateSongReferences: (fallbackSongs?: State.Song[]) => void;
+  refreshStateSongReferences: (fallbackSongs?: Song[]) => void;
   finalizeLibraryScanProgress: (
-    songs: State.Song[],
+    songs: Song[],
     failed?: boolean,
     message?: string,
   ) => void;
@@ -49,7 +49,7 @@ export const createPlayerLibraryRuntime = ({
   const loadLibrarySongsFromCache = async () => {
     try {
       flushBufferedLibraryScanBatch();
-      const songs = await invoke<State.Song[]>('get_library_songs_cached');
+      const songs = await invoke<Song[]>('get_library_songs_cached');
       libraryStore.setLibrarySongs(songs);
       refreshStateSongReferences(songs);
     } catch (error) {
@@ -81,7 +81,7 @@ export const createPlayerLibraryRuntime = ({
     libraryRefreshPromise = (async () => {
       try {
         flushBufferedLibraryScanBatch();
-        const songs = await invoke<State.Song[]>('scan_library');
+        const songs = await invoke<Song[]>('scan_library');
         libraryStore.setLibrarySongs(songs);
         refreshStateSongReferences(songs);
         await fetchLibraryFolders();

@@ -1,4 +1,4 @@
-import * as State from './playerPreferencesState';
+import type { Song } from '../types';
 import { useLibraryCollections } from './useLibraryCollections';
 
 interface CreatePlayerPlaylistDeps {
@@ -34,7 +34,7 @@ export const createPlayerPlaylist = ({
     libraryCollections.viewPlaylist(id);
   };
 
-  const getSongsFromPlaylist = (playlistId: string): State.Song[] => {
+  const getSongsFromPlaylist = (playlistId: string): Song[] => {
     return libraryCollections.getSongsFromPlaylist(playlistId);
   };
 

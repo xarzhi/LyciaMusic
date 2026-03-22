@@ -1,4 +1,4 @@
-import * as State from './playerPreferencesState';
+import type { HistoryItem, Song } from '../types';
 import { playerStorage } from '../services/storage/playerStorage';
 import { historyApi } from '../services/tauri/historyApi';
 import { playbackApi } from '../services/tauri/playbackApi';
@@ -18,11 +18,11 @@ interface PlayerRestoreKeys {
 
 interface CreatePlayerRestoreDeps {
   keys: PlayerRestoreKeys;
-  createSongLookup: (fallbackSongs?: State.Song[]) => Map<string, State.Song>;
-  resolveSongsFromPaths: (paths: string[], fallbackSongs?: State.Song[]) => State.Song[];
-  readStoredHistory: (key: string) => State.HistoryItem[];
-  readStoredSongArray: (key: string) => State.Song[];
-  readStoredSong: (key: string) => State.Song | null;
+  createSongLookup: (fallbackSongs?: Song[]) => Map<string, Song>;
+  resolveSongsFromPaths: (paths: string[], fallbackSongs?: Song[]) => Song[];
+  readStoredHistory: (key: string) => HistoryItem[];
+  readStoredSongArray: (key: string) => Song[];
+  readStoredSong: (key: string) => Song | null;
   readStoredStringArray: (key: string) => string[] | null;
   loadLibrarySongsFromCache: () => Promise<void>;
 }
@@ -54,7 +54,7 @@ export const createPlayerRestore = ({
             const song = lookup.get(record.songPath);
             return song ? { song, playedAt: record.playedAt } : null;
           })
-          .filter((item): item is State.HistoryItem => !!item));
+          .filter((item): item is HistoryItem => !!item));
 
         if (collectionsStore.recentSongs.length > 0) {
           playerStorage.remove(keys.legacyPlayerHistory);

@@ -62,9 +62,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { usePlayer } from '../composables/player';
 import type { Song } from '../types';
 import { useLibraryCollections } from '../composables/useLibraryCollections';
+import { usePlaybackController } from '../composables/usePlaybackController';
+import { usePlayerLibraryView } from '../composables/usePlayerLibraryView';
 import { useToast } from '../composables/toast';
 
 // 组件导入
@@ -75,14 +76,12 @@ import AddToPlaylistModal from '../components/overlays/AddToPlaylistModal.vue';
 import SongContextMenu from '../components/overlays/SongContextMenu.vue';
 import ModernModal from '../components/common/ModernModal.vue';
 import { useSongDrag } from '../composables/useSongDrag';
+import { useNavigationStore } from '../stores/navigation';
 
 const route = useRoute();
-
-const { 
-  displaySongList, 
-  playSong, 
-  switchToFavorites,
-} = usePlayer();
+const navigationStore = useNavigationStore();
+const { displaySongList } = usePlayerLibraryView();
+const { playSong, addSongsToQueue } = usePlaybackController();
 const {
   addSongsToPlaylist,
   favoritePaths,
@@ -118,19 +117,20 @@ watch(isBatchMode, (val) => { if (!val) selectedPaths.value.clear(); });
 
 const handlePlayAll = () => {
   if (localSongList.value.length > 0) {
-    playSong(localSongList.value[0]);
+    void playSong(localSongList.value[0]);
   }
 };
 
 const handleAddAllToQueue = () => {
-  const { addSongsToQueue } = usePlayer();
   addSongsToQueue(localSongList.value);
 };
 
 // 批量播放
 const handleBatchPlay = () => {
   const selected = localSongList.value.filter(s => selectedPaths.value.has(s.path));
-  if (selected.length > 0) playSong(selected[0]);
+  if (selected.length > 0) {
+    void playSong(selected[0]);
+  }
 };
 
 // 批量删除（从收藏移除）
@@ -186,7 +186,7 @@ const handleContextMenu = (e: MouseEvent, song: Song) => {
 // ========== 路由监听 ==========
 watch(() => route.path, (path) => {
   if (path === '/favorites') {
-    switchToFavorites();
+    navigationStore.switchToFavorites();
   }
 }, { immediate: true });
 </script>

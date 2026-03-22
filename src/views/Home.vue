@@ -121,6 +121,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia';
 
 import DragGhost from '../components/common/DragGhost.vue';
 import HomeViewPane from '../components/home/HomeViewPane.vue';
@@ -138,21 +139,40 @@ import { useHomePlaylistRename } from '../composables/useHomePlaylistRename';
 import { useHomeRouteSync } from '../composables/useHomeRouteSync';
 import { useHomeViewState } from '../composables/useHomeViewState';
 import { useLibraryCollections } from '../composables/useLibraryCollections';
-import { usePlayer } from '../composables/player';
+import { useLibraryRuntimeActions } from '../composables/useLibraryRuntimeActions';
+import { usePlaybackController } from '../composables/usePlaybackController';
+import { usePlayerLibraryView } from '../composables/usePlayerLibraryView';
+import { usePlayerViewState } from '../composables/usePlayerViewState';
 import { useSongContextActions } from '../composables/useSongContextActions';
 import { useSongDrag } from '../composables/useSongDrag';
 import { useToast } from '../composables/toast';
+import { useLibraryStore } from '../stores/library';
 
 const route = useRoute();
 const router = useRouter();
 const { openHomeAlbum } = useHomeNavigation(router);
 const { showToast } = useToast();
-
+const libraryStore = useLibraryStore();
 const {
   songList,
-  displaySongList,
+  albumSortMode,
+  albumCustomOrder,
+} = storeToRefs(libraryStore);
+
+const {
   currentViewMode,
-  playSong,
+  activeRootPath,
+  currentFolderFilter,
+  filterCondition,
+} = usePlayerViewState();
+const {
+  displaySongList,
+  librarySongs,
+  folderTree,
+  searchQuery,
+} = usePlayerLibraryView();
+const { playSong } = usePlaybackController();
+const {
   moveFilesToFolder,
   refreshAllFolders,
   deleteFromDisk,
@@ -163,15 +183,7 @@ const {
   fetchFolderTree,
   removeLibraryFolderLinked,
   refreshFolder,
-  folderTree,
-  activeRootPath,
-  currentFolderFilter,
-  filterCondition,
-  searchQuery,
-  librarySongs,
-  albumSortMode,
-  albumCustomOrder,
-} = usePlayer();
+} = useLibraryRuntimeActions();
 
 const {
   addSongsToPlaylist,

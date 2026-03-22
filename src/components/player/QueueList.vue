@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue';
-import { usePlayer } from '../../composables/player';
+import { storeToRefs } from 'pinia';
 
-const { playQueue, songList, currentSong, playSong, formatDuration } = usePlayer();
+import { usePlaybackController } from '../../composables/usePlaybackController';
+import { useLibraryStore } from '../../stores/library';
+
+const libraryStore = useLibraryStore();
+const { songList } = storeToRefs(libraryStore);
+const { playQueue, currentSong, playSong, formatDuration } = usePlaybackController();
 
 const queue = computed(() => {
   return playQueue.value.length > 0 ? playQueue.value : songList.value;

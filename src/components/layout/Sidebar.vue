@@ -8,7 +8,8 @@ import PlaylistContextMenu from '../overlays/PlaylistContextMenu.vue';
 import { useCoverCache } from '../../composables/useCoverCache';
 import { useHomeNavigation } from '../../composables/useHomeNavigation';
 import { useLibraryCollections } from '../../composables/useLibraryCollections';
-import { usePlayer } from '../../composables/player';
+import { usePlaybackController } from '../../composables/usePlaybackController';
+import { usePlayerLibraryView } from '../../composables/usePlayerLibraryView';
 import { dragSession } from '../../composables/dragState';
 import { usePlayerViewState } from '../../composables/usePlayerViewState';
 import { useSettings } from '../../composables/settings';
@@ -20,13 +21,8 @@ import SidebarBrand from './SidebarBrand.vue';
 import SidebarNavigation from './SidebarNavigation.vue';
 import SidebarPlaylists from './SidebarPlaylists.vue';
 
-const {
-  artistList,
-  albumList,
-  playSong,
-  addSongsToQueue,
-  clearQueue,
-} = usePlayer();
+const { artistList, albumList } = usePlayerLibraryView();
+const { playSong, addSongsToQueue, clearQueue } = usePlaybackController();
 const { settings } = useSettings();
 
 const {

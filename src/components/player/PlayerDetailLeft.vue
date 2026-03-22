@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { usePlayer } from '../../composables/player';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useCoverCache } from '../../composables/useCoverCache';
+import { usePlaybackController } from '../../composables/usePlaybackController';
 import FooterContextMenu from "../overlays/FooterContextMenu.vue";
 
 const props = defineProps<{
@@ -11,7 +11,7 @@ const props = defineProps<{
 
 const { 
   currentSong, currentCover, isPlaying, dominantColors
-} = usePlayer();
+} = usePlaybackController();
 const { loadCover } = useCoverCache();
 
 const showContextMenu = ref(false);

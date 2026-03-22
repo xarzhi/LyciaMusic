@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useLyrics } from '../../composables/lyrics';
-import { usePlayer } from '../../composables/player';
+import { usePlaybackController } from '../../composables/usePlaybackController';
 import { useSharedTransition } from '../../composables/useSharedTransition';
 import LyricsView from './LyricsView.vue';
 import PlayerDetailBackground from './PlayerDetailBackground.vue';
@@ -13,7 +13,8 @@ const {
   showPlayerDetail,
   showQueue,
   currentSong,
-} = usePlayer();
+  closePlayerDetail,
+} = usePlaybackController();
 
 const { parsedLyrics } = useLyrics();
 const { staggerPhase } = useSharedTransition();
@@ -88,7 +89,7 @@ const staggerStyle = (phase: number, translateDir: 'Y' | 'X' = 'Y', distance = 2
 };
 
 const handleClose = () => {
-  showPlayerDetail.value = false;
+  closePlayerDetail();
 };
 
 const metaInfo = computed(() => {

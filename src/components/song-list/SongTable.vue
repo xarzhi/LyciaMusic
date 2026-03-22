@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
-import { usePlayer } from '../../composables/player';
 import { dragSession } from '../../composables/dragState';
 import type { Song } from '../../types';
 import { useLibraryCollections } from '../../composables/useLibraryCollections';
@@ -11,16 +10,18 @@ import QualityBadge from '../common/QualityBadge.vue';
 import { INDEX_KEYS } from '../../utils/alphabetIndex';
 import { useCoverCache } from '../../composables/useCoverCache';
 import { useHomeNavigation } from '../../composables/useHomeNavigation';
+import { useLibraryRuntimeActions } from '../../composables/useLibraryRuntimeActions';
+import { usePlaybackController } from '../../composables/usePlaybackController';
+import { usePlayerLibraryView } from '../../composables/usePlayerLibraryView';
+import { usePlayerViewState } from '../../composables/usePlayerViewState';
 import { useSongTableAlphabetIndex } from '../../composables/useSongTableAlphabetIndex';
 import { useSongTableLibraryState } from '../../composables/useSongTableLibraryState';
 import { useLibraryStore } from '../../stores/library';
-import { usePlaybackStore } from '../../stores/playback';
 
 const { settings } = useSettings();
 const libraryStore = useLibraryStore();
-const playbackStore = usePlaybackStore();
 const { libraryScanProgress, lastLibraryScanError } = storeToRefs(libraryStore);
-const { currentSong, isPlaying } = storeToRefs(playbackStore);
+const { currentSong, isPlaying, formatDuration } = usePlaybackController();
 
 const props = defineProps<{
   songs: Song[];
@@ -36,20 +37,23 @@ const emit = defineEmits<{
 }>();
 
 const {
-  formatDuration,
   currentViewMode,
-  addLibraryFolder,
-  scanLibrary,
-  searchQuery,
-  librarySongs,
   localSortMode,
   folderSortMode,
   activeRootPath,
   currentFolderFilter,
+} = usePlayerViewState();
+const {
   folderTree,
+  searchQuery,
+  librarySongs,
+} = usePlayerLibraryView();
+const {
+  addLibraryFolder,
+  scanLibrary,
   refreshFolder,
   expandFolderPath,
-} = usePlayer();
+} = useLibraryRuntimeActions();
 const { isFavorite, toggleFavorite } = useLibraryCollections();
 const router = useRouter();
 const route = useRoute();

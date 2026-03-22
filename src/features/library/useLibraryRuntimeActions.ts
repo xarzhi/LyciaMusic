@@ -1,25 +1,25 @@
-import { usePlayerService } from '../../composables/playerService';
+import { usePlayerCore } from '../../composables/playerCore';
 
 export function useLibraryRuntimeActions() {
-  const playerService = usePlayerService();
+  const { libraryDomain } = usePlayerCore();
 
   return {
-    addLibraryFolder: playerService.addLibraryFolder,
-    addLibraryFolderLinked: playerService.addLibraryFolderLinked,
-    addLibraryFolderPath: playerService.addLibraryFolderPath,
-    removeLibraryFolder: playerService.removeLibraryFolder,
-    removeLibraryFolderLinked: playerService.removeLibraryFolderLinked,
-    removeLibraryFolderPath: playerService.removeLibraryFolderPath,
-    scanLibrary: playerService.scanLibrary,
-    refreshFolder: playerService.refreshFolder,
-    refreshAllFolders: playerService.refreshAllFolders,
-    fetchFolderTree: playerService.fetchFolderTree,
-    createFolder: playerService.createFolder,
-    deleteFolder: playerService.deleteFolder,
-    expandFolderPath: playerService.expandFolderPath,
-    moveFilesToFolder: playerService.moveFilesToFolder,
-    deleteFromDisk: playerService.deleteFromDisk,
-    openInFinder: playerService.openInFinder,
-    getSongsInFolder: playerService.getSongsInFolder,
+    addLibraryFolder: libraryDomain.addLibraryFolder,
+    addLibraryFolderLinked: libraryDomain.addLibraryFolderLinked,
+    addLibraryFolderPath: libraryDomain.addLibraryFolderPath,
+    removeLibraryFolder: libraryDomain.removeLibraryFolder,
+    removeLibraryFolderLinked: libraryDomain.removeLibraryFolderLinked,
+    removeLibraryFolderPath: libraryDomain.removeLibraryFolderPath,
+    scanLibrary: libraryDomain.scanLibrary,
+    refreshFolder: libraryDomain.refreshFolder,
+    refreshAllFolders: libraryDomain.refreshAllFolders,
+    fetchFolderTree: libraryDomain.fetchFolderTree,
+    createFolder: libraryDomain.createFolder,
+    deleteFolder: libraryDomain.deleteFolder,
+    expandFolderPath: libraryDomain.expandFolderPath,
+    moveFilesToFolder: libraryDomain.moveFilesToFolder,
+    deleteFromDisk: libraryDomain.deleteFromDisk,
+    openInFinder: libraryDomain.openInFinder,
+    getSongsInFolder: libraryDomain.getSongsInFolder,
   };
 }

@@ -1,5 +1,5 @@
-import { usePlayerService } from './playerService';
+import { usePlayerCore } from './playerCore';
 
 export function usePlayer() {
-  return usePlayerService();
+  return usePlayerCore().legacyApi;
 }

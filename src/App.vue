@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent } from 'vue';
 import { usePlayer } from './composables/player';
-import { useLibraryCollections } from './composables/useLibraryCollections';
+import { useLibraryCollections } from './features/collections/useLibraryCollections';
 import { useAppThemeSync } from './composables/useAppThemeSync';
 import { useExternalPathBridge } from './composables/useExternalPathBridge';
 import { useAppShellTheme } from './composables/useAppShellTheme';

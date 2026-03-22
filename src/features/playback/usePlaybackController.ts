@@ -1,11 +1,11 @@
 import { storeToRefs } from 'pinia';
 
-import { usePlayerService } from '../../composables/playerService';
+import { usePlayerCore } from '../../composables/playerCore';
 import { usePlaybackStore } from './store';
 import { useUiStore } from '../../shared/stores/ui';
 
 export function usePlaybackController() {
-  const playerService = usePlayerService();
+  const { playbackDomain, windowDomain } = usePlayerCore();
   const playbackStore = usePlaybackStore();
   const uiStore = useUiStore();
   const playbackRefs = storeToRefs(playbackStore);
@@ -27,26 +27,26 @@ export function usePlaybackController() {
     showPlayerDetail: uiRefs.showPlayerDetail,
     showQueue: uiRefs.showQueue,
     dominantColors: uiRefs.dominantColors,
-    playSong: playerService.playSong,
-    pauseSong: playerService.pauseSong,
-    togglePlay: playerService.togglePlay,
-    nextSong: playerService.nextSong,
-    prevSong: playerService.prevSong,
-    seekTo: playerService.seekTo,
-    stepSeek: playerService.stepSeek,
-    handleVolume: playerService.handleVolume,
-    toggleMute: playerService.toggleMute,
-    toggleMode: playerService.toggleMode,
-    togglePlaylist: playerService.togglePlaylist,
-    togglePlayerDetail: playerService.togglePlayerDetail,
+    playSong: playbackDomain.playSong,
+    pauseSong: playbackDomain.pauseSong,
+    togglePlay: playbackDomain.togglePlay,
+    nextSong: playbackDomain.nextSong,
+    prevSong: playbackDomain.prevSong,
+    seekTo: playbackDomain.seekTo,
+    stepSeek: playbackDomain.stepSeek,
+    handleVolume: playbackDomain.handleVolume,
+    toggleMute: playbackDomain.toggleMute,
+    toggleMode: playbackDomain.toggleMode,
+    togglePlaylist: playbackDomain.togglePlaylist,
+    togglePlayerDetail: windowDomain.togglePlayerDetail,
     closePlayerDetail,
-    toggleQueue: playerService.toggleQueue,
-    toggleAlwaysOnTop: playerService.toggleAlwaysOnTop,
-    clearQueue: playerService.clearQueue,
-    addSongToQueue: playerService.addSongToQueue,
-    addSongsToQueue: playerService.addSongsToQueue,
-    removeSongFromQueue: playerService.removeSongFromQueue,
-    playNext: playerService.playNext,
-    formatDuration: playerService.formatDuration,
+    toggleQueue: windowDomain.toggleQueue,
+    toggleAlwaysOnTop: windowDomain.toggleAlwaysOnTop,
+    clearQueue: playbackDomain.clearQueue,
+    addSongToQueue: playbackDomain.addSongToQueue,
+    addSongsToQueue: playbackDomain.addSongsToQueue,
+    removeSongFromQueue: playbackDomain.removeSongFromQueue,
+    playNext: playbackDomain.playNext,
+    formatDuration: playbackDomain.formatDuration,
   };
 }

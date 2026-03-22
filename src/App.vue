@@ -1,11 +1,6 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue';
-import { usePlayer } from './composables/player';
-import { useLibraryCollections } from './features/collections/useLibraryCollections';
-import { useAppThemeSync } from './composables/useAppThemeSync';
-import { useExternalPathBridge } from './composables/useExternalPathBridge';
-import { useAppShellTheme } from './composables/useAppShellTheme';
-import { useMiniModeWindow } from './composables/useMiniModeWindow';
+import { defineAsyncComponent } from 'vue';
+import { useAppShell } from './composables/useAppShell';
 import Sidebar from './components/layout/Sidebar.vue';
 import TitleBar from './components/layout/TitleBar.vue';
 import PlayerFooter from './components/layout/PlayerFooter.vue';
@@ -18,77 +13,19 @@ const Toast = defineAsyncComponent(() => import('./components/common/Toast.vue')
 const MiniPlayer = defineAsyncComponent(() => import('./components/layout/MiniPlayer.vue'));
 
 const {
-  init,
-  playQueue,
   isMiniMode,
-  showPlayerDetail,
-  showMiniPlaylist,
-  showPlaylist,
-  closeMiniPlaylist,
-  showVolumePopover,
-  handleExternalPaths,
+  isExternalDragActive,
   libraryScanProgress,
-} = usePlayer();
-const {
+  libraryScanPhaseLabel,
+  libraryScanFolderLabel,
+  libraryScanPercent,
+  isFooterVisible,
+  mainContainerClass,
+  mainBlurStyle,
   showAddToPlaylistModal,
   playlistAddTargetSongs,
-  addSongsToPlaylist,
-} = useLibraryCollections();
-
-const { hasWindowMaterial, isMicaWindowMaterial, syncWindowMaterial } = useAppThemeSync();
-const { mainBlurStyle, mainContainerClass } = useAppShellTheme({
-  showPlayerDetail,
-  hasWindowMaterial,
-  isMicaWindowMaterial,
-});
-const { isExternalDragActive } = useExternalPathBridge({ handleExternalPaths });
-
-useMiniModeWindow({
-  isMiniMode,
-  showMiniPlaylist,
-  showVolumePopover,
-  showPlaylist,
-  closeMiniPlaylist,
-  syncWindowMaterial,
-});
-
-init();
-
-const isFooterVisible = computed(() => playQueue.value.length > 0);
-const libraryScanPercent = computed(() => {
-  if (!libraryScanProgress.value) return 0;
-  if (libraryScanProgress.value.total <= 0) return 8;
-  const percent = (libraryScanProgress.value.current / libraryScanProgress.value.total) * 100;
-  return Math.min(100, Math.max(6, percent));
-});
-const libraryScanPhaseLabel = computed(() => {
-  switch (libraryScanProgress.value?.phase) {
-    case 'collecting':
-      return '扫描文件';
-    case 'parsing':
-      return '解析元数据';
-    case 'writing':
-      return '写入音乐库';
-    case 'complete':
-      return '扫描完成';
-    case 'error':
-      return '扫描失败';
-    default:
-      return '扫描音乐库';
-  }
-});
-const libraryScanFolderLabel = computed(() => {
-  if (!libraryScanProgress.value || libraryScanProgress.value.folder_total <= 1) {
-    return '';
-  }
-
-  return `文件夹 ${libraryScanProgress.value.folder_index}/${libraryScanProgress.value.folder_total}`;
-});
-
-const handleGlobalAdd = (playlistId: string) => {
-  addSongsToPlaylist(playlistId, playlistAddTargetSongs.value);
-  showAddToPlaylistModal.value = false;
-};
+  handleGlobalAdd,
+} = useAppShell();
 </script>
 
 <template>
@@ -187,10 +124,8 @@ const handleGlobalAdd = (playlistId: string) => {
     </transition>
 
     <div v-if="!isMiniMode && isFooterVisible" class="relative z-[60]">
-      <!-- Player detail panel -->
       <PlayerDetail />
 
-      <!-- Persistent player footer -->
       <transition name="footer-slide">
         <PlayerFooter />
       </transition>
@@ -262,7 +197,6 @@ html.mini-mode-active,
   opacity: 1;
 }
 
-/* Window restore transition */
 .window-restore-enter-active {
   transition: opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }

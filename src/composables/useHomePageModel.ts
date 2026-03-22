@@ -1,0 +1,309 @@
+import { computed, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia';
+
+import { useCoverCache } from './useCoverCache';
+import { useHomeArtistAlbums } from './useHomeArtistAlbums';
+import { useHomeBatchActions } from './useHomeBatchActions';
+import { useHomeFolderManagement } from './useHomeFolderManagement';
+import { useHomeNavigation } from './useHomeNavigation';
+import { useHomePlaylistRename } from './useHomePlaylistRename';
+import { useHomeRouteSync } from './useHomeRouteSync';
+import { useHomeViewState } from './useHomeViewState';
+import { usePlayerViewState } from './usePlayerViewState';
+import { useSongContextActions } from './useSongContextActions';
+import { useSongDrag } from './useSongDrag';
+import { useToast } from './toast';
+import { useLibraryCollections } from '../features/collections/useLibraryCollections';
+import { useLibraryRuntimeActions } from '../features/library/useLibraryRuntimeActions';
+import { usePlayerLibraryView } from '../features/library/usePlayerLibraryView';
+import { usePlaybackController } from '../features/playback/usePlaybackController';
+import { useLibraryStore } from '../features/library/store';
+
+export function useHomePageModel() {
+  const route = useRoute();
+  const router = useRouter();
+  const { openHomeAlbum } = useHomeNavigation(router);
+  const { showToast } = useToast();
+
+  const libraryStore = useLibraryStore();
+  const {
+    canonicalSongs,
+    sourceSongs,
+    albumSortMode,
+    albumCustomOrder,
+  } = storeToRefs(libraryStore);
+
+  const {
+    currentViewMode,
+    activeRootPath,
+    currentFolderFilter,
+    filterCondition,
+  } = usePlayerViewState();
+  const {
+    displaySongList,
+    librarySongs,
+    folderTree,
+    searchQuery,
+  } = usePlayerLibraryView();
+  const { playSong } = usePlaybackController();
+  const {
+    moveFilesToFolder,
+    refreshAllFolders,
+    deleteFromDisk,
+    addLibraryFolder,
+    createFolder,
+    deleteFolder,
+    expandFolderPath,
+    fetchFolderTree,
+    removeLibraryFolderLinked,
+    refreshFolder,
+  } = useLibraryRuntimeActions();
+  const {
+    addSongsToPlaylist,
+    favoritePaths,
+    removeFromHistory,
+    playlists,
+  } = useLibraryCollections();
+  const { coverCache, loadingSet, preloadCovers } = useCoverCache();
+
+  const isBatchMode = ref(false);
+  const isManagementMode = ref(false);
+  const selectedPaths = ref<Set<string>>(new Set());
+  const songTableRef = ref<any>(null);
+  const showAddToPlaylistModal = ref(false);
+
+  const {
+    localViewMode,
+    localFilterCondition,
+    artistActiveTab,
+    viewTransitionKey,
+  } = useHomeViewState({
+    currentViewMode,
+    filterCondition,
+    isManagementMode,
+  });
+
+  const localSongList = computed(() => displaySongList.value);
+  const selectedAlbumSong = computed(() => localSongList.value[0] || null);
+
+  const { handleTableDragStart } = useSongDrag(
+    localSongList,
+    isBatchMode,
+    selectedPaths,
+    songTableRef,
+  );
+
+  const {
+    showContextMenu,
+    contextMenuX,
+    contextMenuY,
+    contextMenuTargetSong,
+    showSongPhysicalDeleteConfirm,
+    songToPhysicalDelete,
+    handleContextMenu,
+    handleSongPhysicalDelete,
+    executeSongPhysicalDelete,
+  } = useSongContextActions({
+    isBatchMode,
+    deleteFromDisk,
+  });
+
+  watch(isBatchMode, value => {
+    if (!value) {
+      selectedPaths.value.clear();
+    }
+  });
+
+  const {
+    showMoveToFolderModal,
+    showConfirm,
+    confirmTitle,
+    confirmButtonText,
+    confirmMessage,
+    requestBatchDelete,
+    handleFolderBatchDelete,
+    executeConfirmAction,
+    handleBatchMove,
+    confirmBatchMove,
+    handleAddToPlaylist,
+    openConfirm,
+  } = useHomeBatchActions({
+    currentViewMode,
+    selectedPaths,
+    isBatchMode,
+    isManagementMode,
+    canonicalSongs,
+    sourceSongs,
+    favoritePaths,
+    playlists,
+    contextMenuTargetSong,
+    showAddToPlaylistModal,
+    addSongsToPlaylist,
+    moveFilesToFolder,
+    removeFromHistory,
+    showToast,
+    getRoutePath: () => route.path,
+  });
+
+  const {
+    showCreateFolderModal,
+    showFolderDeleteConfirm,
+    folderToDeletePath,
+    handleActiveRootChange,
+    confirmCreateFolder,
+    executeDeleteFolder,
+    handleAddFolder,
+    handleRootCreateFolderRequest,
+    handleRootDeleteFolderRequest,
+    handleRefreshFolder,
+    handleRemoveFolderWithConfirm,
+  } = useHomeFolderManagement({
+    isManagementMode,
+    activeRootPath,
+    currentFolderFilter,
+    libraryHierarchy: folderTree,
+    sourceSongs,
+    refreshFolder,
+    fetchFolderTree,
+    createFolder,
+    deleteFolder,
+    expandFolderPath,
+    addLibraryFolder,
+    removeLibraryFolderLinked,
+    showToast,
+    openConfirm,
+  });
+
+  useHomeRouteSync({
+    route,
+    router,
+    currentViewMode,
+    filterCondition,
+    currentFolderFilter,
+    activeRootPath,
+    folderTree,
+    searchQuery,
+  });
+
+  const {
+    showRenameModal,
+    renameInitialValue,
+    handleRenamePlaylist,
+    confirmRename,
+  } = useHomePlaylistRename({
+    currentViewMode,
+    filterCondition,
+    playlists,
+    showToast,
+  });
+
+  const playlistDetail = computed(() => {
+    if (localViewMode.value !== 'playlist') {
+      return null;
+    }
+
+    const playlist = playlists.value.find(item => item.id === localFilterCondition.value);
+    if (!playlist) {
+      return null;
+    }
+
+    return {
+      name: playlist.name,
+      date: (playlist as any).createdAt || '',
+    };
+  });
+
+  const { artistAlbumList } = useHomeArtistAlbums({
+    localFilterCondition,
+    filterCondition,
+    librarySongs,
+    albumSortMode,
+    albumCustomOrder,
+    preloadCovers,
+  });
+
+  const handlePlayAll = () => {
+    if (localSongList.value.length > 0) {
+      void playSong(localSongList.value[0]);
+    }
+  };
+
+  const handleBatchPlay = () => {
+    const selectedSongs = localSongList.value.filter(song => selectedPaths.value.has(song.path));
+    if (selectedSongs.length > 0) {
+      void playSong(selectedSongs[0]);
+    }
+  };
+
+  const handleRefreshAll = async () => {
+    await refreshAllFolders();
+    showToast('Refresh completed', 'success');
+  };
+
+  const handleArtistAlbumClick = (albumKey: string) => {
+    void openHomeAlbum(albumKey);
+  };
+
+  return {
+    viewTransitionKey,
+    localViewMode,
+    isBatchMode,
+    isManagementMode,
+    activeRootPath,
+    selectedPaths,
+    folderTree,
+    currentFolderFilter,
+    playlistDetail,
+    localSongList,
+    artistActiveTab,
+    localFilterCondition,
+    selectedAlbumSong,
+    artistAlbumList,
+    coverCache,
+    loadingSet,
+    songTableRef,
+    handlePlayAll,
+    handleBatchPlay,
+    showAddToPlaylistModal,
+    requestBatchDelete,
+    handleFolderBatchDelete,
+    handleBatchMove,
+    handleAddFolder,
+    handleRefreshFolder,
+    handleRemoveFolderWithConfirm,
+    handleRootCreateFolderRequest,
+    handleRootDeleteFolderRequest,
+    handleActiveRootChange,
+    handleRenamePlaylist,
+    handleRefreshAll,
+    playSong,
+    handleContextMenu,
+    handleTableDragStart,
+    handleArtistAlbumClick,
+    showMoveToFolderModal,
+    confirmBatchMove,
+    showContextMenu,
+    contextMenuX,
+    contextMenuY,
+    contextMenuTargetSong,
+    showConfirm,
+    confirmTitle,
+    confirmMessage,
+    confirmButtonText,
+    executeConfirmAction,
+    showSongPhysicalDeleteConfirm,
+    songToPhysicalDelete,
+    handleSongPhysicalDelete,
+    executeSongPhysicalDelete,
+    showFolderDeleteConfirm,
+    folderToDeletePath,
+    executeDeleteFolder,
+    showCreateFolderModal,
+    confirmCreateFolder,
+    showRenameModal,
+    renameInitialValue,
+    confirmRename,
+    handleAddToPlaylist,
+  };
+}

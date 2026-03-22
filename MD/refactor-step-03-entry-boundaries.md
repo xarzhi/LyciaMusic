@@ -79,3 +79,12 @@ Avoid introducing new aliases like `songList`, `librarySongs`, or `displaySongLi
 - Final song resolution lives in `useLibraryCurrentViewSongs.ts`
 
 Add new library-derived state to the selector layer first, not back into the aggregate hook.
+
+## Step 06 follow-up
+
+Page files should stay as assembly-only entrypoints.
+
+- `src/views/Home.vue` now delegates page setup to `src/composables/useHomePageModel.ts`
+- `src/App.vue` now delegates root shell setup to `src/composables/useAppShell.ts`
+
+When page logic grows, add or split page-level composables instead of expanding the `.vue` script blocks.

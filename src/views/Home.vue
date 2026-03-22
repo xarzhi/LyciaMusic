@@ -119,10 +119,6 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { storeToRefs } from 'pinia';
-
 import DragGhost from '../components/common/DragGhost.vue';
 import HomeViewPane from '../components/home/HomeViewPane.vue';
 import ModernInputModal from '../components/common/ModernInputModal.vue';
@@ -130,249 +126,69 @@ import ModernModal from '../components/common/ModernModal.vue';
 import AddToPlaylistModal from '../components/overlays/AddToPlaylistModal.vue';
 import MoveToFolderModal from '../components/overlays/MoveToFolderModal.vue';
 import SongContextMenu from '../components/overlays/SongContextMenu.vue';
-import { useCoverCache } from '../composables/useCoverCache';
-import { useHomeArtistAlbums } from '../composables/useHomeArtistAlbums';
-import { useHomeBatchActions } from '../composables/useHomeBatchActions';
-import { useHomeFolderManagement } from '../composables/useHomeFolderManagement';
-import { useHomeNavigation } from '../composables/useHomeNavigation';
-import { useHomePlaylistRename } from '../composables/useHomePlaylistRename';
-import { useHomeRouteSync } from '../composables/useHomeRouteSync';
-import { useHomeViewState } from '../composables/useHomeViewState';
-import { useLibraryCollections } from '../features/collections/useLibraryCollections';
-import { useLibraryRuntimeActions } from '../features/library/useLibraryRuntimeActions';
-import { usePlaybackController } from '../features/playback/usePlaybackController';
-import { usePlayerLibraryView } from '../features/library/usePlayerLibraryView';
-import { usePlayerViewState } from '../composables/usePlayerViewState';
-import { useSongContextActions } from '../composables/useSongContextActions';
-import { useSongDrag } from '../composables/useSongDrag';
-import { useToast } from '../composables/toast';
-import { useLibraryStore } from '../features/library/store';
-
-const route = useRoute();
-const router = useRouter();
-const { openHomeAlbum } = useHomeNavigation(router);
-const { showToast } = useToast();
-const libraryStore = useLibraryStore();
-const {
-  canonicalSongs,
-  sourceSongs,
-  albumSortMode,
-  albumCustomOrder,
-} = storeToRefs(libraryStore);
+import { useHomePageModel } from '../composables/useHomePageModel';
 
 const {
-  currentViewMode,
-  activeRootPath,
-  currentFolderFilter,
-  filterCondition,
-} = usePlayerViewState();
-const {
-  displaySongList,
-  librarySongs,
-  folderTree,
-  searchQuery,
-} = usePlayerLibraryView();
-const { playSong } = usePlaybackController();
-const {
-  moveFilesToFolder,
-  refreshAllFolders,
-  deleteFromDisk,
-  addLibraryFolder,
-  createFolder,
-  deleteFolder,
-  expandFolderPath,
-  fetchFolderTree,
-  removeLibraryFolderLinked,
-  refreshFolder,
-} = useLibraryRuntimeActions();
-
-const {
-  addSongsToPlaylist,
-  favoritePaths,
-  removeFromHistory,
-  playlists,
-} = useLibraryCollections();
-
-const { coverCache, loadingSet, preloadCovers } = useCoverCache();
-
-const isBatchMode = ref(false);
-const isManagementMode = ref(false);
-const selectedPaths = ref<Set<string>>(new Set());
-const songTableRef = ref<any>(null);
-
-const {
-  localViewMode,
-  localFilterCondition,
-  artistActiveTab,
   viewTransitionKey,
-} = useHomeViewState({
-  currentViewMode,
-  filterCondition,
-  isManagementMode,
-});
-
-const localSongList = computed(() => displaySongList.value);
-const selectedAlbumSong = computed(() => localSongList.value[0] || null);
-
-const { handleTableDragStart } = useSongDrag(
-  localSongList,
+  localViewMode,
   isBatchMode,
+  isManagementMode,
+  activeRootPath,
   selectedPaths,
+  folderTree,
+  currentFolderFilter,
+  playlistDetail,
+  localSongList,
+  artistActiveTab,
+  localFilterCondition,
+  selectedAlbumSong,
+  artistAlbumList,
+  coverCache,
+  loadingSet,
   songTableRef,
-);
-
-const showAddToPlaylistModal = ref(false);
-
-const {
+  handlePlayAll,
+  handleBatchPlay,
+  showAddToPlaylistModal,
+  requestBatchDelete,
+  handleFolderBatchDelete,
+  handleBatchMove,
+  handleAddFolder,
+  handleRefreshFolder,
+  handleRemoveFolderWithConfirm,
+  handleRootCreateFolderRequest,
+  handleRootDeleteFolderRequest,
+  handleActiveRootChange,
+  handleRenamePlaylist,
+  handleRefreshAll,
+  playSong,
+  handleContextMenu,
+  handleTableDragStart,
+  handleArtistAlbumClick,
+  showMoveToFolderModal,
+  confirmBatchMove,
   showContextMenu,
   contextMenuX,
   contextMenuY,
   contextMenuTargetSong,
-  showSongPhysicalDeleteConfirm,
-  songToPhysicalDelete,
-  handleContextMenu,
-  handleSongPhysicalDelete,
-  executeSongPhysicalDelete,
-} = useSongContextActions({
-  isBatchMode,
-  deleteFromDisk,
-});
-
-watch(isBatchMode, value => {
-  if (!value) {
-    selectedPaths.value.clear();
-  }
-});
-
-const {
-  showMoveToFolderModal,
   showConfirm,
   confirmTitle,
-  confirmButtonText,
   confirmMessage,
-  requestBatchDelete,
-  handleFolderBatchDelete,
+  confirmButtonText,
   executeConfirmAction,
-  handleBatchMove,
-  confirmBatchMove,
-  handleAddToPlaylist,
-  openConfirm,
-} = useHomeBatchActions({
-  currentViewMode,
-  selectedPaths,
-  isBatchMode,
-  isManagementMode,
-  canonicalSongs,
-  sourceSongs,
-  favoritePaths,
-  playlists,
-  contextMenuTargetSong,
-  showAddToPlaylistModal,
-  addSongsToPlaylist,
-  moveFilesToFolder,
-  removeFromHistory,
-  showToast,
-  getRoutePath: () => route.path,
-});
-
-const {
-  showCreateFolderModal,
+  showSongPhysicalDeleteConfirm,
+  songToPhysicalDelete,
+  handleSongPhysicalDelete,
+  executeSongPhysicalDelete,
   showFolderDeleteConfirm,
   folderToDeletePath,
-  handleActiveRootChange,
-  confirmCreateFolder,
   executeDeleteFolder,
-  handleAddFolder,
-  handleRootCreateFolderRequest,
-  handleRootDeleteFolderRequest,
-  handleRefreshFolder,
-  handleRemoveFolderWithConfirm,
-} = useHomeFolderManagement({
-  isManagementMode,
-  activeRootPath,
-  currentFolderFilter,
-  libraryHierarchy: folderTree,
-  sourceSongs,
-  refreshFolder,
-  fetchFolderTree,
-  createFolder,
-  deleteFolder,
-  expandFolderPath,
-  addLibraryFolder,
-  removeLibraryFolderLinked,
-  showToast,
-  openConfirm,
-});
-
-useHomeRouteSync({
-  route,
-  router,
-  currentViewMode,
-  filterCondition,
-  currentFolderFilter,
-  activeRootPath,
-  folderTree,
-  searchQuery,
-});
-
-const {
+  showCreateFolderModal,
+  confirmCreateFolder,
   showRenameModal,
   renameInitialValue,
-  handleRenamePlaylist,
   confirmRename,
-} = useHomePlaylistRename({
-  currentViewMode,
-  filterCondition,
-  playlists,
-  showToast,
-});
-
-const playlistDetail = computed(() => {
-  if (localViewMode.value !== 'playlist') {
-    return null;
-  }
-
-  const playlist = playlists.value.find(item => item.id === localFilterCondition.value);
-  if (!playlist) {
-    return null;
-  }
-
-  return {
-    name: playlist.name,
-    date: (playlist as any).createdAt || '',
-  };
-});
-
-const { artistAlbumList } = useHomeArtistAlbums({
-  localFilterCondition,
-  filterCondition,
-  librarySongs,
-  albumSortMode,
-  albumCustomOrder,
-  preloadCovers,
-});
-
-const handlePlayAll = () => {
-  if (localSongList.value.length > 0) {
-    void playSong(localSongList.value[0]);
-  }
-};
-
-const handleBatchPlay = () => {
-  const selectedSongs = localSongList.value.filter(song => selectedPaths.value.has(song.path));
-  if (selectedSongs.length > 0) {
-    void playSong(selectedSongs[0]);
-  }
-};
-
-const handleRefreshAll = async () => {
-  await refreshAllFolders();
-  showToast('Refresh completed', 'success');
-};
-
-const handleArtistAlbumClick = (albumKey: string) => {
-  void openHomeAlbum(albumKey);
-};
+  handleAddToPlaylist,
+} = useHomePageModel();
 </script>
 
 <style scoped>

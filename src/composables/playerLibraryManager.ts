@@ -6,12 +6,6 @@ import { libraryApi } from '../services/tauri/libraryApi';
 import { useLibraryStore } from '../stores/library';
 import { usePlaybackStore } from '../stores/playback';
 
-interface AppSettingsRef {
-  value: {
-    linkFoldersToLibrary: boolean;
-  };
-}
-
 interface ProcessExternalPathsOptions {
   source?: 'drop' | 'open';
 }
@@ -21,47 +15,12 @@ interface PlaySongOptions {
 }
 
 interface CreatePlayerLibraryManagerDeps {
-  appSettings: AppSettingsRef;
-  fetchSidebarTree: () => Promise<void>;
+  fetchFolderTree: () => Promise<void>;
   scanLibrary: (options?: ScanLibraryOptions) => Promise<void>;
   playSong: (song: Song, options?: PlaySongOptions) => Promise<void>;
   dedupePaths: (paths: string[]) => string[];
   dedupeSongs: (songs: Song[]) => Song[];
   resetShuffleState: () => void;
-}
-
-export interface LinkLibraryFolderOptions {
-  syncLinked?: boolean;
-  scanOptions?: ScanLibraryOptions;
-}
-
-export interface LinkLibraryFolderResult {
-  linkedSidebar: boolean;
-  resolvedScanOptions: Required<ScanLibraryOptions>;
-}
-
-export interface UnlinkLibraryFolderOptions {
-  syncLinked?: boolean;
-}
-
-export interface UnlinkLibraryFolderResult {
-  removedSidebar: boolean;
-}
-
-export interface LinkSidebarFolderOptions {
-  syncLinked?: boolean;
-}
-
-export interface LinkSidebarFolderResult {
-  linkedLibrary: boolean;
-}
-
-export interface UnlinkSidebarFolderOptions {
-  syncLinked?: boolean;
-}
-
-export interface UnlinkSidebarFolderResult {
-  removedLibrary: boolean;
 }
 
 export interface ProcessExternalPathsResult {
@@ -73,8 +32,7 @@ export interface ProcessExternalPathsResult {
 }
 
 export const createPlayerLibraryManager = ({
-  appSettings,
-  fetchSidebarTree,
+  fetchFolderTree,
   scanLibrary,
   playSong,
   dedupePaths,
@@ -83,6 +41,12 @@ export const createPlayerLibraryManager = ({
 }: CreatePlayerLibraryManagerDeps) => {
   const libraryStore = useLibraryStore();
   const playbackStore = usePlaybackStore();
+  const normalizePath = (path: string) => path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const isWithinLibraryRoot = (path: string, root: string) => {
+    const normalizedPath = normalizePath(path);
+    const normalizedRoot = normalizePath(root);
+    return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
+  };
 
   const fetchLibraryFolders = async () => {
     try {
@@ -97,91 +61,24 @@ export const createPlayerLibraryManager = ({
     await libraryApi.addLibraryFolder(path);
     await fetchLibraryFolders();
     await scanLibrary(scanOptions ?? getLibraryAddScanOptions(path));
-  };
-
-  const addSidebarFolderRecord = async (path: string) => {
-    await libraryApi.addSidebarFolder(path);
-    await fileApi.scanMusicFolder(path);
-    await fetchSidebarTree();
+    await fetchFolderTree();
   };
 
   const removeLibraryFolderRecord = async (path: string) => {
     await libraryApi.removeLibraryFolder(path);
     await fetchLibraryFolders();
     await scanLibrary({ trigger: 'manual-rescan', visibility: 'inline' });
+    await fetchFolderTree();
   };
 
-  const removeSidebarFolderRecord = async (path: string) => {
-    await libraryApi.removeSidebarFolder(path);
-    await fetchSidebarTree();
-  };
-
-  const linkLibraryFolder = async (
-    path: string,
-    options: LinkLibraryFolderOptions = {},
-  ): Promise<LinkLibraryFolderResult> => {
-    const { syncLinked = true, scanOptions } = options;
+  const linkLibraryFolder = async (path: string, scanOptions?: ScanLibraryOptions) => {
     const resolvedScanOptions = resolveScanLibraryOptions(scanOptions ?? getLibraryAddScanOptions(path));
-
     await addLibraryFolderRecord(path, resolvedScanOptions);
-
-    const linkedSidebar = syncLinked && appSettings.value.linkFoldersToLibrary;
-    if (linkedSidebar) {
-      await addSidebarFolderRecord(path);
-    }
-
-    return {
-      linkedSidebar,
-      resolvedScanOptions,
-    };
+    return resolvedScanOptions;
   };
 
-  const unlinkLibraryFolder = async (
-    path: string,
-    options: UnlinkLibraryFolderOptions = {},
-  ): Promise<UnlinkLibraryFolderResult> => {
-    const { syncLinked = true } = options;
-
+  const unlinkLibraryFolder = async (path: string) => {
     await removeLibraryFolderRecord(path);
-
-    const removedSidebar = syncLinked && appSettings.value.linkFoldersToLibrary;
-    if (removedSidebar) {
-      await removeSidebarFolderRecord(path);
-    }
-
-    return { removedSidebar };
-  };
-
-  const linkSidebarFolder = async (
-    path: string,
-    options: LinkSidebarFolderOptions = {},
-  ): Promise<LinkSidebarFolderResult> => {
-    const { syncLinked = true } = options;
-
-    await addSidebarFolderRecord(path);
-
-    const linkedLibrary = syncLinked && appSettings.value.linkFoldersToLibrary;
-    if (linkedLibrary) {
-      await addLibraryFolderRecord(path);
-    }
-
-    return { linkedLibrary };
-  };
-
-  const unlinkSidebarFolder = async (
-    path: string,
-    options: UnlinkSidebarFolderOptions = {},
-  ): Promise<UnlinkSidebarFolderResult> => {
-    const { syncLinked = true } = options;
-
-    await removeSidebarFolderRecord(path);
-
-    const removedLibrary = syncLinked && appSettings.value.linkFoldersToLibrary;
-    if (removedLibrary) {
-      await removeLibraryFolderRecord(path);
-    }
-
-    return { removedLibrary };
   };
 
   const playExternalSongs = async (songs: Song[]) => {
@@ -221,13 +118,22 @@ export const createPlayerLibraryManager = ({
     const directoryPaths = pathKinds.filter(item => item.isDirectory).map(item => item.path);
     const filePaths = pathKinds.filter(item => !item.isDirectory).map(item => item.path);
 
-    const existingLibraryPaths = new Set(libraryStore.libraryFolders.map(folder => folder.path));
+    const existingLibraryPaths = new Set(
+      libraryStore.libraryFolders.map(folder => normalizePath(folder.path)),
+    );
     let importedFolderCount = 0;
     let skippedFolderCount = 0;
+    let shouldRescanExistingLibrary = false;
 
     for (const directoryPath of directoryPaths) {
-      if (existingLibraryPaths.has(directoryPath)) {
+      const isExistingRoot = existingLibraryPaths.has(normalizePath(directoryPath));
+      const isNestedInExistingRoot = libraryStore.libraryFolders.some(folder =>
+        isWithinLibraryRoot(directoryPath, folder.path),
+      );
+
+      if (isExistingRoot || isNestedInExistingRoot) {
         skippedFolderCount += 1;
+        shouldRescanExistingLibrary = true;
         continue;
       }
 
@@ -237,6 +143,10 @@ export const createPlayerLibraryManager = ({
       } catch (error) {
         console.error('Failed to import external folder:', directoryPath, error);
       }
+    }
+
+    if (shouldRescanExistingLibrary) {
+      await scanLibrary({ trigger: 'manual-rescan', visibility: 'silent' });
     }
 
     const parsedSongs = filePaths.length > 0
@@ -263,13 +173,9 @@ export const createPlayerLibraryManager = ({
   return {
     fetchLibraryFolders,
     addLibraryFolderRecord,
-    addSidebarFolderRecord,
     removeLibraryFolderRecord,
-    removeSidebarFolderRecord,
     linkLibraryFolder,
     unlinkLibraryFolder,
-    linkSidebarFolder,
-    unlinkSidebarFolder,
     processExternalPaths,
   };
 };

@@ -131,6 +131,14 @@ impl DbState {
         )
         .map_err(|e| e.to_string())?;
 
+        // One-time compatibility merge: old sidebar roots become library roots.
+        conn.execute(
+            "INSERT OR IGNORE INTO library_folders (path, added_at)
+             SELECT path, added_at FROM sidebar_folders",
+            [],
+        )
+        .ok();
+
         // --- Migration: Add audio quality columns (v1.1.1) ---
         let columns: Vec<String> = conn
             .prepare("PRAGMA table_info(songs)")

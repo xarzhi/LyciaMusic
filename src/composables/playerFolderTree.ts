@@ -2,27 +2,12 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { storeToRefs } from 'pinia';
 
 import type { FolderNode } from '../types';
-import { fileApi } from '../services/tauri/fileApi';
 import { libraryApi } from '../services/tauri/libraryApi';
 import { useLibraryStore } from '../stores/library';
 
-interface FolderTreeSettings {
-  value: {
-    linkFoldersToLibrary: boolean;
-  };
-}
-
 interface CreatePlayerFolderTreeDeps {
-  appSettings: FolderTreeSettings;
   addLibraryFolderPath: (path: string) => Promise<void>;
-  linkFolderTreeToLibrary: (
-    path: string,
-    options?: { syncLinked?: boolean }
-  ) => Promise<{ linkedLibrary: boolean }>;
-  unlinkFolderTreeFromLibrary: (
-    path: string,
-    options?: { syncLinked?: boolean }
-  ) => Promise<{ removedLibrary: boolean }>;
+  removeLibraryFolderPath: (path: string) => Promise<void>;
   showToast: (message: string, type: 'success' | 'info' | 'error') => void;
 }
 
@@ -65,10 +50,8 @@ const expandTreeToPath = (nodes: FolderNode[], targetPath: string): boolean => {
 };
 
 export const createPlayerFolderTree = ({
-  appSettings,
   addLibraryFolderPath,
-  linkFolderTreeToLibrary,
-  unlinkFolderTreeFromLibrary,
+  removeLibraryFolderPath,
   showToast,
 }: CreatePlayerFolderTreeDeps) => {
   const libraryStore = useLibraryStore();
@@ -77,11 +60,11 @@ export const createPlayerFolderTree = ({
   const fetchFolderTree = async () => {
     try {
       const expandedPaths = collectExpandedPaths(folderTree.value);
-      const tree = await libraryApi.getSidebarHierarchy();
+      const tree = await libraryApi.getLibraryHierarchy();
       applyExpandedPaths(tree, expandedPaths);
       folderTree.value = tree;
     } catch (error) {
-      console.error('Failed to fetch folder tree:', error);
+      console.error('Failed to fetch library folder tree:', error);
     }
   };
 
@@ -91,35 +74,25 @@ export const createPlayerFolderTree = ({
 
   const addFolderTreeFolderLinked = async (
     path: string,
-    options: { syncLinked?: boolean; showToast?: boolean } = {}
+    options: { showToast?: boolean } = {},
   ) => {
-    const { syncLinked = true, showToast: shouldShowToast = true } = options;
-    const { linkedLibrary } = await linkFolderTreeToLibrary(path, { syncLinked });
+    const { showToast: shouldShowToast = true } = options;
+    await addLibraryFolderPath(path);
 
     if (shouldShowToast) {
-      showToast(
-        linkedLibrary
-          ? '已将文件夹加入左侧文件夹树，并同步关联到本地音乐库'
-          : '已将文件夹加入左侧文件夹树',
-        'success'
-      );
+      showToast('已将文件夹添加到音乐库', 'success');
     }
   };
 
   const removeFolderTreeFolderLinked = async (
     path: string,
-    options: { syncLinked?: boolean; showToast?: boolean } = {}
+    options: { showToast?: boolean } = {},
   ) => {
-    const { syncLinked = true, showToast: shouldShowToast = true } = options;
-    const { removedLibrary } = await unlinkFolderTreeFromLibrary(path, { syncLinked });
+    const { showToast: shouldShowToast = true } = options;
+    await removeLibraryFolderPath(path);
 
     if (shouldShowToast) {
-      showToast(
-        removedLibrary
-          ? '已从左侧文件夹树和本地音乐库同步移除文件夹'
-          : '已从左侧文件夹树移除文件夹',
-        'success'
-      );
+      showToast('已从音乐库移除文件夹', 'success');
     }
   };
 
@@ -128,38 +101,27 @@ export const createPlayerFolderTree = ({
       const selected = await open({
         directory: true,
         multiple: false,
-        title: '选择要加入左侧文件夹树的目录',
+        title: '选择要添加到音乐库的目录',
       });
 
       if (!selected || typeof selected !== 'string') {
         return;
       }
 
-      const shouldLinkToLibrary = appSettings.value.linkFoldersToLibrary;
-      await libraryApi.addSidebarFolder(selected);
-      await fileApi.scanMusicFolder(selected);
-      await fetchFolderTree();
-
-      if (shouldLinkToLibrary) {
-        await addLibraryFolderPath(selected);
-        showToast('已将文件夹加入左侧文件夹树，并关联到本地音乐库', 'success');
-        return;
-      }
-
-      showToast('已将文件夹加入左侧文件夹树', 'success');
+      await addLibraryFolderPath(selected);
+      showToast('已将文件夹添加到音乐库', 'success');
     } catch (error) {
-      console.error('Failed to add folder tree folder:', error);
+      console.error('Failed to add library folder from folder tree:', error);
       showToast(`添加失败: ${error}`, 'error');
     }
   };
 
   const removeFolderTreeFolder = async (path: string) => {
     try {
-      await libraryApi.removeSidebarFolder(path);
-      await fetchFolderTree();
-      showToast('已从左侧文件夹树移除文件夹', 'success');
+      await removeLibraryFolderPath(path);
+      showToast('已从音乐库移除文件夹', 'success');
     } catch (error) {
-      console.error('Failed to remove folder tree folder:', error);
+      console.error('Failed to remove library folder from folder tree:', error);
     }
   };
 

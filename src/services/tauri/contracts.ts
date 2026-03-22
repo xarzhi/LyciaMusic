@@ -49,6 +49,7 @@ export interface TauriCommandMap {
   add_sidebar_folder: { payload: { path: string }; response: void };
   remove_library_folder: { payload: { path: string }; response: void };
   remove_sidebar_folder: { payload: { path: string }; response: void };
+  get_library_hierarchy: { payload: undefined; response: FolderNode[] };
   get_library_folders: { payload: undefined; response: LibraryFolder[] };
   get_sidebar_hierarchy: { payload: undefined; response: FolderNode[] };
   create_folder: { payload: { parentPath: string; folderName: string }; response: string };

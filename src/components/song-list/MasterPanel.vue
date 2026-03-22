@@ -30,7 +30,7 @@ const {
   folderTree, // 🟢 New
   activeRootPath, // 🟢 New Global State
   fetchFolderTree, // 🟢 New
-  removeSidebarFolder, // 🟢 Decoupled Sidebar
+  removeLibraryFolder,
   deleteFolder, // 🟢 Import
   // isManagementMode, 
   libraryFolders, // 🟢 新增
@@ -411,9 +411,9 @@ const handleTreeContextMenu = ({ event, node }: { event: MouseEvent, node: Folde
 };
 
 const executeDeleteFolders = async () => {
-  // Use removeSidebarFolder for decoupled removal
+  // Remove selected roots from the library-backed folder tree
   for (const path of foldersToDelete.value) {
-      await removeSidebarFolder(path);
+      await removeLibraryFolder(path);
   }
   selectedFolderPaths.value.clear();
   foldersToDelete.value = [];

@@ -19,8 +19,8 @@ interface UseHomeFolderManagementOptions {
   createFolder: (parentPath: string, folderName: string) => Promise<string>;
   deleteFolder: (path: string) => Promise<unknown>;
   expandFolderPath: (path: string) => void;
-  addSidebarFolder: () => Promise<unknown>;
-  removeSidebarFolderLinked: (path: string) => Promise<unknown>;
+  addLibraryFolder: () => Promise<unknown>;
+  removeLibraryFolderLinked: (path: string) => Promise<unknown>;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   openConfirm: (options: ConfirmOptions) => void;
 }
@@ -36,8 +36,8 @@ export function useHomeFolderManagement({
   createFolder,
   deleteFolder,
   expandFolderPath,
-  addSidebarFolder,
-  removeSidebarFolderLinked,
+  addLibraryFolder,
+  removeLibraryFolderLinked,
   showToast,
   openConfirm,
 }: UseHomeFolderManagementOptions) {
@@ -226,7 +226,7 @@ export function useHomeFolderManagement({
   };
 
   const handleAddFolder = async () => {
-    await addSidebarFolder();
+    await addLibraryFolder();
   };
 
   const handleRootCreateFolderRequest = (path: string) => {
@@ -259,7 +259,7 @@ export function useHomeFolderManagement({
         : '确定要移除此文件夹吗？这不会删除本地文件。',
       action: async () => {
         const wasActive = activeRootPath.value === path;
-        await removeSidebarFolderLinked(path);
+        await removeLibraryFolderLinked(path);
 
         if (wasActive) {
           if (folderTree.value.length > 0) {

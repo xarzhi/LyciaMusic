@@ -11,12 +11,12 @@ interface UseLibrarySyncOptions {
   addLibraryFolder: () => Promise<unknown>;
   addLibraryFolderLinked: (
     path: string,
-    options?: { syncLinked?: boolean; showToast?: boolean; scanOptions?: ScanLibraryOptions },
+    options?: { showToast?: boolean; scanOptions?: ScanLibraryOptions },
   ) => Promise<unknown>;
   removeLibraryFolder: (path: string) => Promise<unknown>;
   removeLibraryFolderLinked: (
     path: string,
-    options?: { syncLinked?: boolean; showToast?: boolean },
+    options?: { showToast?: boolean },
   ) => Promise<unknown>;
   handleExternalPaths: (paths: string[], options?: HandleExternalPathsOptions) => Promise<void>;
   scanLibrary: (options?: ScanLibraryOptions) => Promise<unknown>;

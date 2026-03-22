@@ -248,9 +248,6 @@ onUnmounted(() => {
             <div class="text-sm font-medium text-gray-800 dark:text-gray-200">关联文件夹与音乐库</div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">文件夹视图与本地音乐库相互耦合，同时移除时也双向同步。</div>
           </div>
-          <button @click="settings.linkFoldersToLibrary = !settings.linkFoldersToLibrary" class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none" :class="settings.linkFoldersToLibrary ? 'bg-[#EC4141]' : 'bg-gray-300 dark:bg-gray-700'">
-            <span class="inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out shadow-sm" :class="settings.linkFoldersToLibrary ? 'translate-x-6' : 'translate-x-1'" />
-          </button>
         </div>
       </div>
     </section>

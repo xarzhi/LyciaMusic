@@ -2,7 +2,6 @@
 import { storeToRefs } from 'pinia';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useLyrics } from './lyrics';
-import { useSettings as useAppSettings } from './settings';
 import { useToast } from './toast';
 import { createPlayerLibraryBatch } from './playerLibraryBatch';
 import { createPlayerLibraryManager } from './playerLibraryManager';
@@ -189,7 +188,6 @@ function createPlayerService() {
 
 
   const { loadLyrics } = useLyrics();
-  const { settings: appSettings } = useAppSettings();
   const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
   const navigationStore = useNavigationStore();
@@ -251,7 +249,7 @@ function createPlayerService() {
     playerHistoryFavorites,
   });
   const playerFileManager = createPlayerFileManager({
-    removeSidebarFolderLinked,
+    removeLibraryFolderLinked,
     removeFromHistory: (songPaths: string[]) => playerHistoryFavorites.removeFromHistory(songPaths),
     showToast: (message, type) => useToast().showToast(message, type),
   });
@@ -259,14 +257,12 @@ function createPlayerService() {
   const {
     fetchLibraryFolders,
     addLibraryFolderRecord,
+    removeLibraryFolderRecord,
     linkLibraryFolder,
     unlinkLibraryFolder,
-    linkSidebarFolder,
-    unlinkSidebarFolder,
     processExternalPaths,
   } = createPlayerLibraryManager({
-    appSettings,
-    fetchSidebarTree,
+    fetchFolderTree,
     scanLibrary,
     playSong,
     dedupePaths,
@@ -274,10 +270,8 @@ function createPlayerService() {
     resetShuffleState,
   });
   const playerFolderTree = createPlayerFolderTree({
-    appSettings,
     addLibraryFolderPath,
-    linkFolderTreeToLibrary: linkSidebarFolder,
-    unlinkFolderTreeFromLibrary: unlinkSidebarFolder,
+    removeLibraryFolderPath,
     showToast: (message, type) => useToast().showToast(message, type),
   });
   const playerFolderImport = createPlayerFolderImport({
@@ -378,28 +372,16 @@ function createPlayerService() {
   // --- Library Management ---
   async function addLibraryFolderLinked(
     path: string,
-    options: { syncLinked?: boolean; showToast?: boolean; scanOptions?: ScanLibraryOptions } = {}
+    options: { showToast?: boolean; scanOptions?: ScanLibraryOptions } = {}
   ) {
-    const { syncLinked = true, showToast = false, scanOptions } = options;
-    const { linkedSidebar, resolvedScanOptions } = await linkLibraryFolder(path, {
-      syncLinked,
-      scanOptions,
-    });
+    const { showToast = false, scanOptions } = options;
+    const resolvedScanOptions = await linkLibraryFolder(path, scanOptions);
 
     if (showToast) {
       const toastText = resolvedScanOptions.visibility === 'silent'
-        ? "\u5df2\u5c06\u6587\u4ef6\u5939\u52a0\u5165\u97f3\u4e50\u5e93"
-        : linkedSidebar
-          ? "\u5df2\u5c06\u6587\u4ef6\u5939\u540c\u6b65\u5230\u4fa7\u8fb9\u680f\u548c\u97f3\u4e50\u5e93"
-          : "\u5df2\u6dfb\u52a0\u6587\u4ef6\u5939";
+        ? '已将文件夹加入音乐库'
+        : '已添加音乐库文件夹';
       useToast().showToast(toastText, "success");
-      return;
-      useToast().showToast(
-        linkedSidebar
-          ? "\u5df2\u5c06\u6587\u4ef6\u5939\u540c\u6b65\u5230\u4fa7\u8fb9\u680f\u548c\u97f3\u4e50\u5e93"
-          : "\u5df2\u6dfb\u52a0\u6587\u4ef6\u5939",
-        "success"
-      );
     }
   }
 
@@ -474,34 +456,14 @@ function createPlayerService() {
 
   async function removeLibraryFolderLinked(
     path: string,
-    options: { syncLinked?: boolean; showToast?: boolean } = {}
+    options: { showToast?: boolean } = {}
   ) {
-    const { syncLinked = true, showToast = true } = options;
-
-    const { removedSidebar } = await unlinkLibraryFolder(path, { syncLinked });
+    const { showToast = true } = options;
+    await unlinkLibraryFolder(path);
 
     if (showToast) {
-      useToast().showToast(
-        removedSidebar
-          ? "\u5df2\u4ece\u672c\u5730\u97f3\u4e50\u5e93\u548c\u4fa7\u8fb9\u680f\u540c\u6b65\u79fb\u9664\u6587\u4ef6\u5939"
-          : "\u5df2\u4ece\u97f3\u4e50\u5e93\u79fb\u9664\u6587\u4ef6\u5939",
-        "success"
-      );
+      useToast().showToast('已从音乐库移除文件夹', "success");
     }
-  }
-
-  async function addSidebarFolderLinked(
-    path: string,
-    options: { syncLinked?: boolean; showToast?: boolean } = {}
-  ) {
-    return playerFolderTree.addFolderTreeFolderLinked(path, options);
-  }
-
-  async function removeSidebarFolderLinked(
-    path: string,
-    options: { syncLinked?: boolean; showToast?: boolean } = {}
-  ) {
-    return playerFolderTree.removeFolderTreeFolderLinked(path, options);
   }
 
   async function addLibraryFolder() {
@@ -525,6 +487,14 @@ function createPlayerService() {
       await addLibraryFolderRecord(path, getLibraryAddScanOptions(path));
     } catch (e) {
       console.error("Failed to add library folder path:", e);
+    }
+  }
+
+  async function removeLibraryFolderPath(path: string) {
+    try {
+      await removeLibraryFolderRecord(path);
+    } catch (e) {
+      console.error("Failed to remove library folder path:", e);
     }
   }
 
@@ -585,23 +555,13 @@ function createPlayerService() {
 
 
 
-  async function fetchSidebarTree() {
+  async function fetchFolderTree() {
     return playerFolderTree.fetchFolderTree();
   }
 
   async function createFolder(parentPath: string, folderName: string) {
     return playerFolderTree.createFolder(parentPath, folderName);
   }
-
-  async function addSidebarFolder() {
-    return playerFolderTree.addFolderTreeFolder();
-  }
-
-  async function removeSidebarFolder(path: string) {
-    return playerFolderTree.removeFolderTreeFolder(path);
-  }
-
-
 
   const artistList = computed<ArtistListItem[]>(() => {
 
@@ -1313,16 +1273,12 @@ function createPlayerService() {
       playlistSortMode.value = mode;
     },
 
-    // Sidebar (Decoupled)
+    // Library directory browsing
     folderTree,
     activeRootPath,
     deleteFolder,
     moveFilePhysical,
-    fetchFolderTree: fetchSidebarTree,
-    addSidebarFolder,
-    addSidebarFolderLinked,
-    removeSidebarFolder,
-    removeSidebarFolderLinked,
+    fetchFolderTree,
     createFolder,
     expandFolderPath: (targetPath: string) => {
       playerFolderTree.expandFolderPath(targetPath);

@@ -9,9 +9,9 @@ import { usePlaybackStore } from '../stores/playback';
 import { useSettingsStore } from '../stores/settings';
 
 interface CreatePlayerFileManagerDeps {
-  removeSidebarFolderLinked: (
+  removeLibraryFolderLinked: (
     path: string,
-    options?: { syncLinked?: boolean; showToast?: boolean }
+    options?: { showToast?: boolean }
   ) => Promise<void>;
   removeFromHistory: (songPaths: string[]) => Promise<void>;
   showToast: (message: string, type: 'success' | 'info' | 'error') => void;
@@ -112,7 +112,7 @@ const findNode = (
 const sanitizePathSegment = (value: string) => value.replace(/[<>:"/\\|?*]/g, '_').trim();
 
 export const createPlayerFileManager = ({
-  removeSidebarFolderLinked,
+  removeLibraryFolderLinked,
   removeFromHistory,
   showToast,
 }: CreatePlayerFileManagerDeps) => {
@@ -129,7 +129,7 @@ export const createPlayerFileManager = ({
 
     const isRoot = folderTree.value.some(node => node.path === path);
     if (isRoot) {
-      await removeSidebarFolderLinked(path, { showToast: false });
+      await removeLibraryFolderLinked(path, { showToast: false });
       return;
     }
 

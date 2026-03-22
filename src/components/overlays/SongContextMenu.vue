@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue';
 import { usePlayer } from '../../composables/player';
 import type { Song } from '../../types';
-import { useLibraryCollections } from '../../composables/useLibraryCollections';
+import { useLibraryCollections } from '../../features/collections/useLibraryCollections';
 import { usePlayerViewState } from '../../composables/usePlayerViewState';
 
 const props = defineProps<{

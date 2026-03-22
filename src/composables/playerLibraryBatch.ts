@@ -1,9 +1,9 @@
 import { storeToRefs } from 'pinia';
 import type { HistoryItem, Song } from '../types';
 
-import { useCollectionsStore } from '../stores/collections';
-import { useLibraryStore } from '../stores/library';
-import { usePlaybackStore } from '../stores/playback';
+import { useCollectionsStore } from '../features/collections/store';
+import { useLibraryStore } from '../features/library/store';
+import { usePlaybackStore } from '../features/playback/store';
 
 const LIBRARY_SCAN_BATCH_FLUSH_MS = 120;
 

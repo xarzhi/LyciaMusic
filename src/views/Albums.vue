@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { dragSession } from '../composables/dragState';
-import { useLibraryBrowse } from '../composables/useLibraryBrowse';
+import { useLibraryBrowse } from '../features/library/useLibraryBrowse';
 import { useRouter } from 'vue-router';
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { useHomeNavigation } from '../composables/useHomeNavigation';

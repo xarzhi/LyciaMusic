@@ -1,4 +1,4 @@
-import { useNavigationStore } from '../stores/navigation';
+import { useNavigationStore } from '../shared/stores/navigation';
 
 interface ArtistListItem {
   name: string;

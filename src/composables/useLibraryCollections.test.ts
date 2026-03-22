@@ -18,10 +18,10 @@ vi.mock('../services/tauri/historyApi', () => ({
 import { playerStorage } from '../services/storage/playerStorage';
 import { historyApi } from '../services/tauri/historyApi';
 import type { Song } from '../types';
-import { useCollectionsStore } from '../stores/collections';
-import { useNavigationStore } from '../stores/navigation';
-import { useUiStore } from '../stores/ui';
-import { useLibraryCollections } from './useLibraryCollections';
+import { useCollectionsStore } from '../features/collections/store';
+import { useNavigationStore } from '../shared/stores/navigation';
+import { useUiStore } from '../shared/stores/ui';
+import { useLibraryCollections } from '../features/collections/useLibraryCollections';
 
 const makeSong = (overrides: Partial<Song> = {}): Song => ({
   path: '/music/demo.flac',

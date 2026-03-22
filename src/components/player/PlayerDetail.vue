@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useLyrics } from '../../composables/lyrics';
-import { usePlaybackController } from '../../composables/usePlaybackController';
+import { usePlaybackController } from '../../features/playback/usePlaybackController';
 import { useSharedTransition } from '../../composables/useSharedTransition';
 import LyricsView from './LyricsView.vue';
 import PlayerDetailBackground from './PlayerDetailBackground.vue';

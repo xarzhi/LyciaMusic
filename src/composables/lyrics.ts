@@ -1,11 +1,11 @@
 import { ref, computed, reactive, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { usePlaybackStore } from '../stores/playback';
+import { usePlaybackStore } from '../features/playback/store';
 import type {
   LyricLine as AmlLyricLine,
   LyricWord as AmlLyricWord,
 } from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js';
-import { useSettingsStore } from '../stores/settings';
+import { useSettingsStore } from '../features/settings/store';
 
 export interface LyricLine {
   time: number;

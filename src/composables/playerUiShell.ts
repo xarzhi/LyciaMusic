@@ -3,11 +3,11 @@ import { storeToRefs } from 'pinia';
 
 import type { Song } from '../types';
 import { playbackApi } from '../services/tauri/playbackApi';
-import { useCollectionsStore } from '../stores/collections';
-import { useLibraryStore } from '../stores/library';
-import { useNavigationStore } from '../stores/navigation';
-import { usePlaybackStore } from '../stores/playback';
-import { useUiStore } from '../stores/ui';
+import { useCollectionsStore } from '../features/collections/store';
+import { useLibraryStore } from '../features/library/store';
+import { useNavigationStore } from '../shared/stores/navigation';
+import { usePlaybackStore } from '../features/playback/store';
+import { useUiStore } from '../shared/stores/ui';
 
 interface CreatePlayerUiShellDeps {
   addFolder: () => void | Promise<void>;

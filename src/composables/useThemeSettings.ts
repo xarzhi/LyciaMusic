@@ -1,7 +1,7 @@
 import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 
-import { useSettingsStore, type ThemeSettingsPatch } from '../stores/settings';
+import { useSettingsStore, type ThemeSettingsPatch } from '../features/settings/store';
 import type { ThemeSettings } from '../types';
 import type { WindowMaterialMode } from './windowMaterial';
 

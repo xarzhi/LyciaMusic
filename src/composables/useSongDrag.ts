@@ -5,7 +5,7 @@ import { dragSession } from './dragState';
 import { usePlayer } from './player';
 import type { Song } from '../types';
 import { useToast } from './toast';
-import { useCollectionsStore } from '../stores/collections';
+import { useCollectionsStore } from '../features/collections/store';
 
 export function useSongDrag(
     displaySongList: Ref<Song[]>,

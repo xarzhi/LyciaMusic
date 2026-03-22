@@ -3,7 +3,7 @@ import { storeToRefs } from 'pinia';
 
 import type { FolderNode } from '../types';
 import { libraryApi } from '../services/tauri/libraryApi';
-import { useLibraryStore } from '../stores/library';
+import { useLibraryStore } from '../features/library/store';
 
 interface CreatePlayerFolderTreeDeps {
   addLibraryFolderPath: (path: string) => Promise<void>;

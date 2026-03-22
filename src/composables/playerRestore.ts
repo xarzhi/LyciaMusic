@@ -2,9 +2,9 @@ import type { HistoryItem, Song } from '../types';
 import { playerStorage } from '../services/storage/playerStorage';
 import { historyApi } from '../services/tauri/historyApi';
 import { playbackApi } from '../services/tauri/playbackApi';
-import { useCollectionsStore } from '../stores/collections';
-import { useLibraryStore } from '../stores/library';
-import { usePlaybackStore } from '../stores/playback';
+import { useCollectionsStore } from '../features/collections/store';
+import { useLibraryStore } from '../features/library/store';
+import { usePlaybackStore } from '../features/playback/store';
 
 interface PlayerRestoreKeys {
   playerPlaylistPaths: string;

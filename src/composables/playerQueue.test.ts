@@ -9,8 +9,8 @@ vi.mock('../services/tauri/playbackApi', () => ({
 
 import { playbackApi } from '../services/tauri/playbackApi';
 import type { Song } from '../types';
-import { useLibraryStore } from '../stores/library';
-import { usePlaybackStore } from '../stores/playback';
+import { useLibraryStore } from '../features/library/store';
+import { usePlaybackStore } from '../features/playback/store';
 import { createPlayerQueue } from './playerQueue';
 
 const makeSong = (overrides: Partial<Song> = {}): Song => ({

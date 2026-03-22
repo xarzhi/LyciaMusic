@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useLibraryBrowse } from '../../composables/useLibraryBrowse';
+import { useLibraryBrowse } from '../../features/library/useLibraryBrowse';
 import { usePlayerViewState } from '../../composables/usePlayerViewState';
 import { ref, watch, onUnmounted, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/core';

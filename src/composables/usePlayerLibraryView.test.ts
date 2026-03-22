@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
 import type { Song } from '../types';
-import { useCollectionsStore } from '../stores/collections';
-import { useLibraryStore } from '../stores/library';
-import { useNavigationStore } from '../stores/navigation';
-import { usePlayerLibraryView } from './usePlayerLibraryView';
+import { useCollectionsStore } from '../features/collections/store';
+import { useLibraryStore } from '../features/library/store';
+import { useNavigationStore } from '../shared/stores/navigation';
+import { usePlayerLibraryView } from '../features/library/usePlayerLibraryView';
 
 const makeSong = (overrides: Partial<Song> = {}): Song => ({
   path: '/music/demo.flac',

@@ -2,11 +2,11 @@ import { storeToRefs } from 'pinia';
 import type { FolderNode, Song } from '../types';
 
 import { fileApi } from '../services/tauri/fileApi';
-import { useCollectionsStore } from '../stores/collections';
-import { useLibraryStore } from '../stores/library';
-import { useNavigationStore } from '../stores/navigation';
-import { usePlaybackStore } from '../stores/playback';
-import { useSettingsStore } from '../stores/settings';
+import { useCollectionsStore } from '../features/collections/store';
+import { useLibraryStore } from '../features/library/store';
+import { useNavigationStore } from '../shared/stores/navigation';
+import { usePlaybackStore } from '../features/playback/store';
+import { useSettingsStore } from '../features/settings/store';
 
 interface CreatePlayerFileManagerDeps {
   removeLibraryFolderLinked: (

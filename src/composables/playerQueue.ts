@@ -1,8 +1,8 @@
 import { storeToRefs } from 'pinia';
 
 import { playbackApi } from '../services/tauri/playbackApi';
-import { useLibraryStore } from '../stores/library';
-import { usePlaybackStore } from '../stores/playback';
+import { useLibraryStore } from '../features/library/store';
+import { usePlaybackStore } from '../features/playback/store';
 import type { Song } from '../types';
 
 interface QueuePlaySongOptions {

@@ -1,6 +1,6 @@
 //负责显示“添加到歌单”的弹窗。
 <script setup lang="ts">
-import { useLibraryCollections } from '../../composables/useLibraryCollections';
+import { useLibraryCollections } from '../../features/collections/useLibraryCollections';
 import { ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';

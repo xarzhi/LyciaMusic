@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 
-import { usePlayerLibraryView } from '../../composables/usePlayerLibraryView';
+import { usePlayerLibraryView } from '../../features/library/usePlayerLibraryView';
 import { usePlayerViewState } from '../../composables/usePlayerViewState';
 import type { FolderNode } from '../../types';
 

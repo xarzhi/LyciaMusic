@@ -63,9 +63,9 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import type { Song } from '../types';
-import { useLibraryCollections } from '../composables/useLibraryCollections';
-import { usePlaybackController } from '../composables/usePlaybackController';
-import { usePlayerLibraryView } from '../composables/usePlayerLibraryView';
+import { useLibraryCollections } from '../features/collections/useLibraryCollections';
+import { usePlaybackController } from '../features/playback/usePlaybackController';
+import { usePlayerLibraryView } from '../features/library/usePlayerLibraryView';
 import { useToast } from '../composables/toast';
 
 // 组件导入
@@ -76,7 +76,7 @@ import AddToPlaylistModal from '../components/overlays/AddToPlaylistModal.vue';
 import SongContextMenu from '../components/overlays/SongContextMenu.vue';
 import ModernModal from '../components/common/ModernModal.vue';
 import { useSongDrag } from '../composables/useSongDrag';
-import { useNavigationStore } from '../stores/navigation';
+import { useNavigationStore } from '../shared/stores/navigation';
 
 const route = useRoute();
 const navigationStore = useNavigationStore();

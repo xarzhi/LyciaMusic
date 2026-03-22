@@ -1,9 +1,9 @@
 import { storeToRefs } from 'pinia';
 import { playerStorage } from '../services/storage/playerStorage';
-import { useCollectionsStore } from '../stores/collections';
-import { useLibraryStore } from '../stores/library';
-import { usePlaybackStore } from '../stores/playback';
-import { useSettingsStore } from '../stores/settings';
+import { useCollectionsStore } from '../features/collections/store';
+import { useLibraryStore } from '../features/library/store';
+import { usePlaybackStore } from '../features/playback/store';
+import { useSettingsStore } from '../features/settings/store';
 
 interface PlayerPersistenceKeys {
   playerPlaylistPaths: string;

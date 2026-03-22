@@ -3,7 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { storeToRefs } from 'pinia';
 
 import type { Song } from '../types';
-import { useLibraryStore } from '../stores/library';
+import { useLibraryStore } from '../features/library/store';
 
 interface GeneratedFolder {
   name: string;

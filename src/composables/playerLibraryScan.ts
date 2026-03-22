@@ -1,4 +1,4 @@
-import { useLibraryStore } from '../stores/library';
+import { useLibraryStore } from '../features/library/store';
 import type {
   LibraryScanSession,
   LibraryScanTrigger,

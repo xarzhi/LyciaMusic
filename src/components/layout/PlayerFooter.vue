@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useLibraryCollections } from '../../composables/useLibraryCollections';
+import { useLibraryCollections } from '../../features/collections/useLibraryCollections';
 import { useLyrics } from '../../composables/lyrics';
-import { usePlaybackController } from '../../composables/usePlaybackController';
+import { usePlaybackController } from '../../features/playback/usePlaybackController';
 import DesktopLyrics from "../player/DesktopLyrics.vue";
 import FooterContextMenu from "../overlays/FooterContextMenu.vue";
 import { computed, ref, onMounted, onUnmounted } from 'vue';

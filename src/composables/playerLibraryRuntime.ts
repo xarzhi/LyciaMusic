@@ -6,7 +6,7 @@ import {
 } from './playerLibraryScan';
 import type { ScanLibraryOptions } from './playerLibraryScan';
 import type { Song } from '../types';
-import { useLibraryStore } from '../stores/library';
+import { useLibraryStore } from '../features/library/store';
 
 let hasBootstrappedLibrary = false;
 let libraryBootstrapPromise: Promise<void> | null = null;

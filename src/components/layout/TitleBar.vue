@@ -2,7 +2,7 @@
 import { useRouter } from 'vue-router';
 import { usePlayerViewState } from '../../composables/usePlayerViewState';
 import { getCurrentWindow } from '@tauri-apps/api/window'; 
-import { useSettings } from '../../composables/settings';
+import { useSettings } from '../../features/settings/useSettings';
 import { ref } from 'vue';
 
 const router = useRouter();

@@ -2,8 +2,8 @@
 import { computed, ref, watch, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 
-import { usePlaybackController } from '../../composables/usePlaybackController';
-import { useLibraryStore } from '../../stores/library';
+import { usePlaybackController } from '../../features/playback/usePlaybackController';
+import { useLibraryStore } from '../../features/library/store';
 
 const libraryStore = useLibraryStore();
 const { sourceSongs } = storeToRefs(libraryStore);

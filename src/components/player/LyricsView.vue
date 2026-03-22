@@ -12,7 +12,7 @@ import {
   useLyrics,
 } from '../../composables/lyrics';
 import { usePlayer } from '../../composables/player';
-import { useSettingsStore } from '../../stores/settings';
+import { useSettingsStore } from '../../features/settings/store';
 import AmlLyricPlayer from './AmlLyricPlayer.vue';
 
 const { parsedLyrics, lyricsSettings, lyricsStatus } = useLyrics();

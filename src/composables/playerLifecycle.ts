@@ -15,11 +15,11 @@ import {
   type PlaylistSortMode,
 } from '../services/storage/playerStorage';
 import { playbackApi } from '../services/tauri/playbackApi';
-import { useCollectionsStore } from '../stores/collections';
-import { useLibraryStore } from '../stores/library';
-import { usePlaybackStore } from '../stores/playback';
-import { mergeAppSettings, useSettingsStore } from '../stores/settings';
-import { useUiStore } from '../stores/ui';
+import { useCollectionsStore } from '../features/collections/store';
+import { useLibraryStore } from '../features/library/store';
+import { usePlaybackStore } from '../features/playback/store';
+import { mergeAppSettings, useSettingsStore } from '../features/settings/store';
+import { useUiStore } from '../shared/stores/ui';
 import type { AppSettings } from '../types';
 
 interface SeekCompletedPayload {

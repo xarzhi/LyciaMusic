@@ -3,8 +3,8 @@ import type { ScanLibraryOptions } from './playerLibraryScan';
 import type { Song } from '../types';
 import { fileApi } from '../services/tauri/fileApi';
 import { libraryApi } from '../services/tauri/libraryApi';
-import { useLibraryStore } from '../stores/library';
-import { usePlaybackStore } from '../stores/playback';
+import { useLibraryStore } from '../features/library/store';
+import { usePlaybackStore } from '../features/playback/store';
 
 interface ProcessExternalPathsOptions {
   source?: 'drop' | 'open';

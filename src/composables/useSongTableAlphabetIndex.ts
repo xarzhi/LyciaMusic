@@ -9,7 +9,7 @@ import {
 } from 'vue';
 import { storeToRefs } from 'pinia';
 import type { FolderNode, Song } from '../types';
-import { usePlaybackStore } from '../stores/playback';
+import { usePlaybackStore } from '../features/playback/store';
 import {
   INDEX_KEYS,
   getAlphabetIndexKey,

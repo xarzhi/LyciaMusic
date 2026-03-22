@@ -1,8 +1,8 @@
 import { storeToRefs } from 'pinia';
-import { useCollectionsStore } from '../stores/collections';
-import { useLibraryStore } from '../stores/library';
-import { useNavigationStore } from '../stores/navigation';
-import { useUiStore } from '../stores/ui';
+import { useCollectionsStore } from '../features/collections/store';
+import { useLibraryStore } from '../features/library/store';
+import { useNavigationStore } from '../shared/stores/navigation';
+import { useUiStore } from '../shared/stores/ui';
 
 export function usePlayerViewState() {
   const collectionsStore = useCollectionsStore();

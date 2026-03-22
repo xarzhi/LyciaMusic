@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
-import { useLibraryBrowse } from '../../composables/useLibraryBrowse';
+import { useLibraryBrowse } from '../../features/library/useLibraryBrowse';
 import { useCoverCache } from '../../composables/useCoverCache';
 
 interface TopSong {

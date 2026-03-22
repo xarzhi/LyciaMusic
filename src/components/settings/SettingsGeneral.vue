@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { listen } from '@tauri-apps/api/event';
-import { useSettings } from '../../composables/settings';
+import { useSettings } from '../../features/settings/useSettings';
 import { usePlayer } from '../../composables/player';
 import { useToast } from '../../composables/toast';
 import { appApi } from '../../services/tauri/appApi';

@@ -97,7 +97,7 @@ import { computed, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { open } from '@tauri-apps/plugin-dialog';
 import { usePlayer } from '../../composables/player';
-import { useLibraryStore } from '../../stores/library';
+import { useLibraryStore } from '../../features/library/store';
 import ConfirmModal from '../overlays/ConfirmModal.vue';
 
 const { addLibraryFolderLinked, removeLibraryFolderLinked, scanLibrary } = usePlayer();

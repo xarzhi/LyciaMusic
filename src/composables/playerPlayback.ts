@@ -1,7 +1,7 @@
 import { storeToRefs } from 'pinia';
 import type { Song } from '../types';
 import { playbackApi } from '../services/tauri/playbackApi';
-import { usePlaybackStore } from '../stores/playback';
+import { usePlaybackStore } from '../features/playback/store';
 
 interface PlaySongOptions {
   updateShuffleHistory?: boolean;

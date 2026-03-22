@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useCoverCache } from '../../composables/useCoverCache';
-import { usePlaybackController } from '../../composables/usePlaybackController';
+import { usePlaybackController } from '../../features/playback/usePlaybackController';
 import FooterContextMenu from "../overlays/FooterContextMenu.vue";
 
 const props = defineProps<{

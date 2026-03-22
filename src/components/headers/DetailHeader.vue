@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { Song } from '../../types';
 import { usePlayerViewState } from '../../composables/usePlayerViewState';
-import { useLibraryCollections } from '../../composables/useLibraryCollections';
+import { useLibraryCollections } from '../../features/collections/useLibraryCollections';
 
 const { playlistSortMode, setPlaylistSortMode, currentViewMode, filterCondition } = usePlayerViewState();
 const { playlists } = useLibraryCollections();

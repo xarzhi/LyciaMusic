@@ -4,7 +4,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import FolderContextMenu from '../overlays/FolderContextMenu.vue';
 import { useToast } from '../../composables/toast';
 import { usePlayerViewState } from '../../composables/usePlayerViewState';
-import { dragSession } from '../../composables/playerState';
+import { dragSession } from '../../composables/dragState';
 
 const { folderSortMode, setFolderSortMode } = usePlayerViewState();
 

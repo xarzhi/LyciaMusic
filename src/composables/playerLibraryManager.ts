@@ -1,4 +1,4 @@
-import * as State from './playerState';
+import * as State from './playerPreferencesState';
 import { getLibraryAddScanOptions, resolveScanLibraryOptions } from './playerLibraryScan';
 import type { ScanLibraryOptions } from './playerLibraryScan';
 import { fileApi } from '../services/tauri/fileApi';

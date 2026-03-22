@@ -1,4 +1,4 @@
-import type { FolderNode, LibraryFolder } from '../../composables/playerState';
+import type { FolderNode, LibraryFolder } from '../../types';
 import { tauriInvoke } from './invoke';
 
 export const libraryApi = {

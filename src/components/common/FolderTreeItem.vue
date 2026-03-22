@@ -68,10 +68,11 @@
 </template>
 
 <script setup lang="ts">
-import { FolderNode, dragSession } from '../../composables/playerState'; // Note: dragSession is in playerState
 import { computed, ref, onMounted, watch } from 'vue';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { invoke } from '@tauri-apps/api/core';
+import { dragSession } from '../../composables/dragState';
+import type { FolderNode } from '../../types';
 
 const props = defineProps<{
   node: FolderNode;

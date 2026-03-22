@@ -5,7 +5,7 @@ import type {
   RouteLocationNormalizedLoaded,
   Router,
 } from 'vue-router';
-import type { FolderNode } from './playerState';
+import type { FolderNode } from '../types';
 
 type SyncedHomeViewMode = 'all' | 'folder' | 'artist' | 'album' | 'playlist' | 'statistics';
 

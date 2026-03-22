@@ -2,7 +2,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { Song } from '../../composables/player';
+import type { Song } from '../../types';
 import { usePlayerViewState } from '../../composables/usePlayerViewState';
 import { useLibraryCollections } from '../../composables/useLibraryCollections';
 

@@ -3,7 +3,7 @@ import { storeToRefs } from 'pinia';
 import { playbackApi } from '../services/tauri/playbackApi';
 import { useLibraryStore } from '../stores/library';
 import { usePlaybackStore } from '../stores/playback';
-import type { Song } from './playerState';
+import type { Song } from '../types';
 
 interface QueuePlaySongOptions {
   updateShuffleHistory?: boolean;

@@ -8,7 +8,8 @@ import FolderContextMenu from '../overlays/FolderContextMenu.vue';
 import ModernModal from '../common/ModernModal.vue'; 
 import ModernInputModal from '../common/ModernInputModal.vue';
 import { useToast } from '../../composables/toast';
-import { dragSession, FolderNode } from '../../composables/playerState';
+import { dragSession } from '../../composables/dragState';
+import type { FolderNode } from '../../types';
 
 const props = withDefaults(defineProps<{
   isManagementMode?: boolean; // 🟢 Prop, now optional

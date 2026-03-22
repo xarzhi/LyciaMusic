@@ -1,8 +1,8 @@
 import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 
-import * as State from './playerState';
-import type { Song, Playlist } from './playerState';
+import * as State from './playerPreferencesState';
+import type { Song, Playlist } from '../types';
 import { compareByAlphabetIndex } from '../utils/alphabetIndex';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';

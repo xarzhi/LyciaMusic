@@ -1,7 +1,5 @@
-import { watch } from 'vue';
 import { storeToRefs } from 'pinia';
 
-import { AUDIO_DELAY } from './playerState';
 import { playerStorage, playerStorageKeys } from '../services/storage/playerStorage';
 import {
   defaultAppSettings,
@@ -37,11 +35,6 @@ export function useSettings() {
   const { settings, audioDelay, theme, sidebar } = storeToRefs(settingsStore);
 
   migrateLegacySettings(settingsStore.patchSettings);
-  AUDIO_DELAY.value = audioDelay.value;
-
-  watch(audioDelay, nextAudioDelay => {
-    AUDIO_DELAY.value = nextAudioDelay;
-  }, { immediate: true });
 
   return {
     settings,

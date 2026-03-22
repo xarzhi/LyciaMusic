@@ -1,8 +1,7 @@
 ﻿import { computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { open } from '@tauri-apps/plugin-dialog';
-import * as State from './playerState';
-export * from './playerState';
+import * as State from './playerPreferencesState';
 import { useLyrics } from './lyrics';
 import { useSettings as useAppSettings } from './settings';
 import { useToast } from './toast';

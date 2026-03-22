@@ -1,4 +1,4 @@
-import * as State from './playerState';
+import * as State from './playerPreferencesState';
 import { useLibraryCollections } from './useLibraryCollections';
 
 interface CreatePlayerHistoryFavoritesDeps {

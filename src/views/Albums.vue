@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { dragSession } from '../composables/playerState';
+import { dragSession } from '../composables/dragState';
 import { useLibraryBrowse } from '../composables/useLibraryBrowse';
 import { useRouter } from 'vue-router';
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';

@@ -1,4 +1,4 @@
-import * as State from './playerState';
+import * as State from './playerPreferencesState';
 import { storeToRefs } from 'pinia';
 import { playbackApi } from '../services/tauri/playbackApi';
 import { usePlaybackStore } from '../stores/playback';

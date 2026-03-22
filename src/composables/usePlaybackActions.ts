@@ -1,6 +1,6 @@
 import type { Ref } from 'vue';
 
-import type { Song } from './playerState';
+import type { Song } from '../types';
 
 interface PlayerPlaybackApi {
   playSong: (song: Song, options?: { updateShuffleHistory?: boolean; clearShuffleFuture?: boolean; preserveQueue?: boolean }) => Promise<unknown>;

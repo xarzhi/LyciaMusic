@@ -1,5 +1,6 @@
-import * as State from './playerState';
+import * as State from './playerPreferencesState';
 import { storeToRefs } from 'pinia';
+import type { FolderNode } from '../types';
 
 import { fileApi } from '../services/tauri/fileApi';
 import { useCollectionsStore } from '../stores/collections';
@@ -17,7 +18,7 @@ interface CreatePlayerFileManagerDeps {
   showToast: (message: string, type: 'success' | 'info' | 'error') => void;
 }
 
-const removeNodeFromTree = (nodes: State.FolderNode[], targetPath: string): boolean => {
+const removeNodeFromTree = (nodes: FolderNode[], targetPath: string): boolean => {
   for (let index = 0; index < nodes.length; index += 1) {
     if (nodes[index].path === targetPath) {
       nodes.splice(index, 1);
@@ -32,7 +33,7 @@ const removeNodeFromTree = (nodes: State.FolderNode[], targetPath: string): bool
   return false;
 };
 
-const incrementNodeCount = (nodes: State.FolderNode[], targetPath: string): boolean => {
+const incrementNodeCount = (nodes: FolderNode[], targetPath: string): boolean => {
   for (let index = 0; index < nodes.length; index += 1) {
     if (nodes[index].path === targetPath) {
       nodes[index].song_count += 1;
@@ -47,7 +48,7 @@ const incrementNodeCount = (nodes: State.FolderNode[], targetPath: string): bool
   return false;
 };
 
-const decrementNodeCount = (nodes: State.FolderNode[], targetPath: string): boolean => {
+const decrementNodeCount = (nodes: FolderNode[], targetPath: string): boolean => {
   for (let index = 0; index < nodes.length; index += 1) {
     if (nodes[index].path === targetPath) {
       if (nodes[index].song_count > 0) {
@@ -65,7 +66,7 @@ const decrementNodeCount = (nodes: State.FolderNode[], targetPath: string): bool
 };
 
 const updateFolderCover = (
-  nodes: State.FolderNode[],
+  nodes: FolderNode[],
   folderPath: string,
   newCoverSongPath: string | null
 ): boolean => {
@@ -94,9 +95,9 @@ const getParentFolder = (filePath: string): string => {
 };
 
 const findNode = (
-  nodes: State.FolderNode[],
+  nodes: FolderNode[],
   targetPath: string
-): State.FolderNode | null => {
+): FolderNode | null => {
   for (const node of nodes) {
     if (node.path === targetPath) return node;
 

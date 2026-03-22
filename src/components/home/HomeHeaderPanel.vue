@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-import type { FolderNode } from '../../composables/playerState';
-import type { Song } from '../../types';
+import type { FolderNode, Song } from '../../types';
 import DetailHeader from '../headers/DetailHeader.vue';
 import FoldersHeader from '../headers/FoldersHeader.vue';
 import LocalMusicHeader from '../headers/LocalMusicHeader.vue';

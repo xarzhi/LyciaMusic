@@ -1,5 +1,4 @@
-import type { FolderNode, LibraryFolder } from '../../composables/playerState';
-import type { Song } from '../../types';
+import type { FolderNode, LibraryFolder, Song } from '../../types';
 
 export interface AudioDevice {
   id: string;

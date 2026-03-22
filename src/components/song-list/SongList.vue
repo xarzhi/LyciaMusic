@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { usePlayer, Song } from '../../composables/player';
+import { usePlayer } from '../../composables/player';
+import type { Song } from '../../types';
 import { computed, watch, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 // 引用子组件

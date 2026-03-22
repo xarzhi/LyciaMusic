@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { storeToRefs } from 'pinia';
 
-import * as State from './playerState';
+import * as State from './playerPreferencesState';
 import { useLibraryStore } from '../stores/library';
 
 interface GeneratedFolder {

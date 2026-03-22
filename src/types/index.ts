@@ -39,6 +39,45 @@ export interface Playlist {
   createdAt?: string;
 }
 
+export interface LibraryFolder {
+  path: string;
+  song_count: number;
+}
+
+export interface FolderNode {
+  name: string;
+  path: string;
+  children: FolderNode[];
+  song_count: number;
+  cover_song_path: string | null;
+  is_expanded: boolean;
+}
+
+export type LibraryScanPhase = 'collecting' | 'parsing' | 'writing' | 'complete' | 'error';
+export type LibraryScanTrigger = 'bootstrap' | 'first-import' | 'manual-rescan' | 'folder-add';
+export type LibraryScanVisibility = 'silent' | 'hero' | 'inline';
+
+export interface LibraryScanProgress {
+  phase: LibraryScanPhase;
+  current: number;
+  total: number;
+  folder_path: string;
+  folder_index: number;
+  folder_total: number;
+  message: string | null;
+  done: boolean;
+  failed: boolean;
+}
+
+export interface LibraryScanSession {
+  trigger: LibraryScanTrigger;
+  visibility: LibraryScanVisibility;
+  startedAt: number;
+  hadLibraryFoldersAtStart: boolean;
+  hadSongsAtStart: boolean;
+  sourcePath?: string;
+}
+
 export interface ThemeSettings {
   mode: 'light' | 'dark' | 'custom';
   dynamicBgType: 'none' | 'flow' | 'blur';

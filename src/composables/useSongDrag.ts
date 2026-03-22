@@ -1,5 +1,7 @@
 import { ref, onMounted, onUnmounted, Ref } from 'vue';
-import { usePlayer, Song, dragSession } from './player';
+import { usePlayer } from './player';
+import { dragSession } from './dragState';
+import type { Song } from '../types';
 import { useToast } from './toast';
 
 export function useSongDrag(

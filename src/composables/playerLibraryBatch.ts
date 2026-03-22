@@ -1,4 +1,4 @@
-import * as State from './playerState';
+import * as State from './playerPreferencesState';
 import { storeToRefs } from 'pinia';
 
 import { useCollectionsStore } from '../stores/collections';

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { storeToRefs } from 'pinia';
 import type { LyricLine as AmlLyricLine, LyricLineMouseEvent } from '@applemusic-like-lyrics/core';
 import {
   DEFAULT_PLAYER_FONT_SCALE,
@@ -11,11 +12,12 @@ import {
   useLyrics,
 } from '../../composables/lyrics';
 import { usePlayer } from '../../composables/player';
-import { AUDIO_DELAY } from '../../composables/playerState';
+import { useSettingsStore } from '../../stores/settings';
 import AmlLyricPlayer from './AmlLyricPlayer.vue';
 
 const { parsedLyrics, lyricsSettings, lyricsStatus } = useLyrics();
 const { seekTo, currentTime } = usePlayer();
+const { audioDelay } = storeToRefs(useSettingsStore());
 
 const FONT_SCALE_STEP = 0.05;
 const LINE_GAP_STEP = 0.05;
@@ -80,7 +82,7 @@ const amllLines = computed<AmlLyricLine[]>(() => {
 });
 
 const amllCurrentTime = computed(() => {
-  return Math.max(0, Math.floor((currentTime.value - AUDIO_DELAY.value) * 1000));
+  return Math.max(0, Math.floor((currentTime.value - audioDelay.value) * 1000));
 });
 
 const emptyStateText = computed(() => {

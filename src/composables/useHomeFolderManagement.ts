@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from 'vue';
-import type { FolderNode, Song } from './playerState';
+import type { FolderNode, Song } from '../types';
 
 interface ConfirmOptions {
   title: string;

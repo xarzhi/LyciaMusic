@@ -1,4 +1,4 @@
-import * as State from './playerState';
+import * as State from './playerPreferencesState';
 import { playerStorage } from '../services/storage/playerStorage';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';

@@ -1,5 +1,5 @@
 import { storeToRefs } from 'pinia';
-import * as State from './playerState';
+import * as State from './playerPreferencesState';
 import { useNavigationStore } from '../stores/navigation';
 import { useUiStore } from '../stores/ui';
 

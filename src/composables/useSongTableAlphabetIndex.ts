@@ -8,10 +8,7 @@ import {
   type Ref,
 } from 'vue';
 import { storeToRefs } from 'pinia';
-import {
-  type FolderNode,
-  type Song,
-} from './playerState';
+import type { FolderNode, Song } from '../types';
 import { usePlaybackStore } from '../stores/playback';
 import {
   INDEX_KEYS,

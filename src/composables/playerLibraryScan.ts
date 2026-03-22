@@ -1,15 +1,20 @@
-import * as State from './playerState';
 import { useLibraryStore } from '../stores/library';
+import type {
+  LibraryScanSession,
+  LibraryScanTrigger,
+  LibraryScanVisibility,
+  Song,
+} from '../types';
 
-const LIBRARY_SCAN_VISIBILITY_PRIORITY: Record<State.LibraryScanVisibility, number> = {
+const LIBRARY_SCAN_VISIBILITY_PRIORITY: Record<LibraryScanVisibility, number> = {
   silent: 1,
   inline: 2,
   hero: 3,
 };
 
 export interface ScanLibraryOptions {
-  trigger?: State.LibraryScanTrigger;
-  visibility?: State.LibraryScanVisibility;
+  trigger?: LibraryScanTrigger;
+  visibility?: LibraryScanVisibility;
   sourcePath?: string;
 }
 
@@ -30,7 +35,7 @@ export const isLibraryScanActive = () => {
     && !libraryStore.libraryScanProgress.failed;
 };
 
-const shouldReplaceLibraryScanSession = (nextVisibility: State.LibraryScanVisibility) => {
+const shouldReplaceLibraryScanSession = (nextVisibility: LibraryScanVisibility) => {
   const libraryStore = getLibraryStore();
 
   if (!libraryStore.libraryScanSession) {
@@ -48,7 +53,7 @@ const shouldReplaceLibraryScanSession = (nextVisibility: State.LibraryScanVisibi
 
 export const startLibraryScanSession = (options: Required<ScanLibraryOptions>) => {
   const libraryStore = getLibraryStore();
-  const nextSession: State.LibraryScanSession = {
+  const nextSession: LibraryScanSession = {
     trigger: options.trigger,
     visibility: options.visibility,
     startedAt: Date.now(),
@@ -76,7 +81,7 @@ export const startLibraryScanSession = (options: Required<ScanLibraryOptions>) =
   return libraryStore.libraryScanSession!;
 };
 
-export const beginLibraryScanProgress = (session: State.LibraryScanSession) => {
+export const beginLibraryScanProgress = (session: LibraryScanSession) => {
   const libraryStore = getLibraryStore();
   libraryStore.setLibraryScanProgress({
     phase: 'collecting',
@@ -103,7 +108,7 @@ export const getLibraryAddScanOptions = (path: string): Required<ScanLibraryOpti
 };
 
 export const finalizeLibraryScanProgress = (
-  songs: State.Song[],
+  songs: Song[],
   failed = false,
   message?: string,
 ) => {

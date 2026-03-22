@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
-import { Song, usePlayer, dragSession } from '../../composables/player';
+import { usePlayer } from '../../composables/player';
+import { dragSession } from '../../composables/dragState';
+import type { Song } from '../../types';
 import { useLibraryCollections } from '../../composables/useLibraryCollections';
 import { useSettings } from '../../composables/settings';
 import { useRoute, useRouter } from 'vue-router';

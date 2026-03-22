@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
-import type { Song } from './playerState';
+import type { Song } from '../types';
 import { useCollectionsActions } from './useCollectionsActions';
 import { useFileImport } from './useFileImport';
 import { useLibrarySync } from './useLibrarySync';

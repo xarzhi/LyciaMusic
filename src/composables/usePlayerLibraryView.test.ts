@@ -5,7 +5,7 @@ import type { Song } from '../types';
 import { useCollectionsStore } from '../stores/collections';
 import { useLibraryStore } from '../stores/library';
 import { useNavigationStore } from '../stores/navigation';
-import * as PlayerState from './playerState';
+import * as PlayerState from './playerPreferencesState';
 import { usePlayerLibraryView } from './usePlayerLibraryView';
 
 const makeSong = (overrides: Partial<Song> = {}): Song => ({

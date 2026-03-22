@@ -3,8 +3,9 @@ import { listen } from '@tauri-apps/api/event';
 import { onMounted, onScopeDispose, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 
-import * as State from './playerState';
+import * as State from './playerPreferencesState';
 import { extractDominantColors } from './colorExtraction';
+import type { LibraryScanProgress, Song } from '../types';
 import {
   playerStorage,
   playerStorageKeys,
@@ -28,14 +29,14 @@ interface SeekCompletedPayload {
 }
 
 interface LibraryScanBatchPayload {
-  songs: State.Song[];
+  songs: Song[];
   deleted_paths: string[];
   folder_path: string;
   folder_index: number;
   folder_total: number;
 }
 
-interface LibraryScanProgressPayload extends State.LibraryScanProgress {}
+interface LibraryScanProgressPayload extends LibraryScanProgress {}
 
 interface CreatePlayerLifecycleDeps {
   bootstrapLibrary: () => Promise<void>;

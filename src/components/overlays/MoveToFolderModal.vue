@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 
 import { usePlayer } from '../../composables/player';
-import type { FolderNode } from '../../composables/playerState';
+import type { FolderNode } from '../../types';
 
 const props = defineProps<{
   visible: boolean;

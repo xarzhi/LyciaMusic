@@ -1,7 +1,13 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 
-import type { Song, LibraryFolder, FolderNode, LibraryScanProgress, LibraryScanSession } from '../composables/playerState';
+import type {
+  FolderNode,
+  LibraryFolder,
+  LibraryScanProgress,
+  LibraryScanSession,
+  Song,
+} from '../types';
 
 export const useLibraryStore = defineStore('library', () => {
   const songList = ref<Song[]>([]);

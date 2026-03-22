@@ -5,7 +5,7 @@ import type {
   LyricLine as AmlLyricLine,
   LyricWord as AmlLyricWord,
 } from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js';
-import { AUDIO_DELAY } from './playerState';
+import { useSettingsStore } from '../stores/settings';
 
 export interface LyricLine {
   time: number;
@@ -350,7 +350,7 @@ function findLyricIndexByTime(lines: LyricLine[], targetTime: number): number {
 const currentLyricIndex = computed(() => {
   if (parsedLyrics.value.length === 0) return -1;
 
-  const targetTime = usePlaybackStore().currentTime - AUDIO_DELAY.value;
+  const targetTime = usePlaybackStore().currentTime - useSettingsStore().audioDelay;
   return findLyricIndexByTime(parsedLyrics.value, targetTime);
 });
 

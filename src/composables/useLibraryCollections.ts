@@ -1,5 +1,5 @@
 import { storeToRefs } from 'pinia';
-import type { Song } from './playerState';
+import type { Song } from '../types';
 import { playerStorage } from '../services/storage/playerStorage';
 import { historyApi } from '../services/tauri/historyApi';
 import { useCollectionsStore } from '../stores/collections';

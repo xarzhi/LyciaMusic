@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch, nextTick } from 'vue';
-import { usePlayer, Song } from '../../composables/player';
+import { usePlayer } from '../../composables/player';
+import type { Song } from '../../types';
 import { useLibraryCollections } from '../../composables/useLibraryCollections';
 import { usePlayerViewState } from '../../composables/usePlayerViewState';
 

@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import * as State from './playerState';
+import * as State from './playerPreferencesState';
 import {
   beginLibraryScanProgress,
   resolveScanLibraryOptions,

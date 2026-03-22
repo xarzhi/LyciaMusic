@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
-import * as PlayerState from '../composables/playerState';
 import { usePlaybackStore } from './playback';
 import { useUiStore } from './ui';
 
@@ -57,12 +56,13 @@ describe('playback and ui stores', () => {
     expect(uiStore.playlistCover).toBe('/covers/demo.jpg');
   });
 
-  it('removes playback and ui bridge exports from playerState', () => {
-    expect('isPlaying' in PlayerState).toBe(false);
-    expect('playQueue' in PlayerState).toBe(false);
-    expect('currentSong' in PlayerState).toBe(false);
-    expect('showQueue' in PlayerState).toBe(false);
-    expect('showAddToPlaylistModal' in PlayerState).toBe(false);
-    expect('playlistCover' in PlayerState).toBe(false);
+  it('keeps playback and ui state scoped to their dedicated stores', () => {
+    const playbackStore = usePlaybackStore();
+    const uiStore = useUiStore();
+
+    expect(playbackStore.isPlaying).toBe(false);
+    expect(playbackStore.playQueue).toEqual([]);
+    expect(uiStore.showQueue).toBe(false);
+    expect(uiStore.showAddToPlaylistModal).toBe(false);
   });
 });

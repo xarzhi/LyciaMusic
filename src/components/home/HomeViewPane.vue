@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import type { FolderNode } from '../../composables/playerState';
-import type { Song } from '../../types';
+import type { FolderNode, Song } from '../../types';
 import HomeContentPanel from './HomeContentPanel.vue';
 import HomeHeaderPanel from './HomeHeaderPanel.vue';
 

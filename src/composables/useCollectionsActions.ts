@@ -1,4 +1,4 @@
-import type { Song } from './playerState';
+import type { Song } from '../types';
 
 interface PlayerPlaylistApi {
   createPlaylist: (name: string, initialSongs?: string[]) => void;

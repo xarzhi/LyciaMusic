@@ -1,7 +1,7 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { storeToRefs } from 'pinia';
 
-import * as State from './playerState';
+import type { FolderNode } from '../types';
 import { fileApi } from '../services/tauri/fileApi';
 import { libraryApi } from '../services/tauri/libraryApi';
 import { useLibraryStore } from '../stores/library';
@@ -26,7 +26,7 @@ interface CreatePlayerFolderTreeDeps {
   showToast: (message: string, type: 'success' | 'info' | 'error') => void;
 }
 
-const collectExpandedPaths = (nodes: State.FolderNode[], expanded = new Set<string>()) => {
+const collectExpandedPaths = (nodes: FolderNode[], expanded = new Set<string>()) => {
   for (const node of nodes) {
     if (node.is_expanded) {
       expanded.add(node.path);
@@ -40,7 +40,7 @@ const collectExpandedPaths = (nodes: State.FolderNode[], expanded = new Set<stri
   return expanded;
 };
 
-const applyExpandedPaths = (nodes: State.FolderNode[], expandedPaths: Set<string>) => {
+const applyExpandedPaths = (nodes: FolderNode[], expandedPaths: Set<string>) => {
   for (const node of nodes) {
     node.is_expanded = expandedPaths.has(node.path);
     if (node.children.length > 0) {
@@ -49,7 +49,7 @@ const applyExpandedPaths = (nodes: State.FolderNode[], expandedPaths: Set<string
   }
 };
 
-const expandTreeToPath = (nodes: State.FolderNode[], targetPath: string): boolean => {
+const expandTreeToPath = (nodes: FolderNode[], targetPath: string): boolean => {
   for (const node of nodes) {
     if (node.path === targetPath) {
       return true;

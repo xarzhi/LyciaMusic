@@ -52,9 +52,9 @@ const emit = defineEmits<{
   (event: 'batchMove'): void;
   (event: 'addFolder'): void;
   (event: 'refreshFolder'): void;
-  (event: 'removeFolder'): void;
-  (event: 'rootCreateFolder'): void;
-  (event: 'rootDeleteFolder'): void;
+  (event: 'removeFolder', path: string, name?: string): void;
+  (event: 'rootCreateFolder', path: string): void;
+  (event: 'rootDeleteFolder', path: string): void;
   (event: 'activeRootChange', value: string): void;
   (event: 'renamePlaylist'): void;
   (event: 'refreshAll'): void;
@@ -96,9 +96,9 @@ const handleTableDragStart = (...args: any[]) => {
         @batchMove="$emit('batchMove')"
         @addFolder="$emit('addFolder')"
         @refreshFolder="$emit('refreshFolder')"
-        @removeFolder="$emit('removeFolder')"
-        @rootCreateFolder="$emit('rootCreateFolder')"
-        @rootDeleteFolder="$emit('rootDeleteFolder')"
+        @removeFolder="(path, name) => $emit('removeFolder', path, name)"
+        @rootCreateFolder="(path) => $emit('rootCreateFolder', path)"
+        @rootDeleteFolder="(path) => $emit('rootDeleteFolder', path)"
         @activeRootChange="$emit('activeRootChange', $event)"
         @renamePlaylist="$emit('renamePlaylist')"
         @refreshAll="$emit('refreshAll')"

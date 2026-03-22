@@ -36,9 +36,9 @@ const emit = defineEmits<{
   (event: 'batchMove'): void;
   (event: 'addFolder'): void;
   (event: 'refreshFolder'): void;
-  (event: 'removeFolder'): void;
-  (event: 'rootCreateFolder'): void;
-  (event: 'rootDeleteFolder'): void;
+  (event: 'removeFolder', path: string, name?: string): void;
+  (event: 'rootCreateFolder', path: string): void;
+  (event: 'rootDeleteFolder', path: string): void;
   (event: 'activeRootChange', value: string): void;
   (event: 'renamePlaylist'): void;
   (event: 'refreshAll'): void;
@@ -70,9 +70,9 @@ const isManagementModeModel = computed({
     @batchMove="$emit('batchMove')"
     @addFolder="$emit('addFolder')"
     @refreshFolder="$emit('refreshFolder')"
-    @removeFolder="$emit('removeFolder')"
-    @newFolder="$emit('rootCreateFolder')"
-    @deleteFolderDisk="$emit('rootDeleteFolder')"
+    @removeFolder="(path, name) => $emit('removeFolder', path, name)"
+    @newFolder="(path) => $emit('rootCreateFolder', path)"
+    @deleteFolderDisk="(path) => $emit('rootDeleteFolder', path)"
     @update:activeRootPath="$emit('activeRootChange', $event)"
     v-model:isManagementMode="isManagementModeModel"
   />

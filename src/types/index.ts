@@ -110,6 +110,7 @@ export interface AppSettings {
   minimizeToTray: boolean;
   closeToTray: boolean;
   showQualityBadges: boolean;
+  // Deprecated compat field. Retained only for legacy config deserialization.
   linkFoldersToLibrary: boolean;
   lyricsSyncOffset: number;
   organizeRoot: string;

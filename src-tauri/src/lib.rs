@@ -71,6 +71,7 @@ pub fn run() {
             get_library_songs_cached,
             scan_library,
             get_library_hierarchy,
+            // Deprecated compatibility commands for legacy sidebar_folders.
             get_sidebar_folders,
             add_sidebar_folder,
             remove_sidebar_folder,

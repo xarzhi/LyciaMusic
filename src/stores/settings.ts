@@ -46,6 +46,7 @@ export const defaultAppSettings: AppSettings = {
   minimizeToTray: false,
   closeToTray: false,
   showQualityBadges: true,
+  // Deprecated compat field. Main folder-source behavior no longer depends on it.
   linkFoldersToLibrary: false,
   lyricsSyncOffset: 0,
   organizeRoot: 'D:\\Music',

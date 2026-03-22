@@ -1,6 +1,7 @@
 // music/sidebar.rs - 侧边栏管理命令
-
 use super::scanner::scan_folder_recursive;
+// Deprecated compatibility commands for legacy sidebar_folders data.
+// New main-flow folder browsing must use library_folders and get_library_hierarchy.
 use super::types::FolderNode;
 use super::utils::normalize_path;
 use crate::database::DbState;
@@ -48,6 +49,7 @@ pub async fn get_sidebar_folders(
     Ok(result)
 }
 
+// Deprecated compat command. Keep only for legacy sidebar_folders access.
 #[tauri::command]
 pub async fn add_sidebar_folder(path: String, db_state: State<'_, DbState>) -> Result<(), String> {
     let db_conn = db_state.conn.clone();
@@ -75,6 +77,7 @@ pub async fn add_sidebar_folder(path: String, db_state: State<'_, DbState>) -> R
     Ok(())
 }
 
+// Deprecated compat command. Keep only for legacy sidebar_folders access.
 #[tauri::command]
 pub async fn remove_sidebar_folder(
     path: String,
@@ -95,6 +98,7 @@ pub async fn remove_sidebar_folder(
     Ok(())
 }
 
+// Deprecated compat command. Main folder-tree flow must use get_library_hierarchy.
 #[tauri::command]
 pub async fn get_sidebar_hierarchy(
     db_state: State<'_, DbState>,

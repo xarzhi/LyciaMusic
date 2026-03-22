@@ -59,7 +59,7 @@ const emit = defineEmits<{
   hide: [title: string];
 }>();
 
-const { librarySongs } = useLibraryBrowse();
+const { canonicalSongs } = useLibraryBrowse();
 const { coverCache, preloadCovers } = useCoverCache();
 
 function normalizePath(path: string): string {
@@ -73,7 +73,7 @@ function getCoverUrl(songPath: string): string | null {
 
 function getSongInfo(path: string) {
   const normalizedPath = normalizePath(path);
-  const song = librarySongs.value.find(item => normalizePath(item.path) === normalizedPath);
+  const song = canonicalSongs.value.find(item => normalizePath(item.path) === normalizedPath);
 
   if (song) {
     return {

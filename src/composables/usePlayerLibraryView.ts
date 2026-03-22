@@ -71,10 +71,10 @@ export function usePlayerLibraryView() {
     searchQuery,
   } = storeToRefs(navigationStore);
   const {
-    folderTree,
+    libraryHierarchy,
     libraryFolders,
-    librarySongs,
-    songList,
+    canonicalSongs,
+    sourceSongs,
     watchedFolders,
     artistSortMode,
     albumSortMode,
@@ -98,7 +98,7 @@ export function usePlayerLibraryView() {
   const artistList = computed<ArtistListItem[]>(() => {
     const map = new Map<string, { count: number; firstSongPath: string }>();
 
-    librarySongs.value.forEach(song => {
+    canonicalSongs.value.forEach(song => {
       getSongArtistNames(song).forEach(artistName => {
         const key = artistName || 'Unknown';
         const existing = map.get(key);
@@ -137,7 +137,7 @@ export function usePlayerLibraryView() {
   const albumList = computed<AlbumListItem[]>(() => {
     const map = new Map<string, AlbumListItem>();
 
-    librarySongs.value.forEach(song => {
+    canonicalSongs.value.forEach(song => {
       const key = getSongAlbumKey(song);
       const existing = map.get(key);
 
@@ -201,7 +201,7 @@ export function usePlayerLibraryView() {
 
   const folderList = computed(() =>
     watchedFolders.value.map(folderPath => {
-      const songsInFolder = songList.value.filter(song => isDirectParent(folderPath, song.path));
+      const songsInFolder = sourceSongs.value.filter(song => isDirectParent(folderPath, song.path));
 
       return {
         path: folderPath,
@@ -213,7 +213,7 @@ export function usePlayerLibraryView() {
   );
 
   const favoriteSongList = computed(() =>
-    librarySongs.value.filter(song => favoritePaths.value.includes(song.path)),
+    canonicalSongs.value.filter(song => favoritePaths.value.includes(song.path)),
   );
 
   const favArtistList = computed(() => {
@@ -317,7 +317,7 @@ export function usePlayerLibraryView() {
   const genreList = computed(() => {
     const map = new Map<string, number>();
 
-    librarySongs.value.forEach(song => {
+    canonicalSongs.value.forEach(song => {
       const key = song.genre || 'Unknown';
       map.set(key, (map.get(key) || 0) + 1);
     });
@@ -328,7 +328,7 @@ export function usePlayerLibraryView() {
   const yearList = computed(() => {
     const map = new Map<string, number>();
 
-    librarySongs.value.forEach(song => {
+    canonicalSongs.value.forEach(song => {
       const key = song.year && song.year.length >= 4 ? song.year.substring(0, 4) : 'Unknown';
       map.set(key, (map.get(key) || 0) + 1);
     });
@@ -336,7 +336,37 @@ export function usePlayerLibraryView() {
     return Array.from(map).map(([name, count]) => ({ name, count })).sort((a, b) => b.name.localeCompare(a.name));
   });
 
-  const displaySongList = computed(() => {
+  const currentFolderSongs = computed(() => {
+    if (!currentFolderFilter.value) {
+      return [];
+    }
+
+    let songs = sourceSongs.value.filter(song => isDirectParent(currentFolderFilter.value, song.path));
+
+    if (folderSortMode.value === 'title') {
+      songs = sortItemsByAlphabetIndex(songs, getSongTitleLabel);
+    } else if (folderSortMode.value === 'name') {
+      songs = sortItemsByAlphabetIndex(songs, getSongFileNameLabel);
+    } else if (folderSortMode.value === 'artist') {
+      songs.sort((left, right) => (left.artist || '').localeCompare(right.artist || '', 'zh-CN'));
+    } else if (folderSortMode.value === 'added_at') {
+      songs.sort((left, right) => (right.added_at || 0) - (left.added_at || 0));
+    } else if (folderSortMode.value === 'custom') {
+      const customOrder = folderCustomOrder.value[currentFolderFilter.value] || [];
+      if (customOrder.length > 0) {
+        const orderMap = new Map(customOrder.map((path, index) => [path, index]));
+        songs.sort((left, right) => {
+          const leftIndex = orderMap.has(left.path) ? orderMap.get(left.path)! : Number.MAX_SAFE_INTEGER;
+          const rightIndex = orderMap.has(right.path) ? orderMap.get(right.path)! : Number.MAX_SAFE_INTEGER;
+          return leftIndex - rightIndex;
+        });
+      }
+    }
+
+    return songs;
+  });
+
+  const currentViewSongs = computed(() => {
     if (searchQuery.value.trim()) {
       const query = searchQuery.value.toLowerCase();
 
@@ -353,7 +383,7 @@ export function usePlayerLibraryView() {
 
       if (currentViewMode.value === 'all') {
         return sortItemsByAlphabetIndex(
-          librarySongs.value.filter(song =>
+          canonicalSongs.value.filter(song =>
             song.name.toLowerCase().includes(query) ||
             getSongArtistSearchText(song).includes(query) ||
             song.album.toLowerCase().includes(query),
@@ -364,7 +394,7 @@ export function usePlayerLibraryView() {
 
       if (currentViewMode.value === 'folder') {
         return sortItemsByAlphabetIndex(
-          songList.value.filter(song =>
+          sourceSongs.value.filter(song =>
             song.name.toLowerCase().includes(query) ||
             getSongArtistSearchText(song).includes(query) ||
             song.album.toLowerCase().includes(query),
@@ -373,7 +403,7 @@ export function usePlayerLibraryView() {
         );
       }
 
-      return librarySongs.value.filter(song =>
+      return canonicalSongs.value.filter(song =>
         song.name.toLowerCase().includes(query) ||
         getSongArtistSearchText(song).includes(query) ||
         song.album.toLowerCase().includes(query),
@@ -381,7 +411,7 @@ export function usePlayerLibraryView() {
     }
 
     if (currentViewMode.value === 'all') {
-      let base = [...librarySongs.value];
+      let base = [...canonicalSongs.value];
       if (localMusicTab.value === 'artist' && currentArtistFilter.value) {
         base = base.filter(song => songHasArtist(song, currentArtistFilter.value));
       } else if (localMusicTab.value === 'album' && currentAlbumFilter.value) {
@@ -411,33 +441,7 @@ export function usePlayerLibraryView() {
     }
 
     if (currentViewMode.value === 'folder') {
-      if (!currentFolderFilter.value) {
-        return [];
-      }
-
-      let songs = songList.value.filter(song => isDirectParent(currentFolderFilter.value, song.path));
-
-      if (folderSortMode.value === 'title') {
-        songs = sortItemsByAlphabetIndex(songs, getSongTitleLabel);
-      } else if (folderSortMode.value === 'name') {
-        songs = sortItemsByAlphabetIndex(songs, getSongFileNameLabel);
-      } else if (folderSortMode.value === 'artist') {
-        songs.sort((left, right) => (left.artist || '').localeCompare(right.artist || '', 'zh-CN'));
-      } else if (folderSortMode.value === 'added_at') {
-        songs.sort((left, right) => (right.added_at || 0) - (left.added_at || 0));
-      } else if (folderSortMode.value === 'custom') {
-        const customOrder = folderCustomOrder.value[currentFolderFilter.value] || [];
-        if (customOrder.length > 0) {
-          const orderMap = new Map(customOrder.map((path, index) => [path, index]));
-          songs.sort((left, right) => {
-            const leftIndex = orderMap.has(left.path) ? orderMap.get(left.path)! : Number.MAX_SAFE_INTEGER;
-            const rightIndex = orderMap.has(right.path) ? orderMap.get(right.path)! : Number.MAX_SAFE_INTEGER;
-            return leftIndex - rightIndex;
-          });
-        }
-      }
-
-      return songs;
+      return currentFolderSongs.value;
     }
 
     if (currentViewMode.value === 'recent') {
@@ -492,8 +496,8 @@ export function usePlayerLibraryView() {
       }
 
       const songMap = new Map<string, Song>();
-      librarySongs.value.forEach(song => songMap.set(song.path, song));
-      songList.value.forEach(song => {
+      canonicalSongs.value.forEach(song => songMap.set(song.path, song));
+      sourceSongs.value.forEach(song => {
         if (!songMap.has(song.path)) {
           songMap.set(song.path, song);
         }
@@ -516,7 +520,7 @@ export function usePlayerLibraryView() {
       return songs;
     }
 
-    return librarySongs.value.filter(song =>
+    return canonicalSongs.value.filter(song =>
       songHasArtist(song, filterCondition.value) ||
       matchesAlbumKey(song, filterCondition.value) ||
       (song.genre || 'Unknown') === filterCondition.value ||
@@ -528,22 +532,29 @@ export function usePlayerLibraryView() {
     activeRootPath,
     albumList,
     artistList,
+    canonicalSongs,
+    currentFolderSongs,
+    currentViewSongs,
     favAlbumList,
     favArtistList,
     favoriteSongList,
     filteredAlbumList,
     filteredArtistList,
     folderList,
-    folderTree,
     genreList,
     isFolderMode,
     isLocalMusic,
     libraryFolders,
-    librarySongs,
+    libraryHierarchy,
     recentAlbumList,
     recentPlaylistList,
     searchQuery,
-    displaySongList,
+    sourceSongs,
     yearList,
+    // Compatibility aliases for existing callers.
+    displaySongList: currentViewSongs,
+    folderTree: libraryHierarchy,
+    librarySongs: canonicalSongs,
+    songList: sourceSongs,
   };
 }

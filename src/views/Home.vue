@@ -154,7 +154,8 @@ const { openHomeAlbum } = useHomeNavigation(router);
 const { showToast } = useToast();
 const libraryStore = useLibraryStore();
 const {
-  songList,
+  canonicalSongs,
+  sourceSongs,
   albumSortMode,
   albumCustomOrder,
 } = storeToRefs(libraryStore);
@@ -261,7 +262,8 @@ const {
   selectedPaths,
   isBatchMode,
   isManagementMode,
-  songList,
+  canonicalSongs,
+  sourceSongs,
   favoritePaths,
   playlists,
   contextMenuTargetSong,
@@ -289,8 +291,8 @@ const {
   isManagementMode,
   activeRootPath,
   currentFolderFilter,
-  folderTree,
-  songList,
+  libraryHierarchy: folderTree,
+  sourceSongs,
   refreshFolder,
   fetchFolderTree,
   createFolder,

@@ -16,11 +16,13 @@ import type {
 } from '../types';
 
 export const useLibraryStore = defineStore('library', () => {
-  const songList = ref<Song[]>([]);
-  const librarySongs = ref<Song[]>([]);
+  // Canonical library catalog data indexed from library_folders.
+  const canonicalSongs = ref<Song[]>([]);
+  // File-system-backed source snapshot used by folder browsing and file operations.
+  const sourceSongs = ref<Song[]>([]);
   const libraryFolders = ref<LibraryFolder[]>([]);
-  const folderTree = ref<FolderNode[]>([]);
-  const originalSongList = ref<Song[]>([]);
+  // Directory hierarchy derived from the current library roots.
+  const libraryHierarchy = ref<FolderNode[]>([]);
   const libraryScanProgress = ref<LibraryScanProgress | null>(null);
   const libraryScanSession = ref<LibraryScanSession | null>(null);
   const lastLibraryScanError = ref<string | null>(null);
@@ -34,24 +36,20 @@ export const useLibraryStore = defineStore('library', () => {
   const localSortMode = ref<LocalSortMode>('default');
   const localCustomOrder = ref<string[]>([]);
 
-  const setSongList = (songs: Song[]) => {
-    songList.value = songs;
+  const setSourceSongs = (songs: Song[]) => {
+    sourceSongs.value = songs;
   };
 
-  const setLibrarySongs = (songs: Song[]) => {
-    librarySongs.value = songs;
+  const setCanonicalSongs = (songs: Song[]) => {
+    canonicalSongs.value = songs;
   };
 
   const setLibraryFolders = (folders: LibraryFolder[]) => {
     libraryFolders.value = folders;
   };
 
-  const setFolderTree = (tree: FolderNode[]) => {
-    folderTree.value = tree;
-  };
-
-  const setOriginalSongList = (songs: Song[]) => {
-    originalSongList.value = songs;
+  const setLibraryHierarchy = (tree: FolderNode[]) => {
+    libraryHierarchy.value = tree;
   };
 
   const setLibraryScanProgress = (progress: LibraryScanProgress | null) => {
@@ -82,11 +80,14 @@ export const useLibraryStore = defineStore('library', () => {
   };
 
   return {
-    songList,
-    librarySongs,
+    canonicalSongs,
+    sourceSongs,
     libraryFolders,
-    folderTree,
-    originalSongList,
+    libraryHierarchy,
+    // Compatibility aliases while callers migrate to the semantic names above.
+    songList: sourceSongs,
+    librarySongs: canonicalSongs,
+    folderTree: libraryHierarchy,
     libraryScanProgress,
     libraryScanSession,
     lastLibraryScanError,
@@ -99,11 +100,14 @@ export const useLibraryStore = defineStore('library', () => {
     folderCustomOrder,
     localSortMode,
     localCustomOrder,
-    setSongList,
-    setLibrarySongs,
+    setSourceSongs,
+    setCanonicalSongs,
     setLibraryFolders,
-    setFolderTree,
-    setOriginalSongList,
+    setLibraryHierarchy,
+    // Compatibility aliases while callers migrate to the semantic setters above.
+    setSongList: setSourceSongs,
+    setLibrarySongs: setCanonicalSongs,
+    setFolderTree: setLibraryHierarchy,
     setLibraryScanProgress,
     setLibraryScanSession,
     setLastLibraryScanError,

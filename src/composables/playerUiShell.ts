@@ -24,7 +24,7 @@ export const createPlayerUiShell = ({
   const playbackStore = usePlaybackStore();
   const uiStore = useUiStore();
   const { currentViewMode } = storeToRefs(navigationStore);
-  const { songList } = storeToRefs(libraryStore);
+  const { canonicalSongs, sourceSongs } = storeToRefs(libraryStore);
   const { favoritePaths } = storeToRefs(collectionsStore);
 
   const handleVolume = async (event: Event) => {
@@ -62,7 +62,8 @@ export const createPlayerUiShell = ({
 
   const removeSongFromList = async (song: Song) => {
     if (currentViewMode.value === 'all') {
-      songList.value = songList.value.filter(item => item.path !== song.path);
+      canonicalSongs.value = canonicalSongs.value.filter(item => item.path !== song.path);
+      sourceSongs.value = sourceSongs.value.filter(item => item.path !== song.path);
       return;
     }
 

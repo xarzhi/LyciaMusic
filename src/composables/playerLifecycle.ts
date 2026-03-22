@@ -226,7 +226,7 @@ export const createPlayerLifecycle = ({
   const uiStore = useUiStore();
   const { settings } = storeToRefs(settingsStore);
   const {
-    songList,
+    sourceSongs,
     watchedFolders,
     artistSortMode,
     albumSortMode,
@@ -308,7 +308,7 @@ export const createPlayerLifecycle = ({
 
     watch(
       [
-        () => songList.value.map(song => song.path),
+        () => sourceSongs.value.map(song => song.path),
         watchedFolders,
         favoritePaths,
         playlists,

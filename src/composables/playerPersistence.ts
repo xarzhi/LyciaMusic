@@ -36,7 +36,7 @@ export const createPlayerPersistence = ({ keys }: { keys: PlayerPersistenceKeys 
       queuePathKey: keys.playerQueuePaths,
       legacyPlaylistKey: keys.legacyPlayerPlaylist,
       legacyQueueKey: keys.legacyPlayerQueue,
-      songList: libraryStore.songList,
+      sourceSongs: libraryStore.sourceSongs,
       watchedFolders: libraryStore.watchedFolders,
       favoritePaths: collectionsStore.favoritePaths,
       playlists: collectionsStore.playlists,

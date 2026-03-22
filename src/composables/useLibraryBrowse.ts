@@ -18,13 +18,14 @@ export function useLibraryBrowse() {
   } = storeToRefs(navigationStore);
   const {
     libraryFolders,
-    librarySongs,
+    canonicalSongs,
+    sourceSongs,
+    libraryHierarchy,
     artistSortMode,
     albumSortMode,
     artistCustomOrder,
     albumCustomOrder,
   } = storeToRefs(libraryStore);
-  const { folderTree } = libraryView;
 
   const updateArtistOrder = (newOrder: string[]) => {
     artistCustomOrder.value = newOrder;
@@ -50,13 +51,16 @@ export function useLibraryBrowse() {
     currentViewMode,
     currentFolderFilter,
     activeRootPath,
-    folderTree,
+    libraryHierarchy,
     libraryFolders,
-    librarySongs,
+    canonicalSongs,
+    sourceSongs,
     artistSortMode,
     albumSortMode,
     artistList: libraryView.artistList,
     albumList: libraryView.albumList,
+    currentFolderSongs: libraryView.currentFolderSongs,
+    currentViewSongs: libraryView.currentViewSongs,
     filteredArtistList: libraryView.filteredArtistList,
     filteredAlbumList: libraryView.filteredAlbumList,
     folderList: libraryView.folderList,
@@ -64,6 +68,10 @@ export function useLibraryBrowse() {
     favArtistList: libraryView.favArtistList,
     favAlbumList: libraryView.favAlbumList,
     recentPlaylistList: libraryView.recentPlaylistList,
+    // Compatibility aliases for older callers.
+    folderTree: libraryView.libraryHierarchy,
+    librarySongs: libraryView.canonicalSongs,
+    displaySongList: libraryView.currentViewSongs,
     updateArtistOrder,
     updateAlbumOrder,
     reorderWatchedFolders,

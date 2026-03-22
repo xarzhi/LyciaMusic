@@ -14,7 +14,8 @@ interface UseHomeBatchActionsOptions {
   selectedPaths: Ref<Set<string>>;
   isBatchMode: Ref<boolean>;
   isManagementMode: Ref<boolean>;
-  songList: Ref<Song[]>;
+  canonicalSongs: Ref<Song[]>;
+  sourceSongs: Ref<Song[]>;
   favoritePaths: Ref<string[]>;
   playlists: Ref<Playlist[]>;
   contextMenuTargetSong: Ref<Song | null>;
@@ -31,7 +32,8 @@ export function useHomeBatchActions({
   selectedPaths,
   isBatchMode,
   isManagementMode,
-  songList,
+  canonicalSongs,
+  sourceSongs,
   favoritePaths,
   playlists,
   contextMenuTargetSong,
@@ -65,7 +67,8 @@ export function useHomeBatchActions({
   const executeBatchDelete = () => {
     if (currentViewMode.value === 'all' && getRoutePath() === '/') {
       const selected = new Set(selectedPaths.value);
-      songList.value = songList.value.filter((song) => !selected.has(song.path));
+      canonicalSongs.value = canonicalSongs.value.filter((song) => !selected.has(song.path));
+      sourceSongs.value = sourceSongs.value.filter((song) => !selected.has(song.path));
     } else if (getRoutePath() === '/favorites') {
       const selected = new Set(selectedPaths.value);
       favoritePaths.value = favoritePaths.value.filter((path) => !selected.has(path));
@@ -93,7 +96,8 @@ export function useHomeBatchActions({
     }
 
     if (deletedPaths.size > 0) {
-      songList.value = songList.value.filter((song) => !deletedPaths.has(song.path));
+      canonicalSongs.value = canonicalSongs.value.filter((song) => !deletedPaths.has(song.path));
+      sourceSongs.value = sourceSongs.value.filter((song) => !deletedPaths.has(song.path));
       favoritePaths.value = favoritePaths.value.filter((path) => !deletedPaths.has(path));
       await removeFromHistory(Array.from(deletedPaths));
       playlists.value.forEach((playlist) => {

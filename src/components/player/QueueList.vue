@@ -6,11 +6,11 @@ import { usePlaybackController } from '../../composables/usePlaybackController';
 import { useLibraryStore } from '../../stores/library';
 
 const libraryStore = useLibraryStore();
-const { songList } = storeToRefs(libraryStore);
+const { sourceSongs } = storeToRefs(libraryStore);
 const { playQueue, currentSong, playSong, formatDuration } = usePlaybackController();
 
 const queue = computed(() => {
-  return playQueue.value.length > 0 ? playQueue.value : songList.value;
+  return playQueue.value.length > 0 ? playQueue.value : sourceSongs.value;
 });
 
 const itemRefs = ref<HTMLElement[]>([]);

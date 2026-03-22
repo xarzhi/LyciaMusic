@@ -96,7 +96,7 @@ const createSongLookup = (fallbackSongs: Song[] = []) => {
     }
   }
 
-  for (const song of libraryStore.librarySongs) {
+  for (const song of libraryStore.canonicalSongs) {
     if (song?.path) {
       lookup.set(song.path, song);
     }
@@ -184,7 +184,7 @@ function createPlayerService() {
     favAlbumList,
     recentAlbumList,
     recentPlaylistList,
-    displaySongList,
+    currentViewSongs,
     isLocalMusic,
     isFolderMode,
   } = libraryView;
@@ -351,7 +351,7 @@ function createPlayerService() {
   });
 
   playerPlayback = createPlayerPlayback({
-    getDisplaySongList: () => displaySongList.value,
+    getDisplaySongList: () => currentViewSongs.value,
     addToHistory,
     loadLyrics,
     handleAutoNext: playbackActions.handleAutoNext,
@@ -360,7 +360,7 @@ function createPlayerService() {
     },
   });
 
-  watch(displaySongList, async newList => {
+  watch(currentViewSongs, async newList => {
     if (
       currentViewMode.value === 'favorites' &&
       (favTab.value === 'artists' || favTab.value === 'albums') &&
@@ -520,7 +520,8 @@ function createPlayerService() {
     favAlbumList,
     recentAlbumList,
     recentPlaylistList,
-    displaySongList,
+    currentViewSongs,
+    displaySongList: currentViewSongs,
     isLocalMusic,
     isFolderMode,
     init,

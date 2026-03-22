@@ -52,7 +52,7 @@ export const createPlayerQueue = ({
   };
 
   const getNavigationList = () =>
-    playQueue.value.length ? playQueue.value : libraryStore.songList;
+    playQueue.value.length ? playQueue.value : libraryStore.sourceSongs;
 
   const findSongByPath = (path: string | undefined, primaryList: Song[] = []) => {
     if (!path) return null;
@@ -61,8 +61,8 @@ export const createPlayerQueue = ({
       primaryList,
       playQueue.value,
       tempQueue.value,
-      libraryStore.songList,
-      libraryStore.librarySongs,
+      libraryStore.sourceSongs,
+      libraryStore.canonicalSongs,
       currentSong.value ? [currentSong.value] : [],
     ];
 

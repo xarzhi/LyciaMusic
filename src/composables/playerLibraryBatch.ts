@@ -17,7 +17,7 @@ export const createPlayerLibraryBatch = ({
   const collectionsStore = useCollectionsStore();
   const libraryStore = useLibraryStore();
   const playbackStore = usePlaybackStore();
-  const { songList, librarySongs } = storeToRefs(libraryStore);
+  const { sourceSongs, canonicalSongs } = storeToRefs(libraryStore);
   const { recentSongs } = storeToRefs(collectionsStore);
   const { playQueue, currentSong } = storeToRefs(playbackStore);
   let libraryScanBatchFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -28,13 +28,13 @@ export const createPlayerLibraryBatch = ({
   const refreshStateSongReferences = (fallbackSongs: Song[] = []) => {
     const lookup = createSongLookup([
       ...fallbackSongs,
-      ...songList.value,
+      ...sourceSongs.value,
       ...playQueue.value,
       ...recentSongs.value.map(item => item.song),
       ...(currentSong.value ? [currentSong.value] : []),
     ]);
 
-    songList.value = songList.value
+    sourceSongs.value = sourceSongs.value
       .map(song => lookup.get(song.path) ?? song)
       .filter((song): song is Song => !!song);
     playQueue.value = playQueue.value
@@ -64,7 +64,7 @@ export const createPlayerLibraryBatch = ({
     }
 
     const merged = new Map<string, Song>();
-    for (const song of librarySongs.value) {
+    for (const song of canonicalSongs.value) {
       if (!pendingLibraryScanDeletedPaths.has(song.path)) {
         merged.set(song.path, song);
       }
@@ -76,7 +76,7 @@ export const createPlayerLibraryBatch = ({
       }
     }
 
-    librarySongs.value = Array.from(merged.values());
+    canonicalSongs.value = Array.from(merged.values());
     refreshStateSongReferences(Array.from(pendingLibraryScanFallbackSongs.values()));
 
     pendingLibraryScanSongs.clear();

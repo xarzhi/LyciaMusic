@@ -99,7 +99,7 @@ export const createPlayerRestore = ({
       ...(legacyLastSong ? [legacyLastSong] : []),
     ];
 
-    if (libraryStore.librarySongs.length === 0) {
+    if (libraryStore.canonicalSongs.length === 0) {
       await loadLibrarySongsFromCache();
     }
 
@@ -111,7 +111,7 @@ export const createPlayerRestore = ({
       ?? legacyLastSong?.path
       ?? null;
 
-    libraryStore.setSongList(resolveSongsFromPaths(storedSongListPaths, fallbackSongs));
+    libraryStore.setSourceSongs(resolveSongsFromPaths(storedSongListPaths, fallbackSongs));
     playbackStore.playQueue = resolveSongsFromPaths(storedQueuePaths, fallbackSongs);
 
     if (storedLastSongPath) {

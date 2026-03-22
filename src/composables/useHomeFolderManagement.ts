@@ -12,8 +12,8 @@ interface UseHomeFolderManagementOptions {
   isManagementMode: Ref<boolean>;
   activeRootPath: Ref<string | null>;
   currentFolderFilter: Ref<string>;
-  folderTree: Ref<FolderNode[]>;
-  songList: Ref<Song[]>;
+  libraryHierarchy: Ref<FolderNode[]>;
+  sourceSongs: Ref<Song[]>;
   refreshFolder: (folderPath: string) => Promise<unknown>;
   fetchFolderTree: () => Promise<unknown>;
   createFolder: (parentPath: string, folderName: string) => Promise<string>;
@@ -29,8 +29,8 @@ export function useHomeFolderManagement({
   isManagementMode,
   activeRootPath,
   currentFolderFilter,
-  folderTree,
-  songList,
+  libraryHierarchy,
+  sourceSongs,
   refreshFolder,
   fetchFolderTree,
   createFolder,
@@ -52,7 +52,7 @@ export function useHomeFolderManagement({
 
   const getOwningRootPath = (path: string) => {
     const normalizedTarget = normalizePath(path);
-    const matchedRoots = folderTree.value
+    const matchedRoots = libraryHierarchy.value
       .map((node) => node.path)
       .filter((root) => {
         const normalizedRoot = normalizePath(root);
@@ -200,12 +200,12 @@ export function useHomeFolderManagement({
       await fetchFolderTree();
 
       if (deletedRoot) {
-        const nextRoot = folderTree.value[0]?.path || null;
+        const nextRoot = libraryHierarchy.value[0]?.path || null;
         if (nextRoot) {
           await syncRootSelection(nextRoot, { forceRefresh: true });
         } else {
           await syncRootSelection(null);
-          songList.value = [];
+          sourceSongs.value = [];
         }
       } else if (fallbackPath) {
         if (owningRootPath) {
@@ -262,11 +262,11 @@ export function useHomeFolderManagement({
         await removeLibraryFolderLinked(path);
 
         if (wasActive) {
-          if (folderTree.value.length > 0) {
-            await syncRootSelection(folderTree.value[0].path, { forceRefresh: true });
+          if (libraryHierarchy.value.length > 0) {
+            await syncRootSelection(libraryHierarchy.value[0].path, { forceRefresh: true });
           } else {
             await syncRootSelection(null);
-            songList.value = [];
+            sourceSongs.value = [];
           }
         }
       },

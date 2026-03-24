@@ -243,12 +243,6 @@ onUnmounted(() => {
             <span class="inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out shadow-sm" :class="settings.showQualityBadges ? 'translate-x-6' : 'translate-x-1'" />
           </button>
         </div>
-        <div class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
-          <div>
-            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">关联文件夹与音乐库</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">文件夹视图与本地音乐库相互耦合，同时移除时也双向同步。</div>
-          </div>
-        </div>
       </div>
     </section>
 

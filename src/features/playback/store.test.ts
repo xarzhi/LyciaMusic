@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
-import { usePlaybackStore } from './playback';
-import { useUiStore } from './ui';
+import { usePlaybackStore } from './store';
+import { useUiStore } from '../../shared/stores/ui';
 
 const demoSong = {
   path: '/music/demo.flac',

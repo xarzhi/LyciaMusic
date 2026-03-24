@@ -3,8 +3,7 @@ use super::super::types::Song;
 use super::super::utils::{is_supported_library_extension, normalize_path};
 use super::{
     build_album_key, fill_text_fields_from_tags, normalize_album_key_part, primary_artist_name,
-    split_artist_names, UNKNOWN_ARTIST, UNKNOWN_ALBUM, VARIOUS_ARTISTS,
-    VARIOUS_ARTISTS_THRESHOLD,
+    split_artist_names, UNKNOWN_ALBUM, UNKNOWN_ARTIST, VARIOUS_ARTISTS, VARIOUS_ARTISTS_THRESHOLD,
 };
 use lofty::file::FileType;
 use lofty::prelude::*;
@@ -110,7 +109,9 @@ pub(super) fn parse_song_from_file(path: &Path, path_str: &str, format: &str) ->
         }
     }
 
-    if let Ok(tagged_file) = read_tagged_file_from_path_for_scan(path).map_err(|error| error.to_string()) {
+    if let Ok(tagged_file) =
+        read_tagged_file_from_path_for_scan(path).map_err(|error| error.to_string())
+    {
         let props = tagged_file.properties();
         duration = props.duration().as_secs() as u32;
         bitrate = props.audio_bitrate().unwrap_or(0);
@@ -354,8 +355,10 @@ fn resolve_album_artist_for_group(songs: &[Song]) -> (String, bool, bool) {
         .collect();
 
     let primary_artists: Vec<String> = songs.iter().map(primary_artist_name).collect();
-    let unique_primary_artists: HashSet<String> =
-        primary_artists.iter().map(|name| name.to_lowercase()).collect();
+    let unique_primary_artists: HashSet<String> = primary_artists
+        .iter()
+        .map(|name| name.to_lowercase())
+        .collect();
 
     if !tagged_album_artists.is_empty() {
         let unique_tagged: HashSet<String> = tagged_album_artists
@@ -430,7 +433,10 @@ pub(super) fn enrich_album_groups(songs: &mut [Song]) {
             parent_folder,
             normalize_album_key_part(&song.album, UNKNOWN_ALBUM)
         );
-        grouped_paths.entry(album_group_key).or_default().push(index);
+        grouped_paths
+            .entry(album_group_key)
+            .or_default()
+            .push(index);
     }
 
     for indexes in grouped_paths.into_values() {

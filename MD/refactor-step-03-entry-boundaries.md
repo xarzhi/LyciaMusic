@@ -22,30 +22,13 @@ This step does not remove compatibility files yet. It makes the new source of tr
   - `src/features/collections/*`
   - `src/features/settings/*`
 
-## Compatibility-only entrypoints
-
-The following paths stay in the repo only to avoid a hard cut during migration:
-
-- `src/stores/*`
-- `src/composables/settings.ts`
-- `src/composables/useCollectionsActions.ts`
-- `src/composables/useLibraryBrowse.ts`
-- `src/composables/useLibraryCollections.ts`
-- `src/composables/useLibraryRuntimeActions.ts`
-- `src/composables/useLibrarySync.ts`
-- `src/composables/usePlaybackActions.ts`
-- `src/composables/usePlaybackController.ts`
-- `src/composables/usePlayerLibraryView.ts`
-- `src/composables/useSongTableLibraryState.ts`
-
-These files are compatibility facades only. New feature work should not import through them.
-
 ## Import rules
 
 - Use `src/shared/stores/*` for shared app state.
 - Use `src/features/*/store` for feature-owned state.
+- Use `src/features/statistics/store.ts` for statistics state.
 - Use `src/features/*` APIs directly instead of the matching `src/composables/*` wrapper.
-- Treat `src/stores/*` as deprecated.
+- Do not reintroduce `src/stores/*` or compat `src/composables/*` wrappers.
 
 ## Naming rules for library data
 
@@ -59,15 +42,15 @@ Avoid introducing new aliases like `songList`, `librarySongs`, or `displaySongLi
 
 ## Enforcement
 
-`eslint.config.js` now rejects new imports from the frozen legacy entrypoints above. If a file still needs one of those imports, treat it as migration work and move it toward the canonical source instead of adding another exception.
+`eslint.config.js` now rejects new imports from the removed legacy entrypoints above. If a file still needs one of those imports, treat it as migration work and move it toward the canonical source instead of adding another exception.
 
 ## Step 04 follow-up
 
-`playerService` is now compatibility-only as well. The active composition root lives in `src/composables/playerCore.ts`.
+`playerService` has been removed. The active composition root lives in `src/composables/playerCore.ts`.
 
 - Feature modules should depend on domain slices from `usePlayerCore()`
 - App shell code should depend on `usePlayerCore().appShellDomain` through `usePlayer()`
-- `usePlayerService()` remains only as a compatibility facade for any leftover migration edges
+- Do not add a new service-level facade above `usePlayerCore()` unless it owns real orchestration logic
 
 ## Step 05 follow-up
 
@@ -88,3 +71,11 @@ Page files should stay as assembly-only entrypoints.
 - `src/App.vue` now delegates root shell setup to `src/composables/useAppShell.ts`
 
 When page logic grows, add or split page-level composables instead of expanding the `.vue` script blocks.
+
+## Step 07 follow-up
+
+The legacy frontend facades have been removed.
+
+- `src/stores/*` no longer exists; import feature/shared stores directly
+- Compatibility-only `src/composables/*` wrappers have been deleted
+- Statistics state now lives in `src/features/statistics/store.ts`

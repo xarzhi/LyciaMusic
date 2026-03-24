@@ -1,6 +1,4 @@
-use super::{
-    LIBRARY_SCAN_BATCH_EVENT, LIBRARY_SCAN_PROGRESS_EVENT, PROGRESS_EMIT_INTERVAL_MS,
-};
+use super::{LIBRARY_SCAN_BATCH_EVENT, LIBRARY_SCAN_PROGRESS_EVENT, PROGRESS_EMIT_INTERVAL_MS};
 use crate::music::types::Song;
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};

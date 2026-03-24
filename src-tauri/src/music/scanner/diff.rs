@@ -1,5 +1,7 @@
 use super::super::types::Song;
-use super::super::utils::{descendant_like_patterns, is_supported_library_extension, normalize_path};
+use super::super::utils::{
+    descendant_like_patterns, is_supported_library_extension, normalize_path,
+};
 use super::parser::{
     enrich_album_groups, parse_song_from_file, preferred_parse_workers, song_identity_missing,
     song_metadata_incomplete,
@@ -69,57 +71,60 @@ pub(super) fn load_db_snapshot_for_folder(
         .map_err(|error| error.to_string())?;
 
     let rows = stmt
-        .query_map(params![normalized_folder, pattern_forward, pattern_back], |row| {
-            let path: String = row.get(1)?;
-            let duration = clamp_i64_to_u32(row.get::<_, Option<i64>>(11)?.unwrap_or(0));
-            let bitrate = clamp_i64_to_u32(row.get::<_, Option<i64>>(13)?.unwrap_or(0));
-            let sample_rate = clamp_i64_to_u32(row.get::<_, Option<i64>>(14)?.unwrap_or(0));
-            let bit_depth = i64_to_u8_opt(row.get::<_, Option<i64>>(15)?);
-            let file_size_i64 = row.get::<_, Option<i64>>(19)?.unwrap_or(0).max(0);
-            let added_at_i64 = row.get::<_, Option<i64>>(20)?;
-            let file_modified_at_i64 = row.get::<_, Option<i64>>(21)?;
-            let artist_names = deserialize_string_list(row.get::<_, Option<String>>(4)?);
-            let effective_artist_names =
-                deserialize_string_list(row.get::<_, Option<String>>(5)?);
+        .query_map(
+            params![normalized_folder, pattern_forward, pattern_back],
+            |row| {
+                let path: String = row.get(1)?;
+                let duration = clamp_i64_to_u32(row.get::<_, Option<i64>>(11)?.unwrap_or(0));
+                let bitrate = clamp_i64_to_u32(row.get::<_, Option<i64>>(13)?.unwrap_or(0));
+                let sample_rate = clamp_i64_to_u32(row.get::<_, Option<i64>>(14)?.unwrap_or(0));
+                let bit_depth = i64_to_u8_opt(row.get::<_, Option<i64>>(15)?);
+                let file_size_i64 = row.get::<_, Option<i64>>(19)?.unwrap_or(0).max(0);
+                let added_at_i64 = row.get::<_, Option<i64>>(20)?;
+                let file_modified_at_i64 = row.get::<_, Option<i64>>(21)?;
+                let artist_names = deserialize_string_list(row.get::<_, Option<String>>(4)?);
+                let effective_artist_names =
+                    deserialize_string_list(row.get::<_, Option<String>>(5)?);
 
-            let name = Path::new(&path)
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.clone());
+                let name = Path::new(&path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.clone());
 
-            Ok((
-                path.clone(),
-                DbSongSnapshot {
-                    file_modified_at: file_modified_at_i64,
-                    file_size: file_size_i64,
-                    song: Song {
-                        id: row.get::<_, i64>(0).ok(),
-                        name,
-                        path,
-                        title: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                        artist: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
-                        artist_names,
-                        effective_artist_names,
-                        album: row.get::<_, Option<String>>(6)?.unwrap_or_default(),
-                        album_artist: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
-                        album_key: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
-                        is_various_artists_album: i64_to_bool(row.get::<_, Option<i64>>(9)?),
-                        collapse_artist_credits: i64_to_bool(row.get::<_, Option<i64>>(10)?),
-                        duration,
-                        cover: row.get::<_, Option<String>>(12)?,
-                        bitrate,
-                        sample_rate,
-                        bit_depth,
-                        format: row.get::<_, Option<String>>(16)?.unwrap_or_default(),
-                        container: row.get::<_, Option<String>>(17)?,
-                        codec: row.get::<_, Option<String>>(18)?,
-                        file_size: file_size_i64 as u64,
-                        added_at: i64_to_u64_opt(added_at_i64),
-                        file_modified_at: i64_to_u64_opt(file_modified_at_i64),
+                Ok((
+                    path.clone(),
+                    DbSongSnapshot {
+                        file_modified_at: file_modified_at_i64,
+                        file_size: file_size_i64,
+                        song: Song {
+                            id: row.get::<_, i64>(0).ok(),
+                            name,
+                            path,
+                            title: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                            artist: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                            artist_names,
+                            effective_artist_names,
+                            album: row.get::<_, Option<String>>(6)?.unwrap_or_default(),
+                            album_artist: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
+                            album_key: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
+                            is_various_artists_album: i64_to_bool(row.get::<_, Option<i64>>(9)?),
+                            collapse_artist_credits: i64_to_bool(row.get::<_, Option<i64>>(10)?),
+                            duration,
+                            cover: row.get::<_, Option<String>>(12)?,
+                            bitrate,
+                            sample_rate,
+                            bit_depth,
+                            format: row.get::<_, Option<String>>(16)?.unwrap_or_default(),
+                            container: row.get::<_, Option<String>>(17)?,
+                            codec: row.get::<_, Option<String>>(18)?,
+                            file_size: file_size_i64 as u64,
+                            added_at: i64_to_u64_opt(added_at_i64),
+                            file_modified_at: i64_to_u64_opt(file_modified_at_i64),
+                        },
                     },
-                },
-            ))
-        })
+                ))
+            },
+        )
         .map_err(|error| error.to_string())?;
 
     for row in rows.flatten() {
@@ -195,7 +200,10 @@ fn collect_disk_candidates(
         reporter.emit_collecting(
             candidates.len(),
             candidates.len(),
-            Some(format!("已完成文件收集，共 {} 首候选歌曲", candidates.len())),
+            Some(format!(
+                "已完成文件收集，共 {} 首候选歌曲",
+                candidates.len()
+            )),
         );
     }
 

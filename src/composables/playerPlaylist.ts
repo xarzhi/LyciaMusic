@@ -1,5 +1,5 @@
 import type { Song } from '../types';
-import { useLibraryCollections } from './useLibraryCollections';
+import { useLibraryCollections } from '../features/collections/useLibraryCollections';
 
 interface CreatePlayerPlaylistDeps {
   switchViewToAll: () => void;

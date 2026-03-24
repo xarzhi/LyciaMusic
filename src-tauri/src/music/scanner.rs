@@ -6,20 +6,20 @@ use regex::Regex;
 use std::collections::HashSet;
 use std::sync::OnceLock;
 
-#[path = "scanner/progress.rs"]
-mod progress;
-#[path = "scanner/parser.rs"]
-mod parser;
 #[path = "scanner/diff.rs"]
 mod diff;
-#[path = "scanner/repository.rs"]
-mod repository;
 #[path = "scanner/orchestrator.rs"]
 mod orchestrator;
+#[path = "scanner/parser.rs"]
+mod parser;
+#[path = "scanner/progress.rs"]
+mod progress;
+#[path = "scanner/repository.rs"]
+mod repository;
 
 pub use orchestrator::{
-    get_folder_first_song, parse_audio_files, scan_folder_as_playlists,
-    scan_folder_recursive, scan_music_folder, scan_single_directory_internal,
+    get_folder_first_song, parse_audio_files, scan_folder_as_playlists, scan_folder_recursive,
+    scan_music_folder, scan_single_directory_internal,
 };
 
 pub(super) const VARIOUS_ARTISTS: &str = "Various Artists";
@@ -355,8 +355,7 @@ mod tests {
         let mut conn = setup_test_db();
         let added_song = make_song("/music/first.flac");
 
-        apply_scan_changes(&mut conn, &[added_song.clone()], &[], &[], None)
-            .expect("insert batch");
+        apply_scan_changes(&mut conn, &[added_song.clone()], &[], &[], None).expect("insert batch");
 
         let inserted_title: String = conn
             .query_row(
@@ -407,8 +406,14 @@ mod tests {
             vec!["Updated Artist".to_string(), "Guest".to_string()]
         );
 
-        apply_scan_changes(&mut conn, &[], &[], std::slice::from_ref(&updated_song.path), None)
-            .expect("delete batch");
+        apply_scan_changes(
+            &mut conn,
+            &[],
+            &[],
+            std::slice::from_ref(&updated_song.path),
+            None,
+        )
+        .expect("delete batch");
 
         let remaining_songs: i64 = conn
             .query_row("SELECT COUNT(*) FROM songs", [], |row| row.get(0))

@@ -1,5 +1,7 @@
 use super::super::types::{FolderNode, GeneratedFolder, Song};
-use super::super::utils::{descendant_like_patterns, is_supported_library_extension, normalize_path};
+use super::super::utils::{
+    descendant_like_patterns, is_supported_library_extension, normalize_path,
+};
 use super::diff::{collect_scan_diff, load_db_snapshot_for_folder};
 use super::parser::parse_audio_files_internal;
 use super::progress::ScanProgressReporter;
@@ -226,7 +228,8 @@ pub fn scan_folder_recursive(
             node.cover_song_path = find_first_song_recursive(&folder_path, conn);
         }
 
-        node.children.sort_by(|left, right| left.name.cmp(&right.name));
+        node.children
+            .sort_by(|left, right| left.name.cmp(&right.name));
     } else {
         return None;
     }

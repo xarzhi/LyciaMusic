@@ -5,7 +5,7 @@ import StatsOverviewCards from './StatsOverviewCards.vue';
 import BehaviorStatsSection from './BehaviorStatsSection.vue';
 import QualityPieChart from './QualityPieChart.vue';
 import FormatPieChart from './FormatPieChart.vue';
-import { useStatisticsStore, type TimeRangeType } from '../../stores/statistics';
+import { useStatisticsStore, type TimeRangeType } from '../../features/statistics/store';
 
 const TEXT = {
   range7Days: '\u8fd17\u5929',

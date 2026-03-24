@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
 import type { Song } from '../types';
-import { useCollectionsActions } from './useCollectionsActions';
+import { useCollectionsActions } from '../features/collections/useCollectionsActions';
 import { useFileImport } from './useFileImport';
-import { useLibrarySync } from './useLibrarySync';
+import { useLibrarySync } from '../features/library/useLibrarySync';
 import { useNavigationActions } from './useNavigationActions';
-import { usePlaybackActions } from './usePlaybackActions';
+import { usePlaybackActions } from '../features/playback/usePlaybackActions';
 import { useWindowActions } from './useWindowActions';
 
 const demoSong = {

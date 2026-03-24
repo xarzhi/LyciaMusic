@@ -8,7 +8,7 @@ import { useHomeBatchActions } from './useHomeBatchActions';
 import { useHomeFolderManagement } from './useHomeFolderManagement';
 import { useHomeNavigation } from './useHomeNavigation';
 import { useHomePlaylistRename } from './useHomePlaylistRename';
-import { useHomeRouteSync } from './useHomeRouteSync';
+
 import { useHomeViewState } from './useHomeViewState';
 import { usePlayerViewState } from './usePlayerViewState';
 import { useSongContextActions } from './useSongContextActions';
@@ -44,7 +44,6 @@ export function useHomePageModel() {
     displaySongList,
     librarySongs,
     folderTree,
-    searchQuery,
   } = usePlayerLibraryView();
   const { playSong } = usePlaybackController();
   const {
@@ -175,16 +174,6 @@ export function useHomePageModel() {
     openConfirm,
   });
 
-  useHomeRouteSync({
-    route,
-    router,
-    currentViewMode,
-    filterCondition,
-    currentFolderFilter,
-    activeRootPath,
-    folderTree,
-    searchQuery,
-  });
 
   const {
     showRenameModal,

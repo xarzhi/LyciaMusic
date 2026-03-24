@@ -6,6 +6,10 @@ import { useExternalPathBridge } from './useExternalPathBridge';
 import { useAppShellTheme } from './useAppShellTheme';
 import { useMiniModeWindow } from './useMiniModeWindow';
 import { useLibraryCollections } from '../features/collections/useLibraryCollections';
+import { useHomeRouteSync } from './useHomeRouteSync';
+import { usePlayerViewState } from './usePlayerViewState';
+import { usePlayerLibraryView } from '../features/library/usePlayerLibraryView';
+import { useRoute, useRouter } from 'vue-router';
 
 export function useAppShell() {
   const {
@@ -33,6 +37,22 @@ export function useAppShell() {
     isMicaWindowMaterial,
   });
   const { isExternalDragActive } = useExternalPathBridge({ handleExternalPaths });
+
+  const route = useRoute();
+  const router = useRouter();
+  const { currentViewMode, filterCondition, currentFolderFilter, activeRootPath } = usePlayerViewState();
+  const { folderTree, searchQuery } = usePlayerLibraryView();
+
+  useHomeRouteSync({
+    route,
+    router,
+    currentViewMode,
+    filterCondition,
+    currentFolderFilter,
+    activeRootPath,
+    folderTree,
+    searchQuery,
+  });
 
   useMiniModeWindow({
     isMiniMode,

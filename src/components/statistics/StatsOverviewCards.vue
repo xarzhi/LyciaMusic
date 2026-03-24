@@ -52,16 +52,21 @@ const formattedDuration = computed(() => {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
 
   if (days > 0) {
-    return `${days}\u5929 ${hours}\u5c0f\u65f6`;
+    return `${days}D ${hours}H`;
   }
 
   if (hours > 0) {
-    return `${hours}\u5c0f\u65f6 ${minutes}\u5206\u949f`;
+    return `${hours}H ${minutes}M`;
   }
 
-  return `${minutes}\u5206\u949f`;
+  if (minutes > 0) {
+    return `${minutes}M ${remainingSeconds}S`;
+  }
+
+  return `${remainingSeconds}S`;
 });
 
 const formattedSize = computed(() => {

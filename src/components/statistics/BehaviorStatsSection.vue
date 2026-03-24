@@ -38,9 +38,9 @@ const TEXT = {
   lateNight: '\u6df1\u591c',
   timesSuffix: '\u6b21',
   noDataHint: '\u6682\u65e0\u6570\u636e\uff0c\u53bb\u64ad\u653e\u51e0\u9996\u6b4c\u5427',
-  secondsSuffix: '\u79d2',
-  hourSuffix: '\u5c0f\u65f6',
-  minuteSuffix: '\u5206\u949f',
+  secondsSuffix: 'S',
+  hourSuffix: 'H',
+  minuteSuffix: 'M',
 };
 
 const props = defineProps<{
@@ -90,17 +90,17 @@ function getSongInfo(path: string) {
 
 function formatDuration(seconds: number) {
   if (!seconds) {
-    return `0 ${TEXT.secondsSuffix}`;
+    return `0${TEXT.secondsSuffix}`;
   }
 
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
 
   if (hours > 0) {
-    return `${hours} ${TEXT.hourSuffix} ${minutes} ${TEXT.minuteSuffix}`;
+    return `${hours}${TEXT.hourSuffix} ${minutes}${TEXT.minuteSuffix}`;
   }
 
-  return `${minutes} ${TEXT.minuteSuffix} ${Math.floor(seconds % 60)} ${TEXT.secondsSuffix}`;
+  return `${minutes}${TEXT.minuteSuffix} ${Math.floor(seconds % 60)}${TEXT.secondsSuffix}`;
 }
 
 function formatDurationShort(seconds: number) {

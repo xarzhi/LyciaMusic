@@ -121,7 +121,7 @@ pub async fn get_sidebar_hierarchy(
 
         for root in roots {
             let root_path = PathBuf::from(&root);
-            if let Some(root_node) = scan_folder_recursive(root_path.clone(), 0, 3, &conn) {
+            if let Some(root_node) = scan_folder_recursive(root_path.clone(), 0, 1, &conn) {
                 tree.push(root_node);
             }
         }

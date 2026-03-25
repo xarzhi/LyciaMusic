@@ -35,7 +35,7 @@ interface UseSongTableAlphabetIndexOptions {
   currentFolderFilter: Ref<string>;
   folderTree: Ref<FolderNode[]>;
   refreshFolder: (folderPath: string) => Promise<unknown>;
-  expandFolderPath: (path: string) => void;
+  expandFolderPath: (path: string) => Promise<unknown>;
 }
 
 export function useSongTableAlphabetIndex({
@@ -245,7 +245,7 @@ export function useSongTableAlphabetIndex({
 
     activeRootPath.value = targetRootPath;
     currentFolderFilter.value = targetFolderPath;
-    expandFolderPath(targetFolderPath);
+    await expandFolderPath(targetFolderPath);
     await refreshFolder(targetFolderPath);
     await nextTick();
     requestAnimationFrame(() => {

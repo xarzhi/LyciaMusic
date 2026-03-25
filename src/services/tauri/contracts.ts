@@ -52,6 +52,7 @@ export interface TauriCommandMap {
   // Deprecated compat command. Do not use in new main-flow code.
   remove_sidebar_folder: { payload: { path: string }; response: void };
   get_library_hierarchy: { payload: undefined; response: FolderNode[] };
+  get_folder_children: { payload: { folderPath: string }; response: FolderNode[] };
   get_library_folders: { payload: undefined; response: LibraryFolder[] };
   // Deprecated compat command. Main folder-tree flow must use get_library_hierarchy.
   get_sidebar_hierarchy: { payload: undefined; response: FolderNode[] };

@@ -37,13 +37,13 @@ export function useSidebarPlaylistContextMenu({
 
   const handleDeletePlaylist = (id: string, name: string) => {
     playlistsToDelete.value = [id];
-    deleteModalContent.value = `Delete playlist "${name}"?`;
+    deleteModalContent.value = `确定要删除播放列表 "${name}" 吗？`;
     showDeleteModal.value = true;
   };
 
   const handleDeletePlaylistBatch = (ids: string[], count: number) => {
     playlistsToDelete.value = ids;
-    deleteModalContent.value = `Delete ${count} playlists?`;
+    deleteModalContent.value = `确定要删除 ${count} 个播放列表吗？`;
     showDeleteModal.value = true;
   };
 

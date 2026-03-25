@@ -22,6 +22,8 @@ const makeFolderNode = (
   name: path.split('/').pop() || path,
   path,
   children: [],
+  child_count: 0,
+  children_loaded: true,
   song_count: 0,
   cover_song_path: null,
   is_expanded: false,

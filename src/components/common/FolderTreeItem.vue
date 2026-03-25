@@ -1,48 +1,49 @@
 <template>
   <div class="select-none text-gray-800 dark:text-gray-200">
-    <!-- Folder Row -->
-    <div 
+    <div
       class="flex items-center px-2 py-1.5 rounded-md cursor-pointer transition-colors group relative folder-drop-target"
       :data-folder-path="node.path"
       :data-folder-name="node.name"
       :class="[
         isSelected ? 'bg-blue-500/10 text-blue-500 dark:text-blue-400' : 'hover:bg-black/5 dark:hover:bg-white/5',
-        isTarget ? 'ring-2 ring-blue-500 bg-blue-50/50 dark:bg-blue-900/20 z-10' : ''
+        isTarget ? 'ring-2 ring-blue-500 bg-blue-50/50 dark:bg-blue-900/20 z-10' : '',
       ]"
       @click.stop="handleSelectAndExpand"
       @mousemove="handleMouseMoveDrag"
       @mouseleave="handleMouseLeaveDrag"
       @contextmenu.prevent.stop="handleContextMenu"
     >
-      <!-- Indentation -->
       <div :style="{ width: `${depth * 16}px` }" class="shrink-0 transition-all"></div>
 
-
-
-      <!-- Icon/Cover -->
       <div class="w-9 h-9 rounded shrink-0 mr-2 overflow-hidden bg-gray-200 dark:bg-gray-700 flex items-center justify-center border border-black/5 dark:border-white/5 relative">
-         <img v-if="coverUrl" :src="coverUrl" class="w-full h-full object-cover transition-opacity duration-300" />
-         <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>
+        <img v-if="coverUrl" :src="coverUrl" class="w-full h-full object-cover transition-opacity duration-300" />
+        <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>
       </div>
 
-      <!-- Name & Count -->
       <div class="flex-1 min-w-0 flex flex-col justify-center">
         <div class="text-sm font-medium truncate leading-tight">{{ node.name }}</div>
-        <div 
+        <div
           class="text-[10px] truncate mt-0.5 flex items-center gap-1"
-          :class="node.children.length > 0 
-            ? 'text-blue-500 dark:text-blue-400' 
-            : 'text-gray-500 dark:text-gray-400'"
+          :class="node.child_count > 0 ? 'text-blue-500 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'"
         >
-          <svg v-if="node.children.length > 0" xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+          <svg v-if="node.child_count > 0" xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" viewBox="0 0 20 20" fill="currentColor">
             <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
           </svg>
-          <span>{{ node.children.length > 0 ? node.children.length + ' 文件夹' : node.song_count + ' 首' }}</span>
+          <svg
+            v-if="node.is_loading"
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-3 w-3 shrink-0 animate-spin"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" class="opacity-25" />
+            <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+          </svg>
+          <span>{{ node.child_count > 0 ? `${node.child_count} 个文件夹` : `${node.song_count} 首` }}</span>
         </div>
       </div>
     </div>
 
-    <!-- Children Transition -->
     <transition
       name="folder-expand"
       @before-enter="beforeEnter"
@@ -52,15 +53,27 @@
       @leave="leave"
       @after-leave="afterLeave"
     >
-      <div v-show="node.is_expanded" class="overflow-hidden" ref="expandContainer">
-        <FolderTreeItem 
-          v-for="child in node.children" 
-          :key="child.path" 
-          :node="child" 
+      <div v-show="node.is_expanded" class="overflow-hidden">
+        <div
+          v-if="node.is_loading"
+          class="flex items-center gap-2 px-2 py-2 text-xs text-gray-400 dark:text-gray-500"
+          :style="{ paddingLeft: `${depth * 16 + 16}px` }"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" class="opacity-25" />
+            <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+          </svg>
+          <span>正在加载子文件夹...</span>
+        </div>
+        <FolderTreeItem
+          v-for="child in node.children"
+          :key="child.path"
+          :node="child"
           :depth="depth + 1"
           :selectedPath="selectedPath"
-          @select="(n) => $emit('select', n)"
-          @contextmenu="(p) => $emit('contextmenu', p)"
+          @select="(childNode) => $emit('select', childNode)"
+          @toggle="(childNode) => $emit('toggle', childNode)"
+          @contextmenu="(payload) => $emit('contextmenu', payload)"
         />
       </div>
     </transition>
@@ -68,9 +81,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue';
-import { convertFileSrc } from '@tauri-apps/api/core';
-import { invoke } from '@tauri-apps/api/core';
+import { computed, onMounted, ref, watch } from 'vue';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+
 import { dragSession } from '../../composables/dragState';
 import type { FolderNode } from '../../types';
 
@@ -82,115 +95,107 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'select', node: FolderNode): void;
-  (e: 'contextmenu', payload: { event: MouseEvent, node: FolderNode }): void;
+  (e: 'toggle', node: FolderNode): void;
+  (e: 'contextmenu', payload: { event: MouseEvent; node: FolderNode }): void;
 }>();
 
 const isSelected = computed(() => props.selectedPath === props.node.path);
 
-// 🟢 Drag & Drop Logic
-const isTarget = computed(() => {
-  return dragSession.active && dragSession.type === 'song' && dragSession.targetFolder?.path === props.node.path;
-});
+const isTarget = computed(() =>
+  dragSession.active && dragSession.type === 'song' && dragSession.targetFolder?.path === props.node.path,
+);
 
 const handleMouseMoveDrag = () => {
-  if (dragSession.active && dragSession.type === 'song') {
-      if (dragSession.targetFolder?.path !== props.node.path) {
-          dragSession.targetFolder = { name: props.node.name, path: props.node.path };
-      }
+  if (dragSession.active && dragSession.type === 'song' && dragSession.targetFolder?.path !== props.node.path) {
+    dragSession.targetFolder = { name: props.node.name, path: props.node.path };
   }
 };
 
 const handleMouseLeaveDrag = () => {
-    if (dragSession.active && dragSession.type === 'song' && dragSession.targetFolder?.path === props.node.path) {
-        dragSession.targetFolder = null;
-    }
+  if (dragSession.active && dragSession.type === 'song' && dragSession.targetFolder?.path === props.node.path) {
+    dragSession.targetFolder = null;
+  }
 };
 
 const handleSelectAndExpand = () => {
   emit('select', props.node);
-  // 切换展开/折叠状态
-  props.node.is_expanded = !props.node.is_expanded;
+  emit('toggle', props.node);
 };
 
-const handleContextMenu = (e: MouseEvent) => {
-  emit('contextmenu', { event: e, node: props.node });
+const handleContextMenu = (event: MouseEvent) => {
+  emit('contextmenu', { event, node: props.node });
 };
 
 const coverUrl = ref('');
 
 const loadCover = async () => {
-   if (!props.node.cover_song_path) {
-       coverUrl.value = '';
-       return;
-   }
+  if (!props.node.cover_song_path) {
+    coverUrl.value = '';
+    return;
+  }
 
-   try {
-       const filePath = await invoke<string>('get_song_cover_thumbnail', { path: props.node.cover_song_path });
-       coverUrl.value = filePath ? convertFileSrc(filePath) : '';
-   } catch (e) {
-       coverUrl.value = '';
-       // console.error("Cover load failed", e);
-   }
+  try {
+    const filePath = await invoke<string>('get_song_cover_thumbnail', { path: props.node.cover_song_path });
+    coverUrl.value = filePath ? convertFileSrc(filePath) : '';
+  } catch {
+    coverUrl.value = '';
+  }
 };
 
 onMounted(loadCover);
-
 watch(() => props.node.cover_song_path, loadCover);
 
-// --- Animation Hooks ---
-const beforeEnter = (el: Element) => {
-  const element = el as HTMLElement;
-  element.style.height = '0';
-  element.style.opacity = '0';
+const beforeEnter = (element: Element) => {
+  const htmlElement = element as HTMLElement;
+  htmlElement.style.height = '0';
+  htmlElement.style.opacity = '0';
 };
 
-const enter = (el: Element, done: () => void) => {
-    const element = el as HTMLElement;
-    element.offsetHeight; // Force reflow
-    element.style.transition = 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)'; 
-    element.style.height = element.scrollHeight + 'px';
-    element.style.opacity = '1';
-    
-    const onTransitionEnd = (e: TransitionEvent) => {
-        if (e.target === element && e.propertyName === 'height') {
-             element.removeEventListener('transitionend', onTransitionEnd);
-             done();
-        }
-    };
-    element.addEventListener('transitionend', onTransitionEnd);
+const enter = (element: Element, done: () => void) => {
+  const htmlElement = element as HTMLElement;
+  htmlElement.offsetHeight;
+  htmlElement.style.transition = 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)';
+  htmlElement.style.height = `${htmlElement.scrollHeight}px`;
+  htmlElement.style.opacity = '1';
+
+  const onTransitionEnd = (event: TransitionEvent) => {
+    if (event.target === htmlElement && event.propertyName === 'height') {
+      htmlElement.removeEventListener('transitionend', onTransitionEnd);
+      done();
+    }
+  };
+
+  htmlElement.addEventListener('transitionend', onTransitionEnd);
 };
 
-const afterEnter = (el: Element) => {
-  const element = el as HTMLElement;
-  element.style.height = 'auto'; // Release height
-  element.style.opacity = '';
-  element.style.transition = '';
+const afterEnter = (element: Element) => {
+  const htmlElement = element as HTMLElement;
+  htmlElement.style.height = 'auto';
+  htmlElement.style.opacity = '';
+  htmlElement.style.transition = '';
 };
 
-const leave = (el: Element) => {
-  const element = el as HTMLElement;
-  // Lock height to pixel value before collapsing
-  element.style.height = element.offsetHeight + 'px';
-  element.offsetHeight; // Force reflow
-  
-  // Apply transition
+const leave = (element: Element) => {
+  const htmlElement = element as HTMLElement;
+  htmlElement.style.height = `${htmlElement.offsetHeight}px`;
+  htmlElement.offsetHeight;
+
   requestAnimationFrame(() => {
-      element.style.transition = 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)';
-      element.style.height = '0';
-      element.style.opacity = '0';
+    htmlElement.style.transition = 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)';
+    htmlElement.style.height = '0';
+    htmlElement.style.opacity = '0';
   });
 };
 
-const afterLeave = (el: Element) => {
-    const element = el as HTMLElement;
-    element.style.transition = '';
-    element.style.height = '';
-    element.style.opacity = '';
+const afterLeave = (element: Element) => {
+  const htmlElement = element as HTMLElement;
+  htmlElement.style.transition = '';
+  htmlElement.style.height = '';
+  htmlElement.style.opacity = '';
 };
 </script>
 
 <style scoped>
-/* We handle transition in JS for dynamic height, but keep base styles if needed */
 .folder-expand-move {
   transition: transform 0.3s ease;
 }

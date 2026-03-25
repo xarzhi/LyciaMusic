@@ -1,4 +1,5 @@
 import { ref, watch, type Ref } from 'vue';
+
 import type { FolderNode, Song } from '../types';
 
 interface ConfirmOptions {
@@ -18,7 +19,7 @@ interface UseHomeFolderManagementOptions {
   fetchFolderTree: () => Promise<unknown>;
   createFolder: (parentPath: string, folderName: string) => Promise<string>;
   deleteFolder: (path: string) => Promise<unknown>;
-  expandFolderPath: (path: string) => void;
+  expandFolderPath: (path: string) => Promise<unknown>;
   addLibraryFolder: () => Promise<unknown>;
   removeLibraryFolderLinked: (path: string) => Promise<unknown>;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
@@ -53,33 +54,14 @@ export function useHomeFolderManagement({
   const getOwningRootPath = (path: string) => {
     const normalizedTarget = normalizePath(path);
     const matchedRoots = libraryHierarchy.value
-      .map((node) => node.path)
-      .filter((root) => {
+      .map(node => node.path)
+      .filter(root => {
         const normalizedRoot = normalizePath(root);
         return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}/`);
       })
       .sort((left, right) => normalizePath(right).length - normalizePath(left).length);
 
     return matchedRoots[0] || activeRootPath.value || null;
-  };
-
-  const getRelativeDepth = (rootPath: string, folderPath: string) => {
-    const normalizedRoot = normalizePath(rootPath);
-    const normalizedFolder = normalizePath(folderPath);
-
-    if (!normalizedRoot || normalizedFolder === normalizedRoot) {
-      return 0;
-    }
-
-    if (!normalizedFolder.startsWith(`${normalizedRoot}/`)) {
-      return 0;
-    }
-
-    return normalizedFolder
-      .slice(normalizedRoot.length + 1)
-      .split('/')
-      .filter(Boolean)
-      .length;
   };
 
   const getParentFolderPath = (path: string) => path.replace(/[\\/][^\\/]+$/, '');
@@ -129,14 +111,8 @@ export function useHomeFolderManagement({
       return;
     }
 
-    const rootPath = getOwningRootPath(parentPath);
-    if (rootPath && getRelativeDepth(rootPath, parentPath) + 1 > 3) {
-      showToast('当前文件夹视图最多支持 3 层嵌套，请不要继续向更深层级新建。', 'info');
-      return;
-    }
-
     createFolderParentPath.value = parentPath;
-    createFolderRootPath.value = rootPath;
+    createFolderRootPath.value = getOwningRootPath(parentPath);
     showCreateFolderModal.value = true;
   };
 
@@ -154,9 +130,9 @@ export function useHomeFolderManagement({
         activeRootPath.value = createFolderRootPath.value;
       }
 
-      expandFolderPath(newFolderPath);
+      await expandFolderPath(newFolderPath);
       currentFolderFilter.value = newFolderPath;
-      showToast(`已创建文件夹：${folderName}`, 'success');
+      showToast(`已创建文件夹: ${folderName}`, 'success');
     } catch (error: any) {
       showToast(`新建文件夹失败: ${error?.message || error}`, 'error');
     } finally {
@@ -212,7 +188,7 @@ export function useHomeFolderManagement({
           skipNextRootSync.value = true;
           activeRootPath.value = owningRootPath;
         }
-        expandFolderPath(fallbackPath);
+        await expandFolderPath(fallbackPath);
         currentFolderFilter.value = fallbackPath;
       }
 
@@ -255,7 +231,7 @@ export function useHomeFolderManagement({
       title: '移除文件夹',
       confirmText: '移除',
       message: name
-        ? `确定要移除「${name}」吗？这不会删除本地文件。`
+        ? `确定要移除“${name}”吗？这不会删除本地文件。`
         : '确定要移除此文件夹吗？这不会删除本地文件。',
       action: async () => {
         const wasActive = activeRootPath.value === path;
@@ -279,7 +255,9 @@ export function useHomeFolderManagement({
     folderToDeletePath,
     syncRootSelection,
     handleActiveRootChange,
+    requestCreateFolder,
     confirmCreateFolder,
+    requestDeleteFolder,
     executeDeleteFolder,
     handleAddFolder,
     handleRootCreateFolderRequest,

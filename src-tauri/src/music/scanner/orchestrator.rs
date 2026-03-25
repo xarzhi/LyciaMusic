@@ -1,6 +1,6 @@
 use super::super::types::{FolderNode, GeneratedFolder, Song};
 use super::super::utils::{
-    descendant_like_patterns, is_supported_library_extension, normalize_path,
+    descendant_like_patterns, normalize_path,
 };
 use super::diff::{collect_scan_diff, load_db_snapshot_for_folder};
 use super::parser::parse_audio_files_internal;
@@ -155,6 +155,47 @@ pub fn find_first_song_recursive(path: &Path, conn: &rusqlite::Connection) -> Op
     .ok()?
 }
 
+fn count_songs_recursive(path: &Path, conn: &rusqlite::Connection) -> usize {
+    let path_str = normalize_path(&path.to_string_lossy());
+    let (pattern_forward, pattern_back) = descendant_like_patterns(&path_str);
+
+    conn.query_row(
+        "SELECT COUNT(*)
+         FROM songs
+         WHERE path = ?1
+            OR path LIKE ?2 ESCAPE '^'
+            OR path LIKE ?3 ESCAPE '^'",
+        params![&path_str, pattern_forward, pattern_back],
+        |row| row.get::<_, i64>(0),
+    )
+    .ok()
+    .map(|count| count.max(0) as usize)
+    .unwrap_or(0)
+}
+
+fn read_subdirectories(folder_path: &Path) -> Option<Vec<PathBuf>> {
+    let read_dir = fs::read_dir(folder_path).ok()?;
+    let mut subdirs: Vec<PathBuf> = read_dir
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect();
+
+    subdirs.sort_by(|left, right| {
+        let left_name = left
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| left.to_string_lossy().into_owned());
+        let right_name = right
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| right.to_string_lossy().into_owned());
+        left_name.cmp(&right_name)
+    });
+
+    Some(subdirs)
+}
+
 #[tauri::command]
 pub async fn get_folder_first_song(
     folder_path: String,
@@ -181,58 +222,37 @@ pub fn scan_folder_recursive(
         return None;
     }
 
+    let normalized_path = normalize_path(&folder_path.to_string_lossy());
     let folder_name = folder_path
         .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
-
-    let mut node = FolderNode {
-        name: folder_name,
-        path: normalize_path(&folder_path.to_string_lossy()),
-        children: Vec::new(),
-        song_count: 0,
-        cover_song_path: None,
-        is_expanded: false,
-    };
-
-    if let Ok(read_dir) = fs::read_dir(&folder_path) {
-        let entries: Vec<_> = read_dir.filter_map(|entry| entry.ok()).collect();
-        let mut songs_in_this_dir = 0;
-        let mut subdirs = Vec::new();
-
-        for entry in entries {
-            let path = entry.path();
-            if path.is_dir() {
-                subdirs.push(path);
-            } else if path.is_file() {
-                if let Some(ext) = path.extension() {
-                    let ext_str = ext.to_string_lossy().to_lowercase();
-                    if is_supported_library_extension(&ext_str) {
-                        songs_in_this_dir += 1;
-                    }
-                }
-            }
-        }
-
-        for sub in subdirs {
-            if let Some(child_node) = scan_folder_recursive(sub, current_depth + 1, max_depth, conn)
-            {
-                node.song_count += child_node.song_count;
-                node.children.push(child_node);
-            }
-        }
-
-        node.song_count += songs_in_this_dir;
-        if node.song_count > 0 {
-            node.cover_song_path = find_first_song_recursive(&folder_path, conn);
-        }
-
-        node.children
-            .sort_by(|left, right| left.name.cmp(&right.name));
+        .map(|name| name.to_string_lossy().into_owned())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| normalized_path.clone());
+    let subdirs = read_subdirectories(&folder_path)?;
+    let child_count = subdirs.len();
+    let should_preload_children = current_depth < max_depth;
+    let children = if should_preload_children {
+        subdirs
+            .iter()
+            .filter_map(|subdir| scan_folder_recursive(subdir.clone(), current_depth + 1, max_depth, conn))
+            .collect()
     } else {
-        return None;
-    }
+        Vec::new()
+    };
+    let song_count = count_songs_recursive(&folder_path, conn);
 
-    Some(node)
+    Some(FolderNode {
+        name: folder_name,
+        path: normalized_path,
+        children,
+        child_count,
+        children_loaded: should_preload_children || child_count == 0,
+        song_count,
+        cover_song_path: if song_count > 0 {
+            find_first_song_recursive(&folder_path, conn)
+        } else {
+            None
+        },
+        is_expanded: false,
+    })
 }

@@ -219,18 +219,18 @@ const handleOpenStatisticsView = () => {
 
     <ModernModal
       v-model:visible="showDeleteModal"
-      title="Delete Playlist"
+      title="删除播放列表"
       :content="deleteModalContent"
       type="danger"
-      confirm-text="Delete"
+      confirm-text="删除"
       @confirm="confirmDeletePlaylist"
     />
 
     <ModernInputModal
       v-model:visible="showCreateModal"
-      title="Create Playlist"
-      placeholder="Enter playlist name"
-      confirm-text="Create"
+      title="新建播放列表"
+      placeholder="请输入播放列表名称"
+      confirm-text="创建"
       @confirm="confirmCreatePlaylist"
     />
   </aside>

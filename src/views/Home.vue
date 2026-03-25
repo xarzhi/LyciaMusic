@@ -83,34 +83,34 @@
 
     <ModernModal
       v-model:visible="showSongPhysicalDeleteConfirm"
-      title="Delete File Permanently"
-      :content="`Are you sure you want to permanently delete '${songToPhysicalDelete?.title}' from disk? This cannot be undone.`"
+      title="永久删除文件"
+      :content="`确定要从磁盘中永久删除歌曲 '${songToPhysicalDelete?.title}' 吗？此操作不可逆！`"
       type="danger"
-      confirm-text="Delete Permanently"
+      confirm-text="永久删除"
       @confirm="executeSongPhysicalDelete"
     />
 
     <ModernModal
       v-model:visible="showFolderDeleteConfirm"
-      title="Delete Folder"
-      :content="`Are you sure you want to delete folder '${folderToDeletePath}'? This will also remove local files inside it.`"
+      title="删除文件夹"
+      :content="`确定要删除文件夹 '${folderToDeletePath}' 吗？这也将移除其中的本地文件。`"
       type="danger"
-      confirm-text="Delete Folder"
+      confirm-text="删除文件夹"
       @confirm="executeDeleteFolder"
     />
 
     <ModernInputModal
       :visible="showCreateFolderModal"
-      title="Create Folder"
-      placeholder="Enter folder name"
-      confirm-text="Create"
+      title="新建文件夹"
+      placeholder="请输入文件夹名称"
+      confirm-text="创建"
       @cancel="showCreateFolderModal = false"
       @confirm="confirmCreateFolder"
     />
 
     <ModernInputModal
       :visible="showRenameModal"
-      title="Rename Playlist"
+      title="重命名播放列表"
       :initial-value="renameInitialValue"
       @cancel="showRenameModal = false"
       @confirm="confirmRename"

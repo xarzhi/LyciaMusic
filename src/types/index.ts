@@ -48,9 +48,12 @@ export interface FolderNode {
   name: string;
   path: string;
   children: FolderNode[];
+  child_count: number;
+  children_loaded: boolean;
   song_count: number;
   cover_song_path: string | null;
   is_expanded: boolean;
+  is_loading?: boolean;
 }
 
 export type LibraryScanPhase = 'collecting' | 'parsing' | 'writing' | 'complete' | 'error';

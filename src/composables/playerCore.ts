@@ -415,8 +415,16 @@ function createPlayerCore() {
     return playerFolderTree.fetchFolderTree();
   }
 
+  async function ensureFolderChildrenLoaded(targetPath: string) {
+    return playerFolderTree.ensureFolderChildrenLoaded(targetPath);
+  }
+
   async function createFolder(parentPath: string, folderName: string) {
     return playerFolderTree.createFolder(parentPath, folderName);
+  }
+
+  async function toggleFolderNode(targetPath: string) {
+    return playerFolderTree.toggleFolderNode(targetPath);
   }
 
   async function addFoldersFromStructure() {
@@ -554,10 +562,10 @@ function createPlayerCore() {
     deleteFolder,
     moveFilePhysical,
     fetchFolderTree,
+    ensureFolderChildrenLoaded,
     createFolder,
-    expandFolderPath: (targetPath: string) => {
-      playerFolderTree.expandFolderPath(targetPath);
-    },
+    toggleFolderNode,
+    expandFolderPath: (targetPath: string) => playerFolderTree.expandFolderPath(targetPath),
   };
 
   const sortingDomain = {

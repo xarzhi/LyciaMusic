@@ -199,9 +199,7 @@ export function useLibraryCurrentViewSongs({
 
     return canonicalSongs.value.filter(song =>
       songHasArtist(song, filterCondition.value) ||
-      matchesAlbumKey(song, filterCondition.value) ||
-      (song.genre || 'Unknown') === filterCondition.value ||
-      ((song.year?.substring(0, 4)) || 'Unknown') === filterCondition.value,
+      matchesAlbumKey(song, filterCondition.value),
     );
   });
 

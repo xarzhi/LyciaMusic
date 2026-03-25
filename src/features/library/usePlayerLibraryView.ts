@@ -110,7 +110,6 @@ export function usePlayerLibraryView() {
     filteredAlbumList: catalogSelectors.filteredAlbumList,
     filteredArtistList: catalogSelectors.filteredArtistList,
     folderList: folderSelectors.folderList,
-    genreList: catalogSelectors.genreList,
     isFolderMode,
     isLocalMusic,
     libraryFolders,
@@ -119,7 +118,6 @@ export function usePlayerLibraryView() {
     recentPlaylistList: collectionSelectors.recentPlaylistList,
     searchQuery,
     sourceSongs,
-    yearList: catalogSelectors.yearList,
     // Compatibility aliases for existing callers.
     displaySongList: currentViewSongs,
     folderTree: libraryHierarchy,

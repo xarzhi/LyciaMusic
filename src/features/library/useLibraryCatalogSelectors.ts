@@ -131,34 +131,10 @@ export function useLibraryCatalogSelectors({
     );
   });
 
-  const genreList = computed(() => {
-    const map = new Map<string, number>();
-
-    canonicalSongs.value.forEach(song => {
-      const key = song.genre || 'Unknown';
-      map.set(key, (map.get(key) || 0) + 1);
-    });
-
-    return Array.from(map).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
-  });
-
-  const yearList = computed(() => {
-    const map = new Map<string, number>();
-
-    canonicalSongs.value.forEach(song => {
-      const key = song.year && song.year.length >= 4 ? song.year.substring(0, 4) : 'Unknown';
-      map.set(key, (map.get(key) || 0) + 1);
-    });
-
-    return Array.from(map).map(([name, count]) => ({ name, count })).sort((a, b) => b.name.localeCompare(a.name));
-  });
-
   return {
     artistList,
     albumList,
     filteredArtistList,
     filteredAlbumList,
-    genreList,
-    yearList,
   };
 }

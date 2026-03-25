@@ -21,7 +21,6 @@ import type { ScanLibraryOptions } from './playerLibraryScan';
 import { useCollectionsActions } from '../features/collections/useCollectionsActions';
 import { useFileImport } from './useFileImport';
 import { useLibrarySync } from '../features/library/useLibrarySync';
-import { useNavigationActions } from './useNavigationActions';
 import { usePlaybackActions } from '../features/playback/usePlaybackActions';
 import { usePlayerLibraryView } from '../features/library/usePlayerLibraryView';
 import { useWindowActions } from './useWindowActions';
@@ -176,8 +175,6 @@ function createPlayerCore() {
     albumList,
     filteredArtistList,
     filteredAlbumList,
-    genreList,
-    yearList,
     folderList,
     favoriteSongList,
     favArtistList,
@@ -220,9 +217,7 @@ function createPlayerCore() {
   };
   const resetShuffleState = () => playerQueue.resetShuffleState();
 
-  const playerPlaylist = createPlayerPlaylist({
-    switchViewToAll: () => navigationStore.switchViewToAll(),
-  });
+  const playerPlaylist = createPlayerPlaylist();
 
   const playerHistoryFavorites = createPlayerHistoryFavorites({
     legacyPlayerHistoryKey: LEGACY_PLAYER_HISTORY_KEY,
@@ -381,12 +376,6 @@ function createPlayerCore() {
     }
   }, { immediate: true });
 
-  const navigationActions = useNavigationActions({
-    navigationStore,
-    artistList,
-    albumList,
-  });
-
   librarySync = useLibrarySync({
     fetchLibraryFolders,
     scanLibrary,
@@ -515,8 +504,6 @@ function createPlayerCore() {
     albumList,
     filteredArtistList,
     filteredAlbumList,
-    genreList,
-    yearList,
     folderList,
     favoriteSongList,
     favArtistList,
@@ -638,7 +625,6 @@ function createPlayerCore() {
     ...lifecycle,
     ...libraryDomain,
     ...collectionsActions,
-    ...navigationActions,
     ...playbackDomain,
     ...windowActions,
     ...sortingDomain,
@@ -651,7 +637,6 @@ function createPlayerCore() {
     appShellDomain,
     libraryDomain,
     collectionsDomain: collectionsActions,
-    navigationDomain: navigationActions,
     playbackDomain,
     windowDomain: windowActions,
     sortingDomain,

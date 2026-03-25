@@ -1,13 +1,7 @@
 import type { Song } from '../types';
 import { useLibraryCollections } from '../features/collections/useLibraryCollections';
 
-interface CreatePlayerPlaylistDeps {
-  switchViewToAll: () => void;
-}
-
-export const createPlayerPlaylist = ({
-  switchViewToAll: _switchViewToAll,
-}: CreatePlayerPlaylistDeps) => {
+export const createPlayerPlaylist = () => {
   const libraryCollections = useLibraryCollections();
 
   const createPlaylist = (name: string, initialSongs: string[] = []) => {

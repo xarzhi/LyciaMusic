@@ -1,19 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
-
-vi.mock('../router', () => ({
-  default: {
-    push: vi.fn().mockResolvedValue(undefined),
-    replace: vi.fn().mockResolvedValue(undefined),
-  },
-}));
-
-import router from '../router';
 import type { Song } from '../types';
 import { useCollectionsActions } from '../features/collections/useCollectionsActions';
 import { useFileImport } from './useFileImport';
 import { useLibrarySync } from '../features/library/useLibrarySync';
-import { useNavigationActions } from './useNavigationActions';
 import { usePlaybackActions } from '../features/playback/usePlaybackActions';
 import { useWindowActions } from './useWindowActions';
 
@@ -89,9 +79,8 @@ describe('player action hooks', () => {
     expect(toggleQueue).toHaveBeenCalledTimes(1);
   });
 
-  it('forwards collection, navigation, library, and import actions', async () => {
+  it('forwards collection, library, and import actions', () => {
     const createPlaylist = vi.fn();
-    const switchLocalTab = vi.fn();
     const scanLibrary = vi.fn();
     const addFoldersFromStructure = vi.fn();
 
@@ -115,25 +104,6 @@ describe('player action hooks', () => {
         clearFavorites: vi.fn(),
       },
     });
-    const navigationActions = useNavigationActions({
-      navigationStore: {
-        switchToFolderView: vi.fn(),
-        viewArtist: vi.fn(),
-        viewAlbum: vi.fn(),
-        viewGenre: vi.fn(),
-        viewYear: vi.fn(),
-        switchViewToAll: vi.fn(),
-        switchViewToFolder: vi.fn(),
-        switchToRecent: vi.fn(),
-        switchToFavorites: vi.fn(),
-        switchToStatistics: vi.fn(),
-        setSearch: vi.fn(),
-        switchLocalTab,
-        switchFavTab: vi.fn(),
-      },
-      artistList: ref([{ name: 'Artist A' }]),
-      albumList: ref([{ key: 'Album::Artist A' }]),
-    });
     const librarySync = useLibrarySync({
       fetchLibraryFolders: vi.fn(),
       addLibraryFolder: vi.fn(),
@@ -154,24 +124,10 @@ describe('player action hooks', () => {
     });
 
     collectionsActions.createPlaylist('Daily Mix', [demoSong.path]);
-    await navigationActions.switchToFavorites();
-    await navigationActions.switchViewToAll();
-    navigationActions.switchLocalTab('artist');
     librarySync.scanLibrary();
     fileImportActions.addFoldersFromStructure();
 
     expect(createPlaylist).toHaveBeenCalledWith('Daily Mix', [demoSong.path]);
-    expect(router.push).toHaveBeenNthCalledWith(1, {
-      path: '/favorites',
-    });
-    expect(router.push).toHaveBeenNthCalledWith(2, {
-      path: '/',
-      query: {},
-    });
-    expect(switchLocalTab).toHaveBeenCalledWith('artist', {
-      firstArtistName: 'Artist A',
-      firstAlbumKey: 'Album::Artist A',
-    });
     expect(scanLibrary).toHaveBeenCalledTimes(1);
     expect(addFoldersFromStructure).toHaveBeenCalledTimes(1);
   });

@@ -1,4 +1,4 @@
-import type { Router } from 'vue-router';
+import type { RouteLocationRaw, Router } from 'vue-router';
 
 type HomeNavigationTarget =
   | { view: 'all' }
@@ -6,7 +6,15 @@ type HomeNavigationTarget =
   | { view: 'folder'; folder?: string }
   | { view: 'statistics' };
 
-const buildHomeLocation = (target: HomeNavigationTarget) => {
+type AppNavigationTarget =
+  | { section: 'home'; target: HomeNavigationTarget }
+  | { section: 'artists' }
+  | { section: 'albums' }
+  | { section: 'favorites' }
+  | { section: 'recent' }
+  | { section: 'settings' };
+
+const buildHomeLocation = (target: HomeNavigationTarget): RouteLocationRaw => {
   switch (target.view) {
     case 'artist':
     case 'album':
@@ -45,9 +53,28 @@ const buildHomeLocation = (target: HomeNavigationTarget) => {
   }
 };
 
+export const buildAppLocation = (target: AppNavigationTarget): RouteLocationRaw => {
+  switch (target.section) {
+    case 'home':
+      return buildHomeLocation(target.target);
+    case 'artists':
+      return { path: '/artists' };
+    case 'albums':
+      return { path: '/albums' };
+    case 'favorites':
+      return { path: '/favorites' };
+    case 'recent':
+      return { path: '/recent' };
+    case 'settings':
+      return { path: '/settings' };
+    default:
+      return { path: '/' };
+  }
+};
+
 export function useHomeNavigation(router: Router) {
-  const openHome = async (target: HomeNavigationTarget, options: { replace?: boolean } = {}) => {
-    const location = buildHomeLocation(target);
+  const openApp = async (target: AppNavigationTarget, options: { replace?: boolean } = {}) => {
+    const location = buildAppLocation(target);
     if (options.replace) {
       await router.replace(location);
       return;
@@ -55,6 +82,9 @@ export function useHomeNavigation(router: Router) {
 
     await router.push(location);
   };
+
+  const openHome = async (target: HomeNavigationTarget, options: { replace?: boolean } = {}) =>
+    openApp({ section: 'home', target }, options);
 
   const openHomeAll = (options?: { replace?: boolean }) =>
     openHome({ view: 'all' }, options);
@@ -74,7 +104,23 @@ export function useHomeNavigation(router: Router) {
   const openHomeStatistics = (options?: { replace?: boolean }) =>
     openHome({ view: 'statistics' }, options);
 
+  const openArtists = (options?: { replace?: boolean }) =>
+    openApp({ section: 'artists' }, options);
+
+  const openAlbums = (options?: { replace?: boolean }) =>
+    openApp({ section: 'albums' }, options);
+
+  const openFavorites = (options?: { replace?: boolean }) =>
+    openApp({ section: 'favorites' }, options);
+
+  const openRecent = (options?: { replace?: boolean }) =>
+    openApp({ section: 'recent' }, options);
+
+  const openSettings = (options?: { replace?: boolean }) =>
+    openApp({ section: 'settings' }, options);
+
   return {
+    openApp,
     openHome,
     openHomeAll,
     openHomeArtist,
@@ -82,5 +128,10 @@ export function useHomeNavigation(router: Router) {
     openHomePlaylist,
     openHomeFolder,
     openHomeStatistics,
+    openArtists,
+    openAlbums,
+    openFavorites,
+    openRecent,
+    openSettings,
   };
 }

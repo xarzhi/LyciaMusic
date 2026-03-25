@@ -1,3 +1,5 @@
+import router from '../router';
+import { useHomeNavigation } from './useHomeNavigation';
 import { useNavigationStore } from '../shared/stores/navigation';
 
 interface ArtistListItem {
@@ -18,17 +20,26 @@ export const createPlayerNavigation = ({
   getAlbumList,
 }: CreatePlayerNavigationDeps) => {
   const navigationStore = useNavigationStore();
+  const {
+    openHomeFolder,
+    openHomeArtist,
+    openHomeAlbum,
+    openHomeAll,
+    openRecent,
+    openFavorites,
+    openHomeStatistics,
+  } = useHomeNavigation(router);
 
   const switchToFolderView = () => {
-    navigationStore.switchToFolderView();
+    return openHomeFolder();
   };
 
   const viewArtist = (name: string) => {
-    navigationStore.viewArtist(name);
+    return openHomeArtist(name);
   };
 
   const viewAlbum = (name: string) => {
-    navigationStore.viewAlbum(name);
+    return openHomeAlbum(name);
   };
 
   const viewGenre = (name: string) => {
@@ -40,23 +51,23 @@ export const createPlayerNavigation = ({
   };
 
   const switchViewToAll = () => {
-    navigationStore.switchViewToAll();
+    return openHomeAll();
   };
 
   const switchViewToFolder = (path: string) => {
-    navigationStore.switchViewToFolder(path);
+    return openHomeFolder(path);
   };
 
   const switchToRecent = () => {
-    navigationStore.switchToRecent();
+    return openRecent();
   };
 
   const switchToFavorites = () => {
-    navigationStore.switchToFavorites();
+    return openFavorites();
   };
 
   const switchToStatistics = () => {
-    navigationStore.switchToStatistics();
+    return openHomeStatistics();
   };
 
   const setSearch = (query: string) => {

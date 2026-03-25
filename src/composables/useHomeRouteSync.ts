@@ -112,19 +112,40 @@ export function useHomeRouteSync({
   folderTree,
   searchQuery,
 }: UseHomeRouteSyncOptions) {
+  const resetToDefaultHomeState = () => {
+    currentViewMode.value = 'all';
+    filterCondition.value = '';
+    searchQuery.value = '';
+  };
+
+  const applyCollectionRouteState = (viewMode: 'favorites' | 'recent') => {
+    currentViewMode.value = viewMode;
+    filterCondition.value = '';
+    searchQuery.value = '';
+  };
+
   watch(
     [() => route.path, () => route.query.view, () => route.query.filter, () => route.query.folder],
-    ([path], [oldPath]) => {
+    ([path]) => {
+      if (path === '/favorites') {
+        applyCollectionRouteState('favorites');
+        return;
+      }
+
+      if (path === '/recent') {
+        applyCollectionRouteState('recent');
+        return;
+      }
+
       if (path !== '/') {
+        if (path === '/artists' || path === '/albums' || path === '/settings') {
+          resetToDefaultHomeState();
+        }
         return;
       }
 
       if (!hasExplicitHomeQuery(route.query)) {
-        if (oldPath === '/') {
-          currentViewMode.value = 'all';
-          filterCondition.value = '';
-          searchQuery.value = '';
-        }
+        resetToDefaultHomeState();
         return;
       }
 

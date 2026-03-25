@@ -47,6 +47,10 @@ const {
   openHomeFolder,
   openHomePlaylist,
   openHomeStatistics,
+  openArtists,
+  openAlbums,
+  openFavorites,
+  openRecent,
 } = useHomeNavigation(router);
 const { preloadCovers, loadCover } = useCoverCache();
 
@@ -138,19 +142,19 @@ const handleOpenAllView = () => {
 };
 
 const handleOpenArtistsView = () => {
-  void router.push('/artists');
+  void openArtists();
 };
 
 const handleOpenAlbumsView = () => {
-  void router.push('/albums');
+  void openAlbums();
 };
 
 const handleOpenFavoritesView = () => {
-  void router.push('/favorites');
+  void openFavorites();
 };
 
 const handleOpenRecentView = () => {
-  void router.push('/recent');
+  void openRecent();
 };
 
 const handleOpenFolderView = () => {

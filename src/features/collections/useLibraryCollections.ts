@@ -3,15 +3,16 @@ import type { Song } from '../../types';
 import { playerStorage } from '../../services/storage/playerStorage';
 import { historyApi } from '../../services/tauri/historyApi';
 import { useCollectionsStore } from './store';
-import { useNavigationStore } from '../../shared/stores/navigation';
+import router from '../../router';
+import { useHomeNavigation } from '../../composables/useHomeNavigation';
 import { useUiStore } from '../../shared/stores/ui';
 
 const LEGACY_PLAYER_HISTORY_KEY = 'player_history';
 
 export function useLibraryCollections() {
   const collectionsStore = useCollectionsStore();
-  const navigationStore = useNavigationStore();
   const uiStore = useUiStore();
+  const { openHomeAll, openHomePlaylist } = useHomeNavigation(router);
   const collectionsRefs = storeToRefs(collectionsStore);
   const uiRefs = storeToRefs(uiStore);
 
@@ -20,9 +21,14 @@ export function useLibraryCollections() {
 
   const deletePlaylist = (id: string) => {
     const deleted = collectionsStore.deletePlaylist(id);
+    const currentRoute = router.currentRoute.value;
+    const openedPlaylistId =
+      currentRoute.path === '/' && currentRoute.query.view === 'playlist'
+        ? currentRoute.query.filter
+        : undefined;
 
-    if (deleted && navigationStore.currentViewMode === 'playlist' && navigationStore.filterCondition === id) {
-      navigationStore.switchViewToAll();
+    if (deleted && openedPlaylistId === id) {
+      void openHomeAll({ replace: true });
     }
 
     return deleted;
@@ -44,7 +50,7 @@ export function useLibraryCollections() {
     collectionsStore.getSongsFromPlaylist(playlistId);
 
   const viewPlaylist = (playlistId: string) => {
-    navigationStore.viewPlaylist(playlistId);
+    void openHomePlaylist(playlistId);
   };
 
   const resolveSongPath = (target: Song | string | null | undefined) => {

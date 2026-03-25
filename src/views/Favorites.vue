@@ -61,7 +61,6 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
 import type { Song } from '../types';
 import { useLibraryCollections } from '../features/collections/useLibraryCollections';
 import { usePlaybackController } from '../features/playback/usePlaybackController';
@@ -76,10 +75,7 @@ import AddToPlaylistModal from '../components/overlays/AddToPlaylistModal.vue';
 import SongContextMenu from '../components/overlays/SongContextMenu.vue';
 import ModernModal from '../components/common/ModernModal.vue';
 import { useSongDrag } from '../composables/useSongDrag';
-import { useNavigationStore } from '../shared/stores/navigation';
 
-const route = useRoute();
-const navigationStore = useNavigationStore();
 const { displaySongList } = usePlayerLibraryView();
 const { playSong, addSongsToQueue } = usePlaybackController();
 const {
@@ -184,9 +180,4 @@ const handleContextMenu = (e: MouseEvent, song: Song) => {
 
 
 // ========== 路由监听 ==========
-watch(() => route.path, (path) => {
-  if (path === '/favorites') {
-    navigationStore.switchToFavorites();
-  }
-}, { immediate: true });
 </script>

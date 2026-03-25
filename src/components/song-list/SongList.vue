@@ -26,8 +26,7 @@ const router = useRouter();
 const { 
   songList, displaySongList, currentViewMode, 
   favTab, favDetailFilter, playSong, 
-  addSongsToPlaylist, favoritePaths, moveFilesToFolder,
-  switchViewToAll, switchToRecent, switchToFavorites
+  addSongsToPlaylist, favoritePaths, moveFilesToFolder
 } = usePlayer();
 
 // 状态管理
@@ -120,17 +119,6 @@ watch(() => route.query, (query) => {
   }
 }, { immediate: true });
 
-watch(() => route.path, (path) => {
-  if (path === '/favorites') {
-    switchToFavorites();
-  } else if (path === '/recent') {
-    switchToRecent();
-  } else if (path === '/') {
-    if (currentViewMode.value !== 'folder' && currentViewMode.value !== 'playlist') {
-       switchViewToAll();
-    }
-  }
-}, { immediate: true });
 
 // 🟢 Song Physical Delete Logic
 const showSongPhysicalDeleteConfirm = ref(false);

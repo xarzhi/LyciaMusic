@@ -1,4 +1,6 @@
 import type { Ref } from 'vue';
+import router from '../router';
+import { useHomeNavigation } from './useHomeNavigation';
 
 interface NavigationStoreApi {
   switchToFolderView: () => void;
@@ -27,16 +29,26 @@ export function useNavigationActions({
   artistList,
   albumList,
 }: UseNavigationActionsOptions) {
-  const switchToFolderView = () => navigationStore.switchToFolderView();
-  const viewArtist = (name: string) => navigationStore.viewArtist(name);
-  const viewAlbum = (name: string) => navigationStore.viewAlbum(name);
+  const {
+    openHomeFolder,
+    openHomeArtist,
+    openHomeAlbum,
+    openHomeAll,
+    openRecent,
+    openFavorites,
+    openHomeStatistics,
+  } = useHomeNavigation(router);
+
+  const switchToFolderView = () => openHomeFolder();
+  const viewArtist = (name: string) => openHomeArtist(name);
+  const viewAlbum = (name: string) => openHomeAlbum(name);
   const viewGenre = (name: string) => navigationStore.viewGenre(name);
   const viewYear = (name: string) => navigationStore.viewYear(name);
-  const switchViewToAll = () => navigationStore.switchViewToAll();
-  const switchViewToFolder = (path: string) => navigationStore.switchViewToFolder(path);
-  const switchToRecent = () => navigationStore.switchToRecent();
-  const switchToFavorites = () => navigationStore.switchToFavorites();
-  const switchToStatistics = () => navigationStore.switchToStatistics();
+  const switchViewToAll = () => openHomeAll();
+  const switchViewToFolder = (path: string) => openHomeFolder(path);
+  const switchToRecent = () => openRecent();
+  const switchToFavorites = () => openFavorites();
+  const switchToStatistics = () => openHomeStatistics();
   const setSearch = (query: string) => navigationStore.setSearch(query);
   const switchLocalTab = (tab: 'default' | 'artist' | 'album') =>
     navigationStore.switchLocalTab(tab, {

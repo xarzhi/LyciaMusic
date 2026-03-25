@@ -41,7 +41,7 @@ describe('useHomeRouteSync', () => {
     vi.clearAllMocks();
   });
 
-  it('updates global folder state before a kept-alive home scope resumes', async () => {
+  it('keeps home state normalized while allowing kept-alive home to resume into folder mode', async () => {
     const route = createRoute('/artists');
     const router = {
       replace: vi.fn().mockResolvedValue(undefined),
@@ -81,7 +81,7 @@ describe('useHomeRouteSync', () => {
       });
     });
 
-    expect(homeState.localViewMode.value).toBe('artist');
+    expect(homeState.localViewMode.value).toBe('all');
 
     homeScope.pause();
     Object.assign(route, {
@@ -99,7 +99,7 @@ describe('useHomeRouteSync', () => {
     expect(currentFolderFilter.value).toBe('/music/library/live');
     expect(activeRootPath.value).toBe('/music/library');
     expect(searchQuery.value).toBe('');
-    expect(homeState.localViewMode.value).toBe('artist');
+    expect(homeState.localViewMode.value).toBe('all');
     expect(router.replace).not.toHaveBeenCalled();
 
     homeScope.resume();
@@ -154,6 +154,103 @@ describe('useHomeRouteSync', () => {
         folder: '/music/root-a',
       },
     });
+
+    scope.stop();
+  });
+
+  it('resets stale home state when returning to plain home from a non-home route', async () => {
+    const route = createRoute('/artists');
+    const router = {
+      replace: vi.fn().mockResolvedValue(undefined),
+    } as unknown as Router;
+
+    const currentViewMode = ref('folder');
+    const filterCondition = ref('');
+    const currentFolderFilter = ref('/music/root-a/live');
+    const activeRootPath = ref<string | null>('/music/root-a');
+    const folderTree = ref([
+      makeFolderNode('/music/root-a'),
+    ]);
+    const searchQuery = ref('should clear');
+
+    const scope = effectScope();
+    scope.run(() => {
+      useHomeRouteSync({
+        route,
+        router,
+        currentViewMode,
+        filterCondition,
+        currentFolderFilter,
+        activeRootPath,
+        folderTree,
+        searchQuery,
+      });
+    });
+
+    Object.assign(route, {
+      path: '/',
+      query: {},
+    });
+
+    await nextTick();
+
+    expect(currentViewMode.value).toBe('all');
+    expect(filterCondition.value).toBe('');
+    expect(currentFolderFilter.value).toBe('/music/root-a/live');
+    expect(activeRootPath.value).toBe('/music/root-a');
+    expect(searchQuery.value).toBe('');
+    expect(router.replace).not.toHaveBeenCalled();
+
+    scope.stop();
+  });
+
+  it('maps favorites and recent routes into the shared navigation state', async () => {
+    const route = createRoute('/favorites');
+    const router = {
+      replace: vi.fn().mockResolvedValue(undefined),
+    } as unknown as Router;
+
+    const currentViewMode = ref('folder');
+    const filterCondition = ref('playlist-id');
+    const currentFolderFilter = ref('/music/root-a/live');
+    const activeRootPath = ref<string | null>('/music/root-a');
+    const folderTree = ref([
+      makeFolderNode('/music/root-a'),
+    ]);
+    const searchQuery = ref('should clear');
+
+    const scope = effectScope();
+    scope.run(() => {
+      useHomeRouteSync({
+        route,
+        router,
+        currentViewMode,
+        filterCondition,
+        currentFolderFilter,
+        activeRootPath,
+        folderTree,
+        searchQuery,
+      });
+    });
+
+    await nextTick();
+
+    expect(currentViewMode.value).toBe('favorites');
+    expect(filterCondition.value).toBe('');
+    expect(searchQuery.value).toBe('');
+    expect(router.replace).not.toHaveBeenCalled();
+
+    Object.assign(route, {
+      path: '/recent',
+      query: {},
+    });
+
+    await nextTick();
+
+    expect(currentViewMode.value).toBe('recent');
+    expect(filterCondition.value).toBe('');
+    expect(searchQuery.value).toBe('');
+    expect(router.replace).not.toHaveBeenCalled();
 
     scope.stop();
   });

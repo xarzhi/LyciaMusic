@@ -1,5 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
+import { ref } from 'vue';
+
+vi.mock('../router', () => ({
+  default: {
+    currentRoute: ref({
+      path: '/',
+      query: {},
+    }),
+    push: vi.fn().mockResolvedValue(undefined),
+    replace: vi.fn().mockResolvedValue(undefined),
+  },
+}));
 
 vi.mock('../services/storage/playerStorage', () => ({
   playerStorage: {
@@ -17,9 +29,9 @@ vi.mock('../services/tauri/historyApi', () => ({
 
 import { playerStorage } from '../services/storage/playerStorage';
 import { historyApi } from '../services/tauri/historyApi';
+import router from '../router';
 import type { Song } from '../types';
 import { useCollectionsStore } from '../features/collections/store';
-import { useNavigationStore } from '../shared/stores/navigation';
 import { useUiStore } from '../shared/stores/ui';
 import { useLibraryCollections } from '../features/collections/useLibraryCollections';
 
@@ -43,25 +55,51 @@ describe('library collections domain', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
+    (router.currentRoute as any).value = {
+      path: '/',
+      query: {},
+    };
   });
 
-  it('returns to all view when deleting the currently opened playlist', () => {
-    const navigationStore = useNavigationStore();
+  it('returns to home when deleting the currently opened playlist', () => {
     const collectionsStore = useCollectionsStore();
     const { createPlaylist, deletePlaylist } = useLibraryCollections();
 
     const playlistId = createPlaylist('Daily Mix', ['/music/a.flac']);
     expect(playlistId).toBeTruthy();
 
-    navigationStore.viewPlaylist(playlistId!);
-    expect(navigationStore.currentViewMode).toBe('playlist');
+    (router.currentRoute as any).value = {
+      path: '/',
+      query: {
+        view: 'playlist',
+        filter: playlistId!,
+      },
+    };
 
     const deleted = deletePlaylist(playlistId!);
 
     expect(deleted).toBe(true);
     expect(collectionsStore.playlists).toEqual([]);
-    expect(navigationStore.currentViewMode).toBe('all');
-    expect(navigationStore.filterCondition).toBe('');
+    expect(router.replace).toHaveBeenCalledWith({
+      path: '/',
+      query: {},
+    });
+  });
+
+  it('opens playlists through the shared router navigation helper', async () => {
+    const { createPlaylist, viewPlaylist } = useLibraryCollections();
+    const playlistId = createPlaylist('Daily Mix', ['/music/a.flac']);
+
+    viewPlaylist(playlistId!);
+    await Promise.resolve();
+
+    expect(router.push).toHaveBeenCalledWith({
+      path: '/',
+      query: {
+        view: 'playlist',
+        filter: playlistId!,
+      },
+    });
   });
 
   it('dedupes playlist additions and opens the add-to-playlist modal through ui state', () => {

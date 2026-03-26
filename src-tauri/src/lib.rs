@@ -21,7 +21,7 @@ use music::{
 };
 use player::{
     get_current_output_device, get_output_devices, get_playback_progress, pause_audio, play_audio,
-    resume_audio, seek_audio, set_output_device, set_volume,
+    resume_audio, seek_audio, set_output_device, set_volume, update_playback_metadata,
 };
 use statistics::{
     add_to_history, clear_recent_history, get_behavior_stats, get_format_distribution,
@@ -54,6 +54,7 @@ pub fn run() {
             show_in_folder,
             delete_music_file,
             play_audio,
+            update_playback_metadata,
             pause_audio,
             resume_audio,
             seek_audio,

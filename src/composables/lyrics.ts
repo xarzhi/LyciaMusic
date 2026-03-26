@@ -53,6 +53,10 @@ const defaultLyricsSettings: LyricsSettings = {
   playerLineGap: DEFAULT_PLAYER_LINE_GAP,
 };
 
+const TIMESTAMP_BLOCK_PATTERN = /\[(\d{1,}:\d{2}(?:\.\d+)?)\]/g;
+const ADJACENT_TIMESTAMPS_BEFORE_TEXT_PATTERN = /(?:\[(?:\d{1,}:\d{2}(?:\.\d+)?)\])+(?=[^\[\]\r\n])/g;
+const ESLRC_GAP_PLACEHOLDER = '\u2063';
+
 function clampPlayerFontScale(value: number) {
   if (!Number.isFinite(value)) return DEFAULT_PLAYER_FONT_SCALE;
   return Math.min(MAX_PLAYER_FONT_SCALE, Math.max(MIN_PLAYER_FONT_SCALE, value));
@@ -65,7 +69,8 @@ function clampPlayerLineGap(value: number) {
 
 export const lyricsSettings = reactive<LyricsSettings>({ ...defaultLyricsSettings });
 
-const storedLyricsSettings = localStorage.getItem(LYRICS_SETTINGS_KEY);
+const storage = typeof localStorage === 'undefined' ? null : localStorage;
+const storedLyricsSettings = storage?.getItem(LYRICS_SETTINGS_KEY);
 if (storedLyricsSettings) {
   try {
     const parsed = JSON.parse(storedLyricsSettings) as Partial<LyricsSettings>;
@@ -83,7 +88,7 @@ if (storedLyricsSettings) {
 watch(
   lyricsSettings,
   (nextSettings) => {
-    localStorage.setItem(LYRICS_SETTINGS_KEY, JSON.stringify({
+    storage?.setItem(LYRICS_SETTINGS_KEY, JSON.stringify({
       ...nextSettings,
       playerFontScale: clampPlayerFontScale(nextSettings.playerFontScale),
       playerLineGap: clampPlayerLineGap(nextSettings.playerLineGap),
@@ -121,7 +126,20 @@ function sanitizeLineText(text: string): string {
 }
 
 function sanitizeWordText(text: string): string {
-  return text.replace(/\u200b/g, '');
+  return text.replace(/[\u200b\u2063]/g, '');
+}
+
+export function normalizeEslrcSource(source: string): string {
+  return source.replace(ADJACENT_TIMESTAMPS_BEFORE_TEXT_PATTERN, (match) => {
+    const timestamps = [...match.matchAll(TIMESTAMP_BLOCK_PATTERN)];
+    if (timestamps.length <= 1) return match;
+
+    return timestamps
+      .map((timestamp, index) => (index === timestamps.length - 1
+        ? timestamp[0]
+        : `${timestamp[0]}${ESLRC_GAP_PLACEHOLDER}`))
+      .join('');
+  });
 }
 
 function toSafeMs(value: number, fallback: number): number {
@@ -244,6 +262,7 @@ async function parseWithAml(raw: string): Promise<AmlLyricLine[]> {
     parseYrc,
   } = await getAmlModule();
   const source = raw.replace(/^\uFEFF/, '').replace(/\r/g, '');
+  const normalizedEslrcSource = normalizeEslrcSource(source);
   const candidates: AmlLyricLine[][] = [];
 
   const collect = (parser: () => AmlLyricLine[]) => {
@@ -267,7 +286,7 @@ async function parseWithAml(raw: string): Promise<AmlLyricLine[]> {
   collect(() => parseYrc(source));
   collect(() => parseQrc(source));
   collect(() => parseLys(source));
-  collect(() => parseEslrc(source));
+  collect(() => parseEslrc(normalizedEslrcSource));
   collect(() => parseLrc(source));
 
   if (candidates.length === 0) return [];

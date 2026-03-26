@@ -149,16 +149,12 @@ export const createPlayerPlayback = ({
     addToHistory(song);
 
     try {
-      const cover = await playbackApi.getSongCover(song.path).catch(() => '');
-      if (requestId !== playRequestId || currentSong.value?.path !== song.path) return;
-
-      currentCover.value = cover;
       await playbackApi.playAudio({
         path: song.path,
         title: song.name,
         artist: song.artist || 'Unknown Artist',
         album: song.album || 'Unknown Album',
-        cover,
+        cover: '',
         duration: Math.floor(song.duration),
       });
       if (requestId !== playRequestId || currentSong.value?.path !== song.path) return;
@@ -167,6 +163,25 @@ export const createPlayerPlayback = ({
       sessionStartTime = Date.now();
       loadLyrics();
       startPlaybackRuntime();
+
+      void playbackApi.getSongCover(song.path)
+        .then(async cover => {
+          if (requestId !== playRequestId || currentSong.value?.path !== song.path) {
+            return;
+          }
+
+          currentCover.value = cover;
+
+          await playbackApi.updatePlaybackMetadata({
+            title: song.name,
+            artist: song.artist || 'Unknown Artist',
+            album: song.album || 'Unknown Album',
+            cover,
+            duration: Math.floor(song.duration),
+            isPlaying: isPlaying.value,
+          }).catch(() => {});
+        })
+        .catch(() => {});
     } catch {
       if (requestId !== playRequestId || currentSong.value?.path !== song.path) return;
 

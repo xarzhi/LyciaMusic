@@ -4,6 +4,7 @@ import type {
   AudioOutputStatus,
   PlayAudioOptions,
   SeekAudioOptions,
+  UpdatePlaybackMetadataOptions,
 } from './contracts';
 
 export const playbackApi = {
@@ -13,6 +14,8 @@ export const playbackApi = {
     tauriInvoke('record_play', { songPath, duration }),
   getSongCover: (path: string): Promise<string> => tauriInvoke('get_song_cover', { path }),
   playAudio: (options: PlayAudioOptions): Promise<void> => tauriInvoke('play_audio', options),
+  updatePlaybackMetadata: (options: UpdatePlaybackMetadataOptions): Promise<void> =>
+    tauriInvoke('update_playback_metadata', options),
   pauseAudio: (): Promise<void> => tauriInvoke('pause_audio'),
   resumeAudio: (): Promise<void> => tauriInvoke('resume_audio'),
   seekAudio: (options: SeekAudioOptions): Promise<void> => tauriInvoke('seek_audio', options),

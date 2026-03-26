@@ -30,6 +30,15 @@ export interface PlayAudioOptions {
   duration: number;
 }
 
+export interface UpdatePlaybackMetadataOptions {
+  title: string;
+  artist: string;
+  album: string;
+  cover: string;
+  duration: number;
+  isPlaying: boolean;
+}
+
 export interface SeekAudioOptions {
   time: number;
   isPlaying: boolean;
@@ -82,6 +91,7 @@ export interface TauriCommandMap {
   record_play: { payload: { songPath: string; duration: number }; response: void };
   get_song_cover: { payload: { path: string }; response: string };
   play_audio: { payload: PlayAudioOptions; response: void };
+  update_playback_metadata: { payload: UpdatePlaybackMetadataOptions; response: void };
   pause_audio: { payload: undefined; response: void };
   resume_audio: { payload: undefined; response: void };
   seek_audio: { payload: SeekAudioOptions; response: void };

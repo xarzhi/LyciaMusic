@@ -40,6 +40,42 @@ pub fn play_audio(
 }
 
 #[tauri::command]
+pub fn update_playback_metadata(
+    title: String,
+    artist: String,
+    album: String,
+    cover: String,
+    duration: u32,
+    is_playing: bool,
+    state: tauri::State<PlayerState>,
+) -> Result<(), String> {
+    if let Ok(mut controls) = state.controls.lock() {
+        if let Some(mc) = controls.as_mut() {
+            let _ = mc.set_metadata(MediaMetadata {
+                title: Some(&title),
+                artist: Some(&artist),
+                album: Some(&album),
+                cover_url: if cover.is_empty() { None } else { Some(&cover) },
+                duration: if duration > 0 {
+                    Some(Duration::from_secs(duration as u64))
+                } else {
+                    None
+                },
+            });
+            let _ = mc.set_playback(if is_playing {
+                MediaPlayback::Playing {
+                    progress: Some(MediaPosition(Duration::from_secs(0))),
+                }
+            } else {
+                MediaPlayback::Paused { progress: None }
+            });
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 pub fn pause_audio(state: tauri::State<PlayerState>) -> Result<(), String> {
     let tx = state.tx.lock().map_err(|e| e.to_string())?;
     tx.send(AudioCommand::Pause)

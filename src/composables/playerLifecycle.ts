@@ -352,7 +352,11 @@ export const createPlayerLifecycle = ({
       playerStorage.remove(legacyLastSongKey);
     });
 
-    watch(currentCover, async nextCover => {
+    watch([
+      currentCover,
+      () => settings.value.theme.flowColorBoost,
+      () => settings.value.theme.flowDepth,
+    ], async ([nextCover]) => {
       if (!nextCover) return;
 
       const taskId = ++dominantColorTaskId;
@@ -361,10 +365,13 @@ export const createPlayerLifecycle = ({
         coverUrl = convertFileSrc(nextCover);
       }
 
-      const colors = await extractDominantColors(coverUrl, 4);
+      const colors = await extractDominantColors(coverUrl, 4, {
+        colorBoost: settings.value.theme.flowColorBoost,
+        depth: settings.value.theme.flowDepth,
+      });
       if (taskId !== dominantColorTaskId) return;
       dominantColors.value = colors;
-    });
+    }, { immediate: true });
 
     watch(isPlaying, playing => {
       if (!playing) {

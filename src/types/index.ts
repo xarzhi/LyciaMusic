@@ -85,6 +85,10 @@ export interface ThemeSettings {
   mode: 'light' | 'dark' | 'custom';
   dynamicBgType: 'none' | 'flow' | 'blur';
   windowMaterial: 'none' | 'mica' | 'acrylic';
+  flowColorBoost: number;
+  flowDepth: number;
+  flowSpeed: number;
+  flowTexture: number;
   customBgPath: string; // Legacy field, keeping for compatibility if needed, but we'll use customBackground
   opacity: number;      // Legacy field
   blur: number;         // Legacy field

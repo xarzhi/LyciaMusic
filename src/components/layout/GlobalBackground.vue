@@ -12,6 +12,7 @@ const { activeWindowMaterial } = useWindowMaterial();
 const hasWindowMaterial = computed(() => activeWindowMaterial.value !== 'none');
 const isMicaWindowMaterial = computed(() => activeWindowMaterial.value === 'mica');
 const reduceDynamicEffects = computed(() => showPlayerDetail.value);
+const flowFallbackPalette = ['hsl(220, 28%, 34%)', 'hsl(196, 58%, 56%)', 'hsl(340, 52%, 58%)', 'hsl(42, 72%, 60%)'];
 
 const activeBackgroundInfo = computed(() => {
   const currentTheme = theme.value;
@@ -72,14 +73,67 @@ const dynamicShellClass = computed(() => {
   return 'bg-white dark:bg-[#1a1a1a]';
 });
 
-const dynamicBaseOpacity = computed(() => (isMicaWindowMaterial.value ? 0.14 : 0.4));
-const dynamicBlobOpacity = computed(() => (isMicaWindowMaterial.value ? 0.2 : 0.6));
-const dynamicNoiseOpacity = computed(() => (isMicaWindowMaterial.value ? 0.01 : 0.025));
+const flowColorBoostFactor = computed(() => theme.value.flowColorBoost / 100);
+const flowDepthFactor = computed(() => theme.value.flowDepth / 100);
+const flowSpeedFactor = computed(() => theme.value.flowSpeed / 100);
+const flowTextureFactor = computed(() => theme.value.flowTexture / 100);
+
+const resolvedFlowColors = computed(() => {
+  const colors = dominantColors.value.filter(color => color && color !== 'transparent');
+  return colors.length >= 3 ? colors : flowFallbackPalette;
+});
+
+const dynamicBaseOpacity = computed(() => {
+  const baseOpacity = 0.44 + flowColorBoostFactor.value * 0.18 - flowDepthFactor.value * 0.06;
+  return isMicaWindowMaterial.value ? Math.max(0.14, baseOpacity * 0.36) : Math.max(0.34, baseOpacity);
+});
+
+const dynamicBlobOpacity = computed(() => {
+  const blobOpacity = 0.58 + flowColorBoostFactor.value * 0.2;
+  return isMicaWindowMaterial.value ? Math.max(0.18, blobOpacity * 0.34) : Math.min(0.86, blobOpacity);
+});
+
+const dynamicNoiseOpacity = computed(() => {
+  const noiseOpacity = 0.004 + flowTextureFactor.value * 0.022;
+  return isMicaWindowMaterial.value ? noiseOpacity * 0.55 : noiseOpacity;
+});
+
+const flowMotionStyle = computed(() => {
+  const speedFactor = flowSpeedFactor.value;
+  const duration1 = 18 - speedFactor * 8;
+  const duration2 = 22 - speedFactor * 9;
+  const duration3 = 26 - speedFactor * 10;
+
+  return {
+    '--mesh-duration-1': `${duration1.toFixed(2)}s`,
+    '--mesh-duration-2': `${duration2.toFixed(2)}s`,
+    '--mesh-duration-3': `${duration3.toFixed(2)}s`,
+  };
+});
+
+const dynamicBaseStyle = computed(() => {
+  const [base, accent, edge, glow] = resolvedFlowColors.value;
+  const depthFactor = flowDepthFactor.value;
+
+  return {
+    opacity: dynamicBaseOpacity.value,
+    background: [
+      `radial-gradient(circle at 18% 18%, ${accent} 0%, transparent ${38 + depthFactor * 8}%)`,
+      `radial-gradient(circle at 82% 78%, ${glow || edge || base} 0%, transparent ${42 + depthFactor * 10}%)`,
+      `linear-gradient(135deg, ${base} 0%, ${edge || accent || base} 100%)`,
+    ].join(', '),
+  };
+});
 
 const dynamicOverlayClass = computed(() => {
-  if (isMicaWindowMaterial.value) return 'bg-white/[0.02] dark:bg-black/[0.06]';
-  if (hasWindowMaterial.value) return 'bg-white/0 dark:bg-black/20';
-  return 'bg-white/5 dark:bg-black/40';
+  if (isMicaWindowMaterial.value) return 'bg-white/[0.02] dark:bg-black/[0.08]';
+  if (hasWindowMaterial.value) return 'bg-white/[0.02] dark:bg-black/[0.16]';
+  return 'bg-white/[0.03] dark:bg-black/[0.22]';
+});
+
+const dynamicOverlayStyle = computed(() => {
+  const overlayOpacity = 0.88 + flowDepthFactor.value * 0.26 - flowColorBoostFactor.value * 0.1;
+  return { opacity: Math.min(1.08, Math.max(0.72, overlayOpacity)) };
 });
 
 const staticMaskClass = computed(() => {
@@ -128,10 +182,11 @@ const materialScrimStyle = computed(() => {
         v-if="activeBackgroundInfo?.isDynamic"
         class="absolute inset-0 overflow-hidden"
         :class="dynamicShellClass"
+        :style="flowMotionStyle"
       >
         <div
           class="absolute inset-0 transition-colors duration-[1500ms]"
-          :style="{ backgroundColor: dominantColors[0], opacity: dynamicBaseOpacity }"
+          :style="dynamicBaseStyle"
         ></div>
 
         <div
@@ -141,15 +196,15 @@ const materialScrimStyle = computed(() => {
         >
           <div
             class="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-1 transition-colors duration-[1500ms]"
-            :style="{ backgroundColor: dominantColors[1] }"
+            :style="{ backgroundColor: resolvedFlowColors[1] }"
           ></div>
           <div
             class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-2 transition-colors duration-[1500ms]"
-            :style="{ backgroundColor: dominantColors[2] || dominantColors[0] }"
+            :style="{ backgroundColor: resolvedFlowColors[2] || resolvedFlowColors[0] }"
           ></div>
           <div
             class="absolute top-[20%] right-[-10%] w-[70%] h-[70%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-3 transition-colors duration-[1500ms]"
-            :style="{ backgroundColor: dominantColors[3] || dominantColors[1] }"
+            :style="{ backgroundColor: resolvedFlowColors[3] || resolvedFlowColors[1] }"
           ></div>
         </div>
 
@@ -159,7 +214,7 @@ const materialScrimStyle = computed(() => {
           :style="{ opacity: dynamicNoiseOpacity }"
         ></div>
 
-        <div class="absolute inset-0 z-20" :class="dynamicOverlayClass"></div>
+        <div class="absolute inset-0 z-20" :class="dynamicOverlayClass" :style="dynamicOverlayStyle"></div>
       </div>
     </transition>
 
@@ -262,7 +317,7 @@ const materialScrimStyle = computed(() => {
   100% { transform: translate(10%, 30%) scale(0.9) rotate(360deg); }
 }
 
-.animate-mesh-1 { animation: mesh-1 6s linear infinite; }
-.animate-mesh-2 { animation: mesh-2 8s linear infinite; }
-.animate-mesh-3 { animation: mesh-3 10s linear infinite; }
+.animate-mesh-1 { animation: mesh-1 var(--mesh-duration-1, 14s) ease-in-out infinite; }
+.animate-mesh-2 { animation: mesh-2 var(--mesh-duration-2, 18s) ease-in-out infinite; }
+.animate-mesh-3 { animation: mesh-3 var(--mesh-duration-3, 22s) ease-in-out infinite; }
 </style>

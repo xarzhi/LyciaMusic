@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { usePlayer } from '../../composables/player';
 import { useThemeSettings } from '../../composables/useThemeSettings';
@@ -13,6 +13,27 @@ const hasWindowMaterial = computed(() => activeWindowMaterial.value !== 'none');
 const isMicaWindowMaterial = computed(() => activeWindowMaterial.value === 'mica');
 const reduceDynamicEffects = computed(() => showPlayerDetail.value);
 const flowFallbackPalette = ['hsl(220, 28%, 34%)', 'hsl(196, 58%, 56%)', 'hsl(340, 52%, 58%)', 'hsl(42, 72%, 60%)'];
+const FLOW_SCENE_TRANSITION_MS = 1180;
+
+interface FlowLayerSnapshot {
+  id: number;
+  signature: string;
+  state: 'entering' | 'current' | 'previous';
+  shellClass: string;
+  colors: string[];
+  baseStyle: {
+    opacity: number;
+    background: string;
+  };
+  blobOpacity: number;
+  noiseOpacity: number;
+  overlayClass: string;
+  overlayStyle: {
+    opacity: number;
+  };
+  motionStyle: Record<string, string>;
+  reduceDynamicEffects: boolean;
+}
 
 const activeBackgroundInfo = computed(() => {
   const currentTheme = theme.value;
@@ -136,6 +157,141 @@ const dynamicOverlayStyle = computed(() => {
   return { opacity: Math.min(1.08, Math.max(0.72, overlayOpacity)) };
 });
 
+const flowScene = computed(() => {
+  if (activeBackgroundInfo.value?.type !== 'flow') {
+    return null;
+  }
+
+  const colors = [...resolvedFlowColors.value];
+  const baseStyle = { ...dynamicBaseStyle.value };
+  const overlayStyle = { ...dynamicOverlayStyle.value };
+  const motionStyle = { ...flowMotionStyle.value };
+  const signature = JSON.stringify({
+    colors,
+    shellClass: dynamicShellClass.value,
+    baseStyle,
+    blobOpacity: dynamicBlobOpacity.value,
+    noiseOpacity: dynamicNoiseOpacity.value,
+    overlayClass: dynamicOverlayClass.value,
+    overlayOpacity: overlayStyle.opacity,
+    motionStyle,
+    reduceDynamicEffects: reduceDynamicEffects.value,
+  });
+
+  return {
+    signature,
+    shellClass: dynamicShellClass.value,
+    colors,
+    baseStyle,
+    blobOpacity: dynamicBlobOpacity.value,
+    noiseOpacity: dynamicNoiseOpacity.value,
+    overlayClass: dynamicOverlayClass.value,
+    overlayStyle,
+    motionStyle,
+    reduceDynamicEffects: reduceDynamicEffects.value,
+  };
+});
+
+const flowLayers = ref<FlowLayerSnapshot[]>([]);
+
+let flowLayerId = 0;
+let flowTransitionTimer: ReturnType<typeof setTimeout> | null = null;
+let flowEnterAnimationFrame: number | null = null;
+
+function clearFlowTransitionTimer() {
+  if (flowTransitionTimer) {
+    clearTimeout(flowTransitionTimer);
+    flowTransitionTimer = null;
+  }
+}
+
+function clearFlowEnterAnimationFrame() {
+  if (flowEnterAnimationFrame !== null) {
+    cancelAnimationFrame(flowEnterAnimationFrame);
+    flowEnterAnimationFrame = null;
+  }
+}
+
+function buildFlowLayerSnapshot(scene: NonNullable<typeof flowScene.value>): FlowLayerSnapshot {
+  return {
+    id: ++flowLayerId,
+    signature: scene.signature,
+    state: 'entering',
+    shellClass: scene.shellClass,
+    colors: scene.colors,
+    baseStyle: scene.baseStyle,
+    blobOpacity: scene.blobOpacity,
+    noiseOpacity: scene.noiseOpacity,
+    overlayClass: scene.overlayClass,
+    overlayStyle: scene.overlayStyle,
+    motionStyle: scene.motionStyle,
+    reduceDynamicEffects: scene.reduceDynamicEffects,
+  };
+}
+
+watch(flowScene, nextScene => {
+  if (!nextScene) {
+    clearFlowTransitionTimer();
+    clearFlowEnterAnimationFrame();
+    flowLayers.value = [];
+    return;
+  }
+
+  const currentLayer = flowLayers.value.find(layer => layer.state === 'current');
+  if (!currentLayer) {
+    const initialLayer = buildFlowLayerSnapshot(nextScene);
+    flowLayers.value = [initialLayer];
+    void nextTick(() => {
+      clearFlowEnterAnimationFrame();
+      flowEnterAnimationFrame = requestAnimationFrame(() => {
+        flowLayers.value = flowLayers.value.map(layer => (
+          layer.id === initialLayer.id
+            ? { ...layer, state: 'current' }
+            : layer
+        ));
+        flowEnterAnimationFrame = null;
+      });
+    });
+    return;
+  }
+
+  if (currentLayer.signature === nextScene.signature) {
+    return;
+  }
+
+  const nextLayer = buildFlowLayerSnapshot(nextScene);
+  flowLayers.value = [
+    {
+      ...currentLayer,
+      state: 'previous',
+    },
+    nextLayer,
+  ];
+
+  void nextTick(() => {
+    clearFlowEnterAnimationFrame();
+    flowEnterAnimationFrame = requestAnimationFrame(() => {
+      flowLayers.value = flowLayers.value.map(layer => (
+        layer.id === nextLayer.id
+          ? { ...layer, state: 'current' }
+          : layer
+      ));
+      flowEnterAnimationFrame = null;
+    });
+  });
+
+  clearFlowTransitionTimer();
+  flowTransitionTimer = setTimeout(() => {
+    flowLayers.value = flowLayers.value.filter(layer => layer.state === 'current');
+    flowTransitionTimer = null;
+  }, FLOW_SCENE_TRANSITION_MS);
+}, { immediate: true });
+
+onBeforeUnmount(() => {
+  clearFlowTransitionTimer();
+  clearFlowEnterAnimationFrame();
+});
+
 const staticMaskClass = computed(() => {
   if (isMicaWindowMaterial.value) return 'bg-white/40 dark:bg-black/35';
   return 'bg-black/20';
@@ -179,42 +335,59 @@ const materialScrimStyle = computed(() => {
 
     <transition name="fade">
       <div
-        v-if="activeBackgroundInfo?.isDynamic"
+        v-if="activeBackgroundInfo?.isDynamic && flowLayers.length > 0"
         class="absolute inset-0 overflow-hidden"
-        :class="dynamicShellClass"
-        :style="flowMotionStyle"
       >
         <div
-          class="absolute inset-0 transition-colors duration-[1500ms]"
-          :style="dynamicBaseStyle"
-        ></div>
-
-        <div
-          v-if="!reduceDynamicEffects"
-          class="absolute inset-0 filter blur-[120px]"
-          :style="{ opacity: dynamicBlobOpacity }"
+          v-for="layer in flowLayers"
+          :key="layer.id"
+          class="flow-layer absolute inset-0 overflow-hidden"
+          :class="[
+            layer.shellClass,
+            layer.state === 'previous'
+              ? 'flow-layer-previous'
+              : layer.state === 'entering'
+                ? 'flow-layer-entering'
+                : 'flow-layer-current',
+          ]"
+          :style="layer.motionStyle"
         >
           <div
-            class="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-1 transition-colors duration-[1500ms]"
-            :style="{ backgroundColor: resolvedFlowColors[1] }"
+            class="absolute inset-0 transition-colors duration-[1500ms]"
+            :style="layer.baseStyle"
           ></div>
+
           <div
-            class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-2 transition-colors duration-[1500ms]"
-            :style="{ backgroundColor: resolvedFlowColors[2] || resolvedFlowColors[0] }"
+            v-if="!layer.reduceDynamicEffects"
+            class="absolute inset-0 filter blur-[120px]"
+            :style="{ opacity: layer.blobOpacity }"
+          >
+            <div
+              class="absolute top-[-10%] left-[-10%] h-[60%] w-[60%] rounded-full mix-blend-multiply transition-colors duration-[1500ms] dark:mix-blend-screen animate-mesh-1"
+              :style="{ backgroundColor: layer.colors[1] }"
+            ></div>
+            <div
+              class="absolute bottom-[-10%] right-[-10%] h-[60%] w-[60%] rounded-full mix-blend-multiply transition-colors duration-[1500ms] dark:mix-blend-screen animate-mesh-2"
+              :style="{ backgroundColor: layer.colors[2] || layer.colors[0] }"
+            ></div>
+            <div
+              class="absolute top-[20%] right-[-10%] h-[70%] w-[70%] rounded-full mix-blend-multiply transition-colors duration-[1500ms] dark:mix-blend-screen animate-mesh-3"
+              :style="{ backgroundColor: layer.colors[3] || layer.colors[1] }"
+            ></div>
+          </div>
+
+          <div
+            v-if="!layer.reduceDynamicEffects"
+            class="absolute inset-0 z-10 bg-noise pointer-events-none"
+            :style="{ opacity: layer.noiseOpacity }"
           ></div>
+
           <div
-            class="absolute top-[20%] right-[-10%] w-[70%] h-[70%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-3 transition-colors duration-[1500ms]"
-            :style="{ backgroundColor: resolvedFlowColors[3] || resolvedFlowColors[1] }"
+            class="absolute inset-0 z-20"
+            :class="layer.overlayClass"
+            :style="layer.overlayStyle"
           ></div>
         </div>
-
-        <div
-          v-if="!reduceDynamicEffects"
-          class="absolute inset-0 pointer-events-none z-10 bg-noise"
-          :style="{ opacity: dynamicNoiseOpacity }"
-        ></div>
-
-        <div class="absolute inset-0 z-20" :class="dynamicOverlayClass" :style="dynamicOverlayStyle"></div>
       </div>
     </transition>
 
@@ -287,6 +460,32 @@ const materialScrimStyle = computed(() => {
 .fade-fast-enter-from,
 .fade-fast-leave-to {
   opacity: 0;
+}
+
+.flow-layer {
+  will-change: opacity, transform, filter;
+  transition:
+    opacity 920ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 920ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 920ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.flow-layer-current {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+}
+
+.flow-layer-entering {
+  opacity: 0;
+  transform: scale(1.028);
+  filter: blur(10px);
+}
+
+.flow-layer-previous {
+  opacity: 0;
+  transform: scale(1.048);
+  filter: blur(16px);
 }
 
 .bg-noise {

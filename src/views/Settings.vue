@@ -31,7 +31,7 @@ const tabs = [
           :key="tab.id"
           @click="activeTab = tab.id as any"
           class="pb-2 text-base font-medium transition-all relative"
-          :class="activeTab === tab.id ? 'text-[#EC4141] font-bold' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'"
+          :class="activeTab === tab.id ? 'text-[#EC4141] font-bold' : 'text-gray-800 dark:text-gray-200 hover:text-black dark:hover:text-white'"
         >
           {{ tab.name }}
           <div 

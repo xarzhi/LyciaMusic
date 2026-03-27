@@ -32,7 +32,7 @@ defineEmits<{
 
 const baseNavClasses = 'px-3 py-2 mx-2 rounded-md cursor-pointer flex items-center transition-all duration-300 text-sm font-medium active:scale-[0.97]';
 const activeNavClasses = 'bg-black/10 dark:bg-white/10 text-black dark:text-white font-semibold shadow-sm translate-x-1';
-const inactiveNavClasses = 'text-gray-600 dark:text-white/60 hover:bg-black/5 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white hover:translate-x-1';
+const inactiveNavClasses = 'text-gray-800 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white hover:translate-x-1';
 </script>
 
 <template>

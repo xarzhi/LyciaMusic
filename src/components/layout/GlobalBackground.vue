@@ -64,9 +64,9 @@ const activeBackgroundInfo = computed(() => {
   if (currentTheme.dynamicBgType === 'blur') {
     return {
       src: currentCover.value,
-      blur: 50,
-      opacity: 0.7,
-      scale: 1.5,
+      blur: 40,
+      opacity: 0.75,
+      scale: 1.25,
       isDynamic: false,
       type: 'blur' as const,
     };
@@ -105,12 +105,12 @@ const resolvedFlowColors = computed(() => {
 });
 
 const dynamicBaseOpacity = computed(() => {
-  const baseOpacity = 0.44 + flowColorBoostFactor.value * 0.18 - flowDepthFactor.value * 0.06;
+  const baseOpacity = 0.36 + flowColorBoostFactor.value * 0.15 - flowDepthFactor.value * 0.05;
   return isMicaWindowMaterial.value ? Math.max(0.14, baseOpacity * 0.36) : Math.max(0.34, baseOpacity);
 });
 
 const dynamicBlobOpacity = computed(() => {
-  const blobOpacity = 0.58 + flowColorBoostFactor.value * 0.2;
+  const blobOpacity = 0.45 + flowColorBoostFactor.value * 0.18;
   return isMicaWindowMaterial.value ? Math.max(0.18, blobOpacity * 0.34) : Math.min(0.86, blobOpacity);
 });
 
@@ -153,8 +153,8 @@ const dynamicOverlayClass = computed(() => {
 });
 
 const dynamicOverlayStyle = computed(() => {
-  const overlayOpacity = 0.88 + flowDepthFactor.value * 0.26 - flowColorBoostFactor.value * 0.1;
-  return { opacity: Math.min(1.08, Math.max(0.72, overlayOpacity)) };
+  const overlayOpacity = 0.91 + flowDepthFactor.value * 0.26 - flowColorBoostFactor.value * 0.08;
+  return { opacity: Math.min(1.1, Math.max(0.80, overlayOpacity)) };
 });
 
 const flowScene = computed(() => {
@@ -294,7 +294,7 @@ onBeforeUnmount(() => {
 
 const staticMaskClass = computed(() => {
   if (isMicaWindowMaterial.value) return 'bg-white/40 dark:bg-black/35';
-  return 'bg-black/20';
+  return 'bg-white/50 dark:bg-black/50';
 });
 
 const staticImageOpacity = computed(() => (isMicaWindowMaterial.value ? 0.35 : 1));
@@ -395,15 +395,14 @@ const materialScrimStyle = computed(() => {
       <div
         v-if="activeBackgroundInfo?.type === 'blur' && bgImageSrc"
         :key="bgImageSrc"
-        class="absolute inset-0 bg-black"
-        :style="{ filter: `brightness(${activeBackgroundInfo.opacity})` }"
+        class="absolute inset-0"
       >
-        <div class="absolute inset-0 z-10" :class="staticMaskClass"></div>
+        <div class="absolute inset-0 z-10 transition-colors duration-500" :class="staticMaskClass"></div>
         <img
           :src="bgImageSrc"
           class="w-full h-full object-cover transition-all duration-1000 z-0"
           :style="{
-            filter: `blur(${isMicaWindowMaterial ? Math.min(activeBackgroundInfo.blur, 26) : activeBackgroundInfo.blur}px)`,
+            filter: `blur(${isMicaWindowMaterial ? Math.min(activeBackgroundInfo.blur, 26) : activeBackgroundInfo.blur}px) brightness(${activeBackgroundInfo.opacity})`,
             transform: `scale(${activeBackgroundInfo.scale})`,
             opacity: staticImageOpacity,
           }"

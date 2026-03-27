@@ -182,7 +182,7 @@ const allCards = computed(() => [
           <div class="close-zone absolute top-0 right-0 w-10 h-10 z-20">
             <button
               @click.stop="emit('hide', card.title)"
-              class="absolute top-2 right-2 p-1 rounded-full bg-black/5 dark:bg-white/5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 opacity-0 close-btn transition-opacity duration-200"
+              class="absolute top-2 right-2 p-1 rounded-full bg-black/5 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white opacity-0 close-btn transition-opacity duration-200"
               :title="TEXT.hiddenCardTitle"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -199,7 +199,7 @@ const allCards = computed(() => [
             </div>
 
             <div>
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5">{{ card.title }}</p>
+              <p class="text-xs font-medium text-white mb-0.5 drop-shadow-[0_1px_6px_rgba(0,0,0,0.28)]">{{ card.title }}</p>
               <div class="flex items-baseline gap-2 flex-nowrap">
                 <p class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{{ card.value }}</p>
                 <Transition name="fade">

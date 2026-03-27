@@ -193,8 +193,8 @@ onMounted(async () => {
         <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-300 dark:text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
         </svg>
-        <p class="text-gray-500 dark:text-gray-400 text-lg">{{ TEXT.noData }}</p>
-        <p class="text-gray-400 dark:text-gray-500 text-sm mt-1">{{ TEXT.noLibraryHint }}</p>
+        <p class="text-gray-800 dark:text-gray-200 text-lg">{{ TEXT.noData }}</p>
+        <p class="text-gray-600 dark:text-gray-300 text-sm mt-1">{{ TEXT.noLibraryHint }}</p>
       </div>
 
       <template v-else-if="stats">
@@ -203,7 +203,7 @@ onMounted(async () => {
             {{ TEXT.libraryOverview }}
             <button
               @click="showManager = !showManager"
-              class="text-[10px] font-normal not-italic px-1.5 py-0.5 rounded border border-gray-200 dark:border-white/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              class="text-[10px] font-normal not-italic px-1.5 py-0.5 rounded border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors"
               :class="{ 'bg-blue-500/10 text-blue-500 border-blue-500/20': showManager }"
             >
               {{ TEXT.manageCards }}
@@ -211,12 +211,12 @@ onMounted(async () => {
           </h2>
 
           <div class="flex items-center gap-3">
-            <span v-if="lastUpdated" class="text-xs text-gray-400 dark:text-gray-500">
+            <span v-if="lastUpdated" class="text-xs text-gray-600 dark:text-gray-300">
               {{ TEXT.updatedAt }} {{ lastUpdated.toLocaleTimeString() }}
             </span>
             <button
               @click="handleRefresh"
-              class="bg-white/1 hover:bg-white/10 border border-white/1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 w-7 h-7 flex items-center justify-center rounded-full transition active:scale-95 shadow-sm hover:border-gray-200 dark:hover:border-white/20"
+              class="bg-white/1 hover:bg-white/10 border border-white/1 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white w-7 h-7 flex items-center justify-center rounded-full transition active:scale-95 shadow-sm hover:border-gray-200 dark:hover:border-white/20"
               :class="{ 'animate-spin': isRefreshing }"
               :disabled="isRefreshing"
             >
@@ -236,7 +236,7 @@ onMounted(async () => {
           leave-to-class="transform -translate-y-2 opacity-0"
         >
           <div v-if="showManager" class="mb-6 p-4 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10">
-            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">{{ TEXT.managerHint }}</p>
+            <p class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-3">{{ TEXT.managerHint }}</p>
             <div class="flex flex-wrap gap-x-6 gap-y-2">
               <label v-for="card in managerCards" :key="card" class="flex items-center gap-2 cursor-pointer group">
                 <input
@@ -245,7 +245,7 @@ onMounted(async () => {
                   @change="toggleCardVisibility(card)"
                   class="w-3.5 h-3.5 rounded border-gray-300 text-blue-500 focus:ring-blue-500/20"
                 />
-                <span class="text-xs text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+                <span class="text-xs text-gray-800 dark:text-gray-200 group-hover:text-black dark:group-hover:text-white transition-colors">
                   {{ card }}
                 </span>
               </label>
@@ -280,10 +280,10 @@ onMounted(async () => {
             class="overflow-hidden rounded-xl bg-white/40 dark:bg-white/5 backdrop-blur-md border border-white/20 dark:border-white/5 mb-4"
           >
             <div class="flex items-center justify-between px-6 pt-4">
-              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ TEXT.qualityDetail }}</h3>
+              <h3 class="text-sm font-medium text-gray-800 dark:text-gray-200">{{ TEXT.qualityDetail }}</h3>
               <button
                 @click="expandedCard = null"
-                class="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                class="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
@@ -312,10 +312,10 @@ onMounted(async () => {
             class="overflow-hidden rounded-xl bg-white/40 dark:bg-white/5 backdrop-blur-md border border-white/20 dark:border-white/5 mb-4"
           >
             <div class="flex items-center justify-between px-6 pt-4">
-              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ TEXT.formatDetail }}</h3>
+              <h3 class="text-sm font-medium text-gray-800 dark:text-gray-200">{{ TEXT.formatDetail }}</h3>
               <button
                 @click="expandedCard = null"
-                class="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                class="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
@@ -354,8 +354,8 @@ onMounted(async () => {
                 class="row-start-1 z-10 px-2 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 text-center whitespace-nowrap"
                 :style="{ gridColumn: index + 1 }"
                 :class="currentBehaviorTimeRange === range.value
-                  ? 'text-gray-900 dark:text-white'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+                  ? 'text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.28)]'
+                  : 'text-white/85 hover:text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.24)]'"
               >
                 {{ range.label }}
               </button>

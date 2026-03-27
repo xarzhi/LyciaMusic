@@ -199,7 +199,7 @@ const allCards = computed(() => [
             </div>
 
             <div>
-              <p class="text-xs font-medium text-white mb-0.5 drop-shadow-[0_1px_6px_rgba(0,0,0,0.28)]">{{ card.title }}</p>
+              <p class="text-xs font-medium text-gray-700 dark:text-white/80 mb-0.5 line-clamp-1">{{ card.title }}</p>
               <div class="flex items-baseline gap-2 flex-nowrap">
                 <p class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{{ card.value }}</p>
                 <Transition name="fade">

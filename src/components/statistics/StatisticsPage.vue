@@ -354,8 +354,8 @@ onMounted(async () => {
                 class="row-start-1 z-10 px-2 py-1.5 text-xs font-medium rounded-md transition-colors duration-200 text-center whitespace-nowrap"
                 :style="{ gridColumn: index + 1 }"
                 :class="currentBehaviorTimeRange === range.value
-                  ? 'text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.28)]'
-                  : 'text-white/85 hover:text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.24)]'"
+                  ? 'text-gray-900 dark:text-white'
+                  : 'text-gray-600 dark:text-white/70 hover:text-gray-900 dark:hover:text-white'"
               >
                 {{ range.label }}
               </button>

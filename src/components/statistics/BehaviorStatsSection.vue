@@ -170,7 +170,7 @@ watch(allSongPaths, paths => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <p class="text-xs font-medium text-white mb-1 drop-shadow-[0_1px_6px_rgba(0,0,0,0.28)]">{{ TEXT.totalListenDuration }}</p>
+          <p class="text-xs font-medium text-gray-700 dark:text-white/80 mb-1">{{ TEXT.totalListenDuration }}</p>
           <p class="text-xl font-bold text-gray-900 dark:text-white tracking-tight relative z-10">{{ formatDuration(totalDuration) }}</p>
         </div>
       </div>
@@ -195,7 +195,7 @@ watch(allSongPaths, paths => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <p class="text-xs font-medium text-white mb-1 drop-shadow-[0_1px_6px_rgba(0,0,0,0.28)]">{{ TEXT.playCount }}</p>
+          <p class="text-xs font-medium text-gray-700 dark:text-white/80 mb-1">{{ TEXT.playCount }}</p>
           <p class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{{ totalPlays7d }}</p>
         </div>
       </div>
@@ -219,7 +219,7 @@ watch(allSongPaths, paths => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
           </div>
-          <p class="text-xs font-medium text-white mb-1 drop-shadow-[0_1px_6px_rgba(0,0,0,0.28)]">{{ TEXT.peakPeriod }}</p>
+          <p class="text-xs font-medium text-gray-700 dark:text-white/80 mb-1">{{ TEXT.peakPeriod }}</p>
           <div class="flex flex-col">
             <div class="flex items-end gap-0.5 h-8" :title="peakTimeDesc">
               <div

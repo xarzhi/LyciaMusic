@@ -1,6 +1,7 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { onMounted, ref, watch } from 'vue';
 
+import { normalizeForegroundStyle } from '../features/settings/store';
 import { useThemeSettings } from './useThemeSettings';
 import type { ThemeSettings } from '../types';
 
@@ -11,7 +12,7 @@ export function useCustomThemeModal() {
   const originalTheme = ref<ThemeSettings | null>(null);
   const preview = ref({
     ...theme.value.customBackground,
-    foregroundStyle: theme.value.customBackground.foregroundStyle || 'auto',
+    foregroundStyle: normalizeForegroundStyle(theme.value.customBackground.foregroundStyle),
   });
 
   onMounted(() => {

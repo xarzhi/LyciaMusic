@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { convertFileSrc } from '@tauri-apps/api/core';
 import CustomSkinModal from './CustomSkinModal.vue';
 import { useSettingsThemeControls } from '../../composables/useSettingsThemeControls';
 

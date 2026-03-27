@@ -53,4 +53,32 @@ describe('settings store', () => {
     expect(settingsStore.settings.theme.windowMaterial).toBe('mica');
     expect(settingsStore.settings.theme.customBackground.foregroundStyle).toBe('light');
   });
+
+  it('normalizes legacy auto foreground style to light', () => {
+    const settingsStore = useSettingsStore();
+
+    settingsStore.replaceTheme({
+      mode: 'custom',
+      dynamicBgType: 'none',
+      windowMaterial: 'none',
+      flowColorBoost: 25,
+      flowDepth: 30,
+      flowSpeed: 52,
+      flowTexture: 34,
+      customBgPath: '',
+      opacity: 0.8,
+      blur: 20,
+      customBackground: {
+        imagePath: '/covers/legacy.jpg',
+        blur: 20,
+        opacity: 1,
+        maskColor: '#000000',
+        maskAlpha: 0.4,
+        scale: 1,
+        foregroundStyle: 'auto' as unknown as 'light',
+      },
+    });
+
+    expect(settingsStore.settings.theme.customBackground.foregroundStyle).toBe('light');
+  });
 });

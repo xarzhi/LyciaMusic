@@ -99,7 +99,7 @@ export interface ThemeSettings {
     maskColor: string;
     maskAlpha: number;
     scale: number;
-    foregroundStyle: 'auto' | 'light' | 'dark';
+    foregroundStyle: 'light' | 'dark';
   }
 }
 

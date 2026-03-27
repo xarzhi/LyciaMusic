@@ -1,7 +1,11 @@
 import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 
-import { useSettingsStore, type ThemeSettingsPatch } from '../features/settings/store';
+import {
+  normalizeForegroundStyle,
+  useSettingsStore,
+  type ThemeSettingsPatch,
+} from '../features/settings/store';
 import type { ThemeSettings } from '../types';
 import type { WindowMaterialMode } from './windowMaterial';
 
@@ -10,19 +14,11 @@ const resolveThemeDarkMode = (theme: ThemeSettings) => {
     return theme.mode === 'dark';
   }
 
-  const foregroundStyle = theme.customBackground.foregroundStyle || 'auto';
+  const foregroundStyle = normalizeForegroundStyle(theme.customBackground.foregroundStyle);
   if (foregroundStyle === 'light') {
     return true;
   }
-  if (foregroundStyle === 'dark') {
-    return false;
-  }
-
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return false;
 };
 
 export function useThemeSettings() {

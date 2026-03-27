@@ -14,6 +14,10 @@ export interface AppSettingsPatch extends Partial<Omit<AppSettings, 'theme' | 's
   sidebar?: SidebarSettingsPatch;
 }
 
+export const normalizeForegroundStyle = (
+  foregroundStyle: string | null | undefined,
+): ThemeSettings['customBackground']['foregroundStyle'] => (foregroundStyle === 'dark' ? 'dark' : 'light');
+
 export const defaultThemeSettings: ThemeSettings = {
   mode: 'light',
   dynamicBgType: 'flow',
@@ -32,7 +36,7 @@ export const defaultThemeSettings: ThemeSettings = {
     maskColor: '#000000',
     maskAlpha: 0.4,
     scale: 1,
-    foregroundStyle: 'auto',
+    foregroundStyle: 'light',
   },
 };
 
@@ -80,14 +84,21 @@ export const createDefaultAppSettings = (): AppSettings => ({
 export const mergeThemeSettings = (
   base: ThemeSettings,
   patch: ThemeSettingsPatch,
-): ThemeSettings => ({
-  ...base,
-  ...patch,
-  customBackground: {
+): ThemeSettings => {
+  const mergedCustomBackground = {
     ...base.customBackground,
     ...(patch.customBackground ?? {}),
-  },
-});
+  };
+
+  return {
+    ...base,
+    ...patch,
+    customBackground: {
+      ...mergedCustomBackground,
+      foregroundStyle: normalizeForegroundStyle(mergedCustomBackground.foregroundStyle),
+    },
+  };
+};
 
 export const mergeSidebarSettings = (
   base: SidebarSettings,

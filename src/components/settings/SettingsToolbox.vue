@@ -73,7 +73,7 @@ const setupReadyCount = computed(() => Number(Boolean(musicTagPath.value)) + Num
 
 const getPathLeaf = (path: string) => {
   const segments = path.split(/[\\/]/).filter(Boolean);
-  return segments.at(-1) ?? '未选择';
+  return segments.length > 0 ? segments[segments.length - 1] : '未选择';
 };
 
 onMounted(() => {

@@ -205,7 +205,7 @@ const handleApply = async () => {
       </div>
 
       <div class="space-y-2">
-        <div class="text-xs font-medium text-slate-500 dark:text-slate-400">点击变量插入到模板末尾</div>
+        <div class="text-xs font-medium text-slate-600 dark:text-white/60">点击变量插入到模板末尾</div>
         <div class="flex flex-wrap gap-2">
           <button
             v-for="variable in variables"

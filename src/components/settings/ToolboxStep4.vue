@@ -64,7 +64,7 @@ const handleRefresh = async () => {
           ✓
         </div>
         <h3 class="text-2xl font-bold text-slate-900 dark:text-white">流程已完成</h3>
-        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">当前目标文件夹已经完成刷新，可以直接开始下一轮整理。</p>
+        <p class="mt-2 text-sm text-slate-600 dark:text-white/60">当前目标文件夹已经完成刷新，可以直接开始下一轮整理。</p>
       </div>
 
       <div class="flex gap-3 border-t border-slate-100 pt-4 dark:border-white/5">

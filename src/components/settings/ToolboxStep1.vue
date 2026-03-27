@@ -156,7 +156,7 @@ const handleApply = async () => {
         />
         <div>
           <div class="text-sm font-semibold text-slate-900 dark:text-white">去除序号前缀</div>
-          <p class="mt-1 text-xs leading-6 text-slate-500 dark:text-slate-400">
+          <p class="mt-1 text-xs leading-6 text-slate-600 dark:text-white/60">
             适合从下载站或网盘整理出来的曲目文件，能减少后续标签识别时的干扰。
           </p>
         </div>

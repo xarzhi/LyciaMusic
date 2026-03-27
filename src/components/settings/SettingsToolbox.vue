@@ -224,7 +224,7 @@ const restart = () => {
               :class="
                 index <= currentProgressIndex
                   ? 'text-slate-800 dark:text-white'
-                  : 'text-slate-400 dark:text-slate-500'
+                  : 'text-slate-500 dark:text-white/50'
               "
             >
               {{ step.label }}
@@ -254,7 +254,7 @@ const restart = () => {
             <div class="mb-3 flex items-center justify-between gap-4">
               <div>
                 <label class="text-sm font-semibold text-slate-900 dark:text-white">MusicTag 路径</label>
-                <p class="mt-1 text-xs leading-6 text-slate-500 dark:text-slate-400">用于歌曲标签写入和人工校正。</p>
+                <p class="mt-1 text-xs leading-6 text-slate-600 dark:text-white/60">用于歌曲标签写入和人工校正。</p>
               </div>
               <button
                 @click="selectExecutable"
@@ -263,7 +263,7 @@ const restart = () => {
                 选择路径
               </button>
             </div>
-            <div class="rounded-2xl border border-dashed border-slate-300 bg-white/85 px-4 py-3 text-sm text-slate-500 dark:border-white/10 dark:bg-black/20 dark:text-slate-300">
+            <div class="rounded-2xl border border-dashed border-slate-300 bg-white/85 px-4 py-3 text-sm text-slate-500 dark:border-white/10 dark:bg-black/20 dark:text-white/60">
               <span v-if="musicTagPath" class="break-all text-slate-700 dark:text-slate-200">{{ musicTagPath }}</span>
               <span v-else>请选择 MusicTag.exe</span>
             </div>
@@ -273,7 +273,7 @@ const restart = () => {
             <div class="mb-3 flex items-center justify-between gap-4">
               <div>
                 <label class="text-sm font-semibold text-slate-900 dark:text-white">目标文件夹</label>
-                <p class="mt-1 text-xs leading-6 text-slate-500 dark:text-slate-400">这里决定本次要处理的整批歌曲文件。</p>
+                <p class="mt-1 text-xs leading-6 text-slate-600 dark:text-white/60">这里决定本次要处理的整批歌曲文件。</p>
               </div>
               <button
                 @click="selectTargetFolder"
@@ -282,7 +282,7 @@ const restart = () => {
                 选择文件夹
               </button>
             </div>
-            <div class="rounded-2xl border border-dashed border-slate-300 bg-white/85 px-4 py-3 text-sm text-slate-500 dark:border-white/10 dark:bg-black/20 dark:text-slate-300">
+            <div class="rounded-2xl border border-dashed border-slate-300 bg-white/85 px-4 py-3 text-sm text-slate-500 dark:border-white/10 dark:bg-black/20 dark:text-white/60">
               <span v-if="targetPath" class="break-all text-slate-700 dark:text-slate-200">{{ targetPath }}</span>
               <span v-else>请选择要整理的歌曲目录</span>
             </div>
@@ -305,7 +305,7 @@ const restart = () => {
           <div class="flex items-center justify-between">
             <div>
               <h3 class="text-lg font-semibold text-slate-900 dark:text-white">实时预览</h3>
-              <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">当前预设完成后，工具箱会进入分步整理模式。</p>
+              <p class="mt-1 text-sm text-slate-600 dark:text-white/60">当前预设完成后，工具箱会进入分步整理模式。</p>
             </div>
             <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-white/10 dark:text-slate-300">
               {{ setupReadyCount }}/2
@@ -318,7 +318,7 @@ const restart = () => {
               <div class="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
                 {{ musicTagPath ? '已连接' : '等待选择' }}
               </div>
-              <p class="mt-2 break-all text-sm text-slate-500 dark:text-slate-400">
+              <p class="mt-2 break-all text-sm text-slate-600 dark:text-white/60">
                 {{ musicTagPath || '选择 MusicTag 后，这里会显示可执行文件路径。' }}
               </p>
             </div>
@@ -328,7 +328,7 @@ const restart = () => {
               <div class="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
                 {{ targetPath ? getPathLeaf(targetPath) : '等待选择' }}
               </div>
-              <p class="mt-2 break-all text-sm text-slate-500 dark:text-slate-400">
+              <p class="mt-2 break-all text-sm text-slate-600 dark:text-white/60">
                 {{ targetPath || '选择目标文件夹后，这里会显示本次处理目录。' }}
               </p>
             </div>
@@ -392,7 +392,7 @@ const restart = () => {
             <div class="flex items-center justify-between">
               <div>
                 <h3 class="text-lg font-semibold text-slate-900 dark:text-white">实时预览</h3>
-                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">预处理结果会即时显示在这里。</p>
+                <p class="mt-1 text-sm text-slate-600 dark:text-white/60">预处理结果会即时显示在这里。</p>
               </div>
               <div class="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
                 {{ preprocessPreview.items.length }} 项
@@ -405,7 +405,7 @@ const restart = () => {
                 <div class="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
                   {{ preprocessPreview.removeTrackPrefix ? '去除序号前缀' : '未启用清洗规则' }}
                 </div>
-                <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                <p class="mt-2 text-sm text-slate-600 dark:text-white/60">
                   {{ preprocessPreview.targetPath || '先在左侧确认目标文件夹。' }}
                 </p>
               </div>
@@ -444,7 +444,7 @@ const restart = () => {
                     :key="`${item.originalName}-${item.newName}`"
                     class="grid grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)] items-center gap-2 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0 dark:border-white/5"
                   >
-                    <div class="truncate text-slate-500 dark:text-slate-400">{{ item.originalName }}</div>
+                    <div class="truncate text-slate-600 dark:text-white/60">{{ item.originalName }}</div>
                     <div class="text-center text-slate-300">→</div>
                     <div class="truncate font-medium text-slate-900 dark:text-white">{{ item.newName }}</div>
                   </div>
@@ -457,7 +457,7 @@ const restart = () => {
             <div class="flex items-center justify-between">
               <div>
                 <h3 class="text-lg font-semibold text-slate-900 dark:text-white">实时预览</h3>
-                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">这一步是外部工具协作，右侧展示当前工作状态。</p>
+                <p class="mt-1 text-sm text-slate-600 dark:text-white/60">这一步是外部工具协作，右侧展示当前工作状态。</p>
               </div>
               <div
                 class="rounded-full px-3 py-1 text-xs font-medium"
@@ -516,7 +516,7 @@ const restart = () => {
             <div class="flex items-center justify-between">
               <div>
                 <h3 class="text-lg font-semibold text-slate-900 dark:text-white">实时预览</h3>
-                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">模板变化和扫描结果会同步显示在这里。</p>
+                <p class="mt-1 text-sm text-slate-600 dark:text-white/60">模板变化和扫描结果会同步显示在这里。</p>
               </div>
               <div class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
                 {{ renamePreview.items.length }} 项
@@ -527,7 +527,7 @@ const restart = () => {
               <div class="rounded-3xl border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5">
                 <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Template</div>
                 <div class="mt-2 font-mono text-sm font-medium text-slate-900 dark:text-white">{{ renamePreview.template }}</div>
-                <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                <p class="mt-2 text-sm text-slate-600 dark:text-white/60">
                   {{ renamePreview.skippedCount > 0 ? `当前有 ${renamePreview.skippedCount} 项会被跳过。` : '当前模板将用于本次批量重命名。' }}
                 </p>
               </div>
@@ -566,7 +566,7 @@ const restart = () => {
                     :key="`${item.originalName}-${item.newName}`"
                     class="grid grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)] items-center gap-2 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0 dark:border-white/5"
                   >
-                    <div class="truncate text-slate-500 dark:text-slate-400">{{ item.originalName }}</div>
+                    <div class="truncate text-slate-600 dark:text-white/60">{{ item.originalName }}</div>
                     <div class="text-center text-slate-300">→</div>
                     <div class="truncate font-medium text-slate-900 dark:text-white">{{ item.newName }}</div>
                   </div>
@@ -579,7 +579,7 @@ const restart = () => {
             <div class="flex items-center justify-between">
               <div>
                 <h3 class="text-lg font-semibold text-slate-900 dark:text-white">实时预览</h3>
-                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">这里显示刷新进度和最终完成状态。</p>
+                <p class="mt-1 text-sm text-slate-600 dark:text-white/60">这里显示刷新进度和最终完成状态。</p>
               </div>
               <div
                 class="rounded-full px-3 py-1 text-xs font-medium"

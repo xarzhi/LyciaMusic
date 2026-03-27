@@ -148,7 +148,7 @@ onMounted(() => {
 
       <div class="space-y-1">
         <h1 class="text-3xl font-bold tracking-tight text-gray-800 dark:text-white">Lycia Player</h1>
-        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">v{{ appVersion }}</p>
+        <p class="text-sm font-medium text-gray-600 dark:text-white/60">v{{ appVersion }}</p>
       </div>
 
       <p class="max-w-sm text-gray-600 dark:text-gray-300">

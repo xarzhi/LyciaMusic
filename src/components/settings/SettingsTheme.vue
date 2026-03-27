@@ -181,7 +181,7 @@ const {
             <div class="mb-4 flex items-center justify-between gap-3">
               <div>
                 <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ FLOW_TEXT.panelTitle }}</div>
-                <div class="text-xs text-gray-500 dark:text-gray-400">Lycia Flow</div>
+                <div class="text-xs text-gray-600 dark:text-white/60">Lycia Flow</div>
               </div>
               <div class="rounded-full bg-[#EC4141]/10 px-2.5 py-1 text-[11px] font-medium text-[#EC4141]">
                 {{ theme.flowColorBoost }} / {{ theme.flowDepth }} / {{ theme.flowSpeed }} / {{ theme.flowTexture }}
@@ -193,7 +193,7 @@ const {
                 <div class="mb-1.5 flex items-center justify-between gap-4">
                   <div>
                     <div class="text-sm font-medium text-gray-800 dark:text-gray-200">{{ FLOW_TEXT.colorBoost }}</div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400">{{ FLOW_TEXT.colorBoostHint }}</div>
+                    <div class="text-xs text-gray-600 dark:text-white/60">{{ FLOW_TEXT.colorBoostHint }}</div>
                   </div>
                   <div class="text-xs font-medium tabular-nums text-[#EC4141]">{{ theme.flowColorBoost }}</div>
                 </div>
@@ -206,7 +206,7 @@ const {
                   class="flow-slider"
                   @input="setFlowColorBoost(Number(($event.target as HTMLInputElement).value))"
                 />
-                <div class="mt-1 flex items-center justify-between text-[11px] text-gray-400 dark:text-gray-500">
+                <div class="mt-1 flex items-center justify-between text-[11px] text-gray-500 dark:text-white/50">
                   <span>{{ FLOW_TEXT.subtle }}</span>
                   <span>{{ FLOW_TEXT.vivid }}</span>
                 </div>
@@ -216,7 +216,7 @@ const {
                 <div class="mb-1.5 flex items-center justify-between gap-4">
                   <div>
                     <div class="text-sm font-medium text-gray-800 dark:text-gray-200">{{ FLOW_TEXT.depth }}</div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400">{{ FLOW_TEXT.depthHint }}</div>
+                    <div class="text-xs text-gray-600 dark:text-white/60">{{ FLOW_TEXT.depthHint }}</div>
                   </div>
                   <div class="text-xs font-medium tabular-nums text-[#EC4141]">{{ theme.flowDepth }}</div>
                 </div>
@@ -229,7 +229,7 @@ const {
                   class="flow-slider"
                   @input="setFlowDepth(Number(($event.target as HTMLInputElement).value))"
                 />
-                <div class="mt-1 flex items-center justify-between text-[11px] text-gray-400 dark:text-gray-500">
+                <div class="mt-1 flex items-center justify-between text-[11px] text-gray-500 dark:text-white/50">
                   <span>{{ FLOW_TEXT.airy }}</span>
                   <span>{{ FLOW_TEXT.deep }}</span>
                 </div>
@@ -239,7 +239,7 @@ const {
                 <div class="mb-1.5 flex items-center justify-between gap-4">
                   <div>
                     <div class="text-sm font-medium text-gray-800 dark:text-gray-200">{{ FLOW_TEXT.speed }}</div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400">{{ FLOW_TEXT.speedHint }}</div>
+                    <div class="text-xs text-gray-600 dark:text-white/60">{{ FLOW_TEXT.speedHint }}</div>
                   </div>
                   <div class="text-xs font-medium tabular-nums text-[#EC4141]">{{ theme.flowSpeed }}</div>
                 </div>
@@ -252,7 +252,7 @@ const {
                   class="flow-slider"
                   @input="setFlowSpeed(Number(($event.target as HTMLInputElement).value))"
                 />
-                <div class="mt-1 flex items-center justify-between text-[11px] text-gray-400 dark:text-gray-500">
+                <div class="mt-1 flex items-center justify-between text-[11px] text-gray-500 dark:text-white/50">
                   <span>{{ FLOW_TEXT.calm }}</span>
                   <span>{{ FLOW_TEXT.brisk }}</span>
                 </div>
@@ -262,7 +262,7 @@ const {
                 <div class="mb-1.5 flex items-center justify-between gap-4">
                   <div>
                     <div class="text-sm font-medium text-gray-800 dark:text-gray-200">{{ FLOW_TEXT.texture }}</div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400">{{ FLOW_TEXT.textureHint }}</div>
+                    <div class="text-xs text-gray-600 dark:text-white/60">{{ FLOW_TEXT.textureHint }}</div>
                   </div>
                   <div class="text-xs font-medium tabular-nums text-[#EC4141]">{{ theme.flowTexture }}</div>
                 </div>
@@ -275,7 +275,7 @@ const {
                   class="flow-slider"
                   @input="setFlowTexture(Number(($event.target as HTMLInputElement).value))"
                 />
-                <div class="mt-1 flex items-center justify-between text-[11px] text-gray-400 dark:text-gray-500">
+                <div class="mt-1 flex items-center justify-between text-[11px] text-gray-500 dark:text-white/50">
                   <span>{{ FLOW_TEXT.clean }}</span>
                   <span>{{ FLOW_TEXT.textured }}</span>
                 </div>

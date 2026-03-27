@@ -76,13 +76,13 @@ const validCount = computed(() => props.items.filter(i => i.status !== 'skipped'
         <!-- Header -->
         <div class="px-6 py-4 border-b border-gray-200 dark:border-white/10 flex justify-between items-center bg-gray-50/50 dark:bg-white/5">
           <h3 class="text-lg font-bold text-gray-900 dark:text-white">预览修改</h3>
-          <span class="text-sm text-gray-500 dark:text-gray-400">即将修改 {{ validCount }} 个文件</span>
+          <span class="text-sm text-gray-600 dark:text-white/60">即将修改 {{ validCount }} 个文件</span>
         </div>
 
         <!-- Table -->
         <div class="flex-1 overflow-y-auto p-0 custom-scrollbar">
             <table class="w-full text-left text-sm">
-                <thead class="bg-gray-50 dark:bg-white/5 sticky top-0 z-10 text-gray-500 dark:text-gray-400 font-medium">
+                <thead class="bg-gray-50 dark:bg-white/5 sticky top-0 z-10 text-gray-600 dark:text-white/60 font-medium">
                     <tr>
                         <th class="px-6 py-3 w-16 text-center">状态</th>
                         <th class="px-6 py-3 w-[40%]">原文件名</th>

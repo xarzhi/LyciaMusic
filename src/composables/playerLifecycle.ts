@@ -352,11 +352,8 @@ export const createPlayerLifecycle = ({
       playerStorage.remove(legacyLastSongKey);
     });
 
-    watch([
-      currentCover,
-      () => settings.value.theme.flowColorBoost,
-      () => settings.value.theme.flowDepth,
-    ], async ([nextCover]) => {
+    // 封面切换时立即重提取主色
+    watch(currentCover, async (nextCover) => {
       if (!nextCover) return;
 
       const taskId = ++dominantColorTaskId;
@@ -372,6 +369,32 @@ export const createPlayerLifecycle = ({
       if (taskId !== dominantColorTaskId) return;
       dominantColors.value = colors;
     }, { immediate: true });
+
+    // 流光参数微调时 debounce 延迟重提取主色，避免拖动滑块时频繁触发层切换闪烁
+    let flowTweakTimer: ReturnType<typeof setTimeout> | null = null;
+    watch([
+      () => settings.value.theme.flowColorBoost,
+      () => settings.value.theme.flowDepth,
+    ], () => {
+      if (flowTweakTimer) clearTimeout(flowTweakTimer);
+      flowTweakTimer = setTimeout(async () => {
+        const cover = currentCover.value;
+        if (!cover) return;
+
+        const taskId = ++dominantColorTaskId;
+        let coverUrl = cover;
+        if (!cover.startsWith('http') && !cover.startsWith('data:')) {
+          coverUrl = convertFileSrc(cover);
+        }
+
+        const colors = await extractDominantColors(coverUrl, 4, {
+          colorBoost: settings.value.theme.flowColorBoost,
+          depth: settings.value.theme.flowDepth,
+        });
+        if (taskId !== dominantColorTaskId) return;
+        dominantColors.value = colors;
+      }, 500);
+    });
 
     watch(isPlaying, playing => {
       if (!playing) {

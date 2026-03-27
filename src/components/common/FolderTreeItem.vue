@@ -24,7 +24,7 @@
         <div class="text-sm font-medium truncate leading-tight">{{ node.name }}</div>
         <div
           class="text-[10px] truncate mt-0.5 flex items-center gap-1"
-          :class="node.child_count > 0 ? 'text-blue-500 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'"
+          :class="node.child_count > 0 ? 'text-blue-500 dark:text-blue-400' : 'text-gray-600 dark:text-white/60'"
         >
           <svg v-if="node.child_count > 0" xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" viewBox="0 0 20 20" fill="currentColor">
             <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
@@ -56,7 +56,7 @@
       <div v-show="node.is_expanded" class="overflow-hidden">
         <div
           v-if="node.is_loading"
-          class="flex items-center gap-2 px-2 py-2 text-xs text-gray-400 dark:text-gray-500"
+          class="flex items-center gap-2 px-2 py-2 text-xs text-gray-500 dark:text-white/50"
           :style="{ paddingLeft: `${depth * 16 + 16}px` }"
         >
           <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">

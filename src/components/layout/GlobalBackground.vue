@@ -157,6 +157,16 @@ const dynamicOverlayStyle = computed(() => {
   return { opacity: Math.min(1.1, Math.max(0.80, overlayOpacity)) };
 });
 
+// signature 只追踪「需要触发整层切换」的极少数条件
+// 颜色变化通过 CSS transition-colors 在当前层内平滑渐变
+const flowSceneSignature = computed(() => {
+  if (activeBackgroundInfo.value?.type !== 'flow') return null;
+  return JSON.stringify({
+    shellClass: dynamicShellClass.value,
+    reduceDynamicEffects: reduceDynamicEffects.value,
+  });
+});
+
 const flowScene = computed(() => {
   if (activeBackgroundInfo.value?.type !== 'flow') {
     return null;
@@ -166,20 +176,9 @@ const flowScene = computed(() => {
   const baseStyle = { ...dynamicBaseStyle.value };
   const overlayStyle = { ...dynamicOverlayStyle.value };
   const motionStyle = { ...flowMotionStyle.value };
-  const signature = JSON.stringify({
-    colors,
-    shellClass: dynamicShellClass.value,
-    baseStyle,
-    blobOpacity: dynamicBlobOpacity.value,
-    noiseOpacity: dynamicNoiseOpacity.value,
-    overlayClass: dynamicOverlayClass.value,
-    overlayOpacity: overlayStyle.opacity,
-    motionStyle,
-    reduceDynamicEffects: reduceDynamicEffects.value,
-  });
 
   return {
-    signature,
+    signature: flowSceneSignature.value!,
     shellClass: dynamicShellClass.value,
     colors,
     baseStyle,
@@ -229,14 +228,16 @@ function buildFlowLayerSnapshot(scene: NonNullable<typeof flowScene.value>): Flo
   };
 }
 
-watch(flowScene, nextScene => {
-  if (!nextScene) {
+// 只有 signature 变了（颜色/shell 切换）才触发溶解过场
+watch(flowSceneSignature, (newSig) => {
+  if (!newSig) {
     clearFlowTransitionTimer();
     clearFlowEnterAnimationFrame();
     flowLayers.value = [];
     return;
   }
 
+  const nextScene = flowScene.value!;
   const currentLayer = flowLayers.value.find(layer => layer.state === 'current');
   if (!currentLayer) {
     const initialLayer = buildFlowLayerSnapshot(nextScene);
@@ -255,16 +256,9 @@ watch(flowScene, nextScene => {
     return;
   }
 
-  if (currentLayer.signature === nextScene.signature) {
-    return;
-  }
-
   const nextLayer = buildFlowLayerSnapshot(nextScene);
   flowLayers.value = [
-    {
-      ...currentLayer,
-      state: 'previous',
-    },
+    { ...currentLayer, state: 'previous' },
     nextLayer,
   ];
 
@@ -286,6 +280,29 @@ watch(flowScene, nextScene => {
     flowTransitionTimer = null;
   }, FLOW_SCENE_TRANSITION_MS);
 }, { immediate: true });
+
+// 所有视觉参数变化时直接 patch 当前层（利用模板上已有的 CSS transition 平滑渐变）
+watch(
+  [resolvedFlowColors, dynamicBaseStyle, dynamicBlobOpacity, dynamicNoiseOpacity, dynamicOverlayClass, dynamicOverlayStyle, flowMotionStyle],
+  () => {
+    const nextScene = flowScene.value;
+    if (!nextScene) return;
+    flowLayers.value = flowLayers.value.map(layer =>
+      layer.state === 'current'
+        ? {
+            ...layer,
+            colors: nextScene.colors,
+            baseStyle: nextScene.baseStyle,
+            blobOpacity: nextScene.blobOpacity,
+            noiseOpacity: nextScene.noiseOpacity,
+            overlayClass: nextScene.overlayClass,
+            overlayStyle: nextScene.overlayStyle,
+            motionStyle: nextScene.motionStyle,
+          }
+        : layer,
+    );
+  },
+);
 
 onBeforeUnmount(() => {
   clearFlowTransitionTimer();

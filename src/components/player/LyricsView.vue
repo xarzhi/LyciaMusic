@@ -3,12 +3,14 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import type { LyricLine as AmlLyricLine, LyricLineMouseEvent } from '@applemusic-like-lyrics/core';
 import {
+  DEFAULT_PLAYER_ALIGNMENT,
   DEFAULT_PLAYER_FONT_SCALE,
   DEFAULT_PLAYER_LINE_GAP,
   MAX_PLAYER_FONT_SCALE,
   MAX_PLAYER_LINE_GAP,
   MIN_PLAYER_FONT_SCALE,
   MIN_PLAYER_LINE_GAP,
+  type LyricsPlayerAlignment,
   useLyrics,
 } from '../../composables/lyrics';
 import { usePlayer } from '../../composables/player';
@@ -21,6 +23,11 @@ const { audioDelay } = storeToRefs(useSettingsStore());
 
 const FONT_SCALE_STEP = 0.05;
 const LINE_GAP_STEP = 0.05;
+const PLAYER_ALIGNMENT_OPTIONS: Array<{ value: LyricsPlayerAlignment; label: string }> = [
+  { value: 'left', label: 'Left' },
+  { value: 'center', label: 'Center' },
+  { value: 'right', label: 'Right' },
+];
 
 const fontPanelRef = ref<HTMLElement | null>(null);
 const isFontPanelOpen = ref(false);
@@ -102,6 +109,8 @@ const lineGapProgress = computed(() => {
   return ((lyricsSettings.playerLineGap - MIN_PLAYER_LINE_GAP) / (MAX_PLAYER_LINE_GAP - MIN_PLAYER_LINE_GAP)) * 100;
 });
 
+const lyricsAlignmentClass = computed(() => `lyrics-align-${lyricsSettings.playerAlignment}`);
+
 const lyricsPlayerStyle = computed(() => ({
   '--lyrics-font-scale': lyricsSettings.playerFontScale.toString(),
 }));
@@ -122,6 +131,10 @@ function setPlayerLineGap(value: number) {
   lyricsSettings.playerLineGap = Number(clampLineGap(value).toFixed(2));
 }
 
+function setPlayerAlignment(value: LyricsPlayerAlignment) {
+  lyricsSettings.playerAlignment = value;
+}
+
 function adjustPlayerFontScale(delta: number) {
   setPlayerFontScale(lyricsSettings.playerFontScale + delta);
 }
@@ -132,6 +145,10 @@ function resetPlayerFontScale() {
 
 function resetPlayerLineGap() {
   setPlayerLineGap(DEFAULT_PLAYER_LINE_GAP);
+}
+
+function resetPlayerAlignment() {
+  setPlayerAlignment(DEFAULT_PLAYER_ALIGNMENT);
 }
 
 function handleFontScaleInput(event: Event) {
@@ -296,6 +313,37 @@ onUnmounted(() => {
               +
             </button>
           </div>
+
+          <div class="mt-6 mb-3">
+            <div class="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/30">Alignment</div>
+            <div class="mt-1.5 flex items-center justify-between gap-3">
+              <span class="text-[13px] font-medium text-white/85">Lyrics Position</span>
+              <button
+                v-if="lyricsSettings.playerAlignment !== DEFAULT_PLAYER_ALIGNMENT"
+                type="button"
+                class="flex h-5 w-5 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white"
+                @click="resetPlayerAlignment"
+                title="Reset"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2">
+            <button
+              v-for="option in PLAYER_ALIGNMENT_OPTIONS"
+              :key="option.value"
+              type="button"
+              class="flex h-9 items-center justify-center rounded-2xl border px-3 text-xs font-medium transition"
+              :class="lyricsSettings.playerAlignment === option.value
+                ? 'border-white/25 bg-white/14 text-white shadow-[0_10px_30px_rgba(0,0,0,0.18)]'
+                : 'border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:bg-white/[0.06] hover:text-white'"
+              @click="setPlayerAlignment(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
         </div>
       </transition>
     </div>
@@ -303,6 +351,7 @@ onUnmounted(() => {
     <div
       v-if="amllLines.length > 0"
       class="lyrics-mask-shell h-full min-h-0 w-full min-w-0"
+      :class="lyricsAlignmentClass"
       :style="lyricsPlayerStyle"
     >
       <AmlLyricPlayer
@@ -370,6 +419,26 @@ onUnmounted(() => {
   --amll-lp-color: rgba(255, 255, 255, 0.95);
   --amll-lp-bg-color: transparent;
   --amll-lp-font-size: calc(max(max(5vh, 2.5vw), 12px) * var(--lyrics-font-scale, 1));
+}
+
+.amll-host :deep(.amll-lyric-player [class*="_lyricLine_"]) {
+  text-align: var(--lyrics-text-align, left);
+  transform-origin: var(--lyrics-line-transform-origin, 0%) center;
+}
+
+.lyrics-align-left {
+  --lyrics-text-align: left;
+  --lyrics-line-transform-origin: 0%;
+}
+
+.lyrics-align-center {
+  --lyrics-text-align: center;
+  --lyrics-line-transform-origin: 50%;
+}
+
+.lyrics-align-right {
+  --lyrics-text-align: right;
+  --lyrics-line-transform-origin: 100%;
 }
 
 @media screen and (max-width: 768px) {

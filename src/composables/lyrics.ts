@@ -32,6 +32,8 @@ export const MAX_PLAYER_FONT_SCALE = 1.5;
 export const DEFAULT_PLAYER_LINE_GAP = 1;
 export const MIN_PLAYER_LINE_GAP = 0.5;
 export const MAX_PLAYER_LINE_GAP = 1.5;
+export type LyricsPlayerAlignment = 'left' | 'center' | 'right';
+export const DEFAULT_PLAYER_ALIGNMENT: LyricsPlayerAlignment = 'left';
 
 export interface LyricsSettings {
   showTranslation: boolean;
@@ -41,6 +43,7 @@ export interface LyricsSettings {
   colorScheme: 'default' | 'pink' | 'blue' | 'green';
   playerFontScale: number;
   playerLineGap: number;
+  playerAlignment: LyricsPlayerAlignment;
 }
 
 const defaultLyricsSettings: LyricsSettings = {
@@ -51,6 +54,7 @@ const defaultLyricsSettings: LyricsSettings = {
   colorScheme: 'default' as 'default' | 'pink' | 'blue' | 'green',
   playerFontScale: DEFAULT_PLAYER_FONT_SCALE,
   playerLineGap: DEFAULT_PLAYER_LINE_GAP,
+  playerAlignment: DEFAULT_PLAYER_ALIGNMENT,
 };
 
 const TIMESTAMP_BLOCK_PATTERN = /\[(\d{1,}:\d{2}(?:\.\d+)?)\]/g;
@@ -67,6 +71,10 @@ function clampPlayerLineGap(value: number) {
   return Math.min(MAX_PLAYER_LINE_GAP, Math.max(MIN_PLAYER_LINE_GAP, value));
 }
 
+function normalizePlayerAlignment(value: unknown): LyricsPlayerAlignment {
+  return value === 'center' || value === 'right' ? value : DEFAULT_PLAYER_ALIGNMENT;
+}
+
 export const lyricsSettings = reactive<LyricsSettings>({ ...defaultLyricsSettings });
 
 const storage = typeof localStorage === 'undefined' ? null : localStorage;
@@ -79,6 +87,7 @@ if (storedLyricsSettings) {
       ...parsed,
       playerFontScale: clampPlayerFontScale(parsed.playerFontScale ?? DEFAULT_PLAYER_FONT_SCALE),
       playerLineGap: clampPlayerLineGap(parsed.playerLineGap ?? DEFAULT_PLAYER_LINE_GAP),
+      playerAlignment: normalizePlayerAlignment(parsed.playerAlignment),
     });
   } catch (error) {
     console.error('Failed to parse lyrics settings:', error);
@@ -92,6 +101,7 @@ watch(
       ...nextSettings,
       playerFontScale: clampPlayerFontScale(nextSettings.playerFontScale),
       playerLineGap: clampPlayerLineGap(nextSettings.playerLineGap),
+      playerAlignment: normalizePlayerAlignment(nextSettings.playerAlignment),
     }));
   },
   { deep: true }

@@ -18,7 +18,7 @@ const handleSave = () => {
 <template>
   <Teleport to="body">
     <div class="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 p-4">
-      <div class="bg-[#2b2b2b] w-full max-w-[500px] max-h-[calc(100vh-2rem)] rounded-2xl shadow-2xl overflow-hidden text-white border border-white/10 flex flex-col">
+      <div class="bg-black/40 backdrop-blur-md w-full max-w-[500px] max-h-[calc(100vh-2rem)] rounded-2xl shadow-2xl overflow-hidden text-white border border-white/20 flex flex-col">
       
       <!-- 标题栏 -->
       <div class="flex items-center justify-between px-6 py-4 border-b border-white/10">

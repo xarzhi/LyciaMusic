@@ -47,7 +47,7 @@ const restart = () => {
     <ToolboxStepIndicator :current-step="currentStep" :steps="steps" />
 
     <!-- 步骤内容区域 -->
-    <div class="bg-white dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 p-6 shadow-sm">
+    <div class="bg-white/30 dark:bg-black/20 backdrop-blur-md rounded-2xl border border-white/40 dark:border-white/10 p-6 shadow-sm">
       <!-- Step 1: 预处理 -->
       <ToolboxStep1 
         v-if="currentStep === 1"

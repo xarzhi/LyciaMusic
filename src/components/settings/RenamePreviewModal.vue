@@ -67,7 +67,7 @@ const validCount = computed(() => props.items.filter(i => i.status !== 'skipped'
       ></div>
 
       <div 
-        class="relative bg-white/95 dark:bg-[#2b2b2b] backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden transform transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)"
+        class="relative bg-white/30 dark:bg-black/20 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden transform transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)"
         :class="[
           isClosing ? 'scale-95 opacity-0 translate-y-4' : 'scale-100 opacity-100 translate-y-0',
           'border border-white/20 ring-1 ring-black/5'

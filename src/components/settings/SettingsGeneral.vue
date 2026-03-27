@@ -193,8 +193,8 @@ onUnmounted(() => {
         <span class="w-1 h-4 bg-[#EC4141] rounded-full"></span>
         常规与启动
       </h2>
-      <div class="bg-white/50 dark:bg-black/40 backdrop-blur-sm rounded-xl border border-gray-100/50 dark:border-white/5 overflow-hidden">
-        <div class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+      <div class="bg-white/30 dark:bg-black/20 backdrop-blur-md shadow-sm rounded-xl border border-white/40 dark:border-white/10 overflow-hidden">
+        <div class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors">
           <div>
             <div class="text-sm font-medium text-gray-800 dark:text-gray-200">开机自动运行</div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">系统启动时自动打开应用</div>
@@ -204,7 +204,7 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <div class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+        <div class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors">
           <div>
             <div class="text-sm font-medium text-gray-800 dark:text-gray-200">GPU 加速</div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">使用显卡硬件加速界面渲染 (需要重启)</div>
@@ -214,7 +214,7 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <div class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+        <div class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors">
           <div>
             <div class="text-sm font-medium text-gray-800 dark:text-gray-200">最小化到系统托盘</div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">点击最小化按钮时隐藏到托盘</div>
@@ -224,7 +224,7 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <div class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+        <div class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors">
           <div>
             <div class="text-sm font-medium text-gray-800 dark:text-gray-200">关闭主面板时最小化到托盘</div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">点击关闭按钮时隐藏到托盘，不退出程序</div>
@@ -234,7 +234,7 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <div class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+        <div class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors">
           <div>
             <div class="text-sm font-medium text-gray-800 dark:text-gray-200">显示音质标识</div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">在歌曲标题旁显示 Hi-Res / SQ / HQ 标签</div>
@@ -252,8 +252,8 @@ onUnmounted(() => {
         <span class="w-1 h-4 bg-[#EC4141] rounded-full"></span>
         播放设置
       </h2>
-      <div class="bg-white/50 dark:bg-black/40 backdrop-blur-sm rounded-xl border border-gray-100/50 dark:border-white/5 overflow-hidden">
-        <div class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+      <div class="bg-white/30 dark:bg-black/20 backdrop-blur-md shadow-sm rounded-xl border border-white/40 dark:border-white/10 overflow-hidden">
+        <div class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors">
           <div>
             <div class="text-sm font-medium text-gray-800 dark:text-gray-200">自动播放</div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">程序启动后自动恢复上次播放</div>
@@ -263,7 +263,7 @@ onUnmounted(() => {
           </button>
         </div>
         
-        <div class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors relative">
+        <div class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors relative">
            <div>
             <div class="text-sm font-medium text-gray-800 dark:text-gray-200">输出设备</div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
@@ -325,11 +325,11 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="border-t border-gray-100/50 dark:border-white/5">
+        <div class="border-t border-white/30 dark:border-white/5">
           <button
             type="button"
             @click="showLyricsSyncOffsetPanel = !showLyricsSyncOffsetPanel"
-            class="w-full p-4 flex items-center justify-between gap-4 hover:bg-white/40 dark:hover:bg-white/5 transition-colors text-left"
+            class="w-full p-4 flex items-center justify-between gap-4 hover:bg-white/40 dark:hover:bg-white/10 transition-colors text-left"
           >
             <div class="min-w-0">
               <div class="text-sm font-medium text-gray-800 dark:text-gray-200">歌词同步补偿</div>
@@ -353,8 +353,8 @@ onUnmounted(() => {
             </div>
           </button>
           <div v-if="showLyricsSyncOffsetPanel" class="px-4 pb-4">
-            <div class="pt-1 border-t border-gray-100/50 dark:border-white/5">
-        <div class="p-4 hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+            <div class="pt-1 border-t border-white/30 dark:border-white/5">
+        <div class="p-4 hover:bg-white/40 dark:hover:bg-white/10 transition-colors">
           <div class="flex items-start justify-between gap-6">
             <div>
               <div class="text-xs text-gray-500 dark:text-gray-400">
@@ -400,10 +400,10 @@ onUnmounted(() => {
         <span class="w-1 h-4 bg-[#EC4141] rounded-full"></span>
         界面布局
       </h2>
-      <div class="bg-white/50 dark:bg-black/40 backdrop-blur-sm rounded-xl border border-gray-100/50 dark:border-white/5 overflow-hidden">
+      <div class="bg-white/30 dark:bg-black/20 backdrop-blur-md shadow-sm rounded-xl border border-white/40 dark:border-white/10 overflow-hidden">
         
         <!-- Local Music (Locked/Checked) -->
-        <div class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 opacity-70 cursor-not-allowed">
+        <div class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 opacity-70 cursor-not-allowed">
           <div class="flex items-center gap-3">
             <div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center text-gray-500 shrink-0">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
@@ -421,7 +421,7 @@ onUnmounted(() => {
         <!-- Artists -->
         <div 
               @click="settings.sidebar.showArtists = !settings.sidebar.showArtists"
-          class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors cursor-pointer"
+          class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors cursor-pointer"
         >
           <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center shrink-0" :class="settings.sidebar.showArtists ? 'text-[#EC4141] bg-red-100/50' : 'text-gray-500'">
@@ -437,7 +437,7 @@ onUnmounted(() => {
         <!-- Albums -->
         <div 
               @click="settings.sidebar.showAlbums = !settings.sidebar.showAlbums"
-          class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors cursor-pointer"
+          class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors cursor-pointer"
         >
           <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center shrink-0" :class="settings.sidebar.showAlbums ? 'text-[#EC4141] bg-red-100/50' : 'text-gray-500'">
@@ -453,7 +453,7 @@ onUnmounted(() => {
         <!-- Favorites -->
         <div 
               @click="settings.sidebar.showFavorites = !settings.sidebar.showFavorites"
-          class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors cursor-pointer"
+          class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors cursor-pointer"
         >
           <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center shrink-0" :class="settings.sidebar.showFavorites ? 'text-[#EC4141] bg-red-100/50' : 'text-gray-500'">
@@ -469,7 +469,7 @@ onUnmounted(() => {
         <!-- Recent -->
         <div 
               @click="settings.sidebar.showRecent = !settings.sidebar.showRecent"
-          class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors cursor-pointer"
+          class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors cursor-pointer"
         >
           <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center shrink-0" :class="settings.sidebar.showRecent ? 'text-[#EC4141] bg-red-100/50' : 'text-gray-500'">
@@ -485,7 +485,7 @@ onUnmounted(() => {
         <!-- Folders -->
         <div 
               @click="settings.sidebar.showFolders = !settings.sidebar.showFolders"
-          class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors cursor-pointer"
+          class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors cursor-pointer"
         >
           <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center shrink-0" :class="settings.sidebar.showFolders ? 'text-[#EC4141] bg-red-100/50' : 'text-gray-500'">
@@ -501,7 +501,7 @@ onUnmounted(() => {
         <!-- Statistics -->
         <div 
               @click="settings.sidebar.showStatistics = !settings.sidebar.showStatistics"
-          class="p-4 flex items-center justify-between border-b border-gray-100/50 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/5 transition-colors cursor-pointer"
+          class="p-4 flex items-center justify-between border-b border-white/30 dark:border-white/5 last:border-0 hover:bg-white/40 dark:hover:bg-white/10 transition-colors cursor-pointer"
         >
           <div class="flex items-center gap-3">
               <div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center shrink-0" :class="settings.sidebar.showStatistics ? 'text-[#EC4141] bg-red-100/50' : 'text-gray-500'">
@@ -523,8 +523,8 @@ onUnmounted(() => {
         <span class="w-1 h-4 bg-[#EC4141] rounded-full"></span>
         存储空间
       </h2>
-      <div class="bg-white/50 dark:bg-black/40 backdrop-blur-sm rounded-xl border border-gray-100/50 dark:border-white/5 overflow-hidden">
-         <div class="p-4 flex items-center justify-between hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+      <div class="bg-white/30 dark:bg-black/20 backdrop-blur-md shadow-sm rounded-xl border border-white/40 dark:border-white/10 overflow-hidden">
+         <div class="p-4 flex items-center justify-between hover:bg-white/40 dark:hover:bg-white/10 transition-colors">
           <div>
             <div class="text-sm font-medium text-gray-800 dark:text-gray-200">清除缓存</div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">释放封面与歌词缓存</div>
@@ -539,8 +539,8 @@ onUnmounted(() => {
         <span class="w-1 h-4 bg-[#EC4141] rounded-full"></span>
         数据重置
       </h2>
-      <div class="bg-white/50 dark:bg-black/40 backdrop-blur-sm rounded-xl border border-gray-100/50 dark:border-white/5 overflow-hidden">
-        <div class="p-4 flex items-center justify-between gap-4 hover:bg-white/40 dark:hover:bg-white/5 transition-colors">
+      <div class="bg-white/30 dark:bg-black/20 backdrop-blur-md shadow-sm rounded-xl border border-white/40 dark:border-white/10 overflow-hidden">
+        <div class="p-4 flex items-center justify-between gap-4 hover:bg-white/40 dark:hover:bg-white/10 transition-colors">
           <div class="min-w-0">
             <div class="text-sm font-medium text-gray-800 dark:text-gray-200">清除所有数据</div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">

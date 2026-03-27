@@ -16,6 +16,7 @@ const props = withDefaults(defineProps<{
   currentTime?: number;
   wordFadeWidth?: number;
   lineGap?: number;
+  layoutVersion?: string | number;
 }>(), {
   disabled: false,
   playing: true,
@@ -29,6 +30,7 @@ const props = withDefaults(defineProps<{
   currentTime: 0,
   wordFadeWidth: 0.5,
   lineGap: 1,
+  layoutVersion: 0,
 });
 
 const emit = defineEmits<{
@@ -232,6 +234,10 @@ watch(() => props.wordFadeWidth, (value) => {
 watch(() => props.lineGap, (value) => {
   player?.setLineGap(value);
   queueRecovery('line-gap');
+});
+
+watch(() => props.layoutVersion, () => {
+  queueRecovery('layout-version');
 });
 
 watch(() => props.lyricLines, (value) => {

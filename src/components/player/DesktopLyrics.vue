@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useLyrics, lyricsSettings } from '../../composables/lyrics';
+import { getLyricsFontFamily, useLyrics, lyricsSettings } from '../../composables/lyrics';
 import { usePlayer } from '../../composables/player';
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 
@@ -80,6 +80,10 @@ const colorStyles = computed(() => {
     default: return { main: 'text-[#EC4141]', sub: 'text-gray-200' };
   }
 });
+
+const lyricsTextStyle = computed(() => ({
+  fontFamily: getLyricsFontFamily(lyricsSettings.playerFontPreset),
+}));
 
 watch(() => lyricsSettings.isAlwaysOnTop, (val) => toggleAlwaysOnTop(val));
 
@@ -203,7 +207,7 @@ watch(() => lyricsSettings.isAlwaysOnTop, (val) => toggleAlwaysOnTop(val));
       >
         <div v-if="!lyricsSettings.isLocked" class="absolute inset-0 rounded-2xl border-2 border-white/0 group-hover/lyrics:border-white/10 transition-colors pointer-events-none"></div>
 
-        <div class="flex flex-col items-center justify-center w-full text-center">
+        <div class="flex flex-col items-center justify-center w-full text-center" :style="lyricsTextStyle">
           
           <div class="text-[28px] font-bold text-white tracking-wide drop-shadow-md text-glow leading-tight w-full truncate px-4" v-if="currentLyricLine.lines[0]">
             {{ currentLyricLine.lines[0] }}

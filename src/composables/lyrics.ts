@@ -34,6 +34,68 @@ export const MIN_PLAYER_LINE_GAP = 0.5;
 export const MAX_PLAYER_LINE_GAP = 1.5;
 export type LyricsPlayerAlignment = 'left' | 'center' | 'right';
 export const DEFAULT_PLAYER_ALIGNMENT: LyricsPlayerAlignment = 'left';
+export type LyricsFontPreset =
+  | 'system'
+  | 'yahei'
+  | 'dengxian'
+  | 'songti'
+  | 'heiti'
+  | 'kaiti'
+  | 'arial'
+  | 'georgia'
+  | 'mono';
+export const DEFAULT_PLAYER_FONT_PRESET: LyricsFontPreset = 'system';
+export const LYRICS_FONT_OPTIONS = [
+  {
+    value: 'system',
+    label: '跟随系统默认',
+    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  },
+  {
+    value: 'yahei',
+    label: '微软雅黑',
+    fontFamily: '"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',
+  },
+  {
+    value: 'dengxian',
+    label: '等线',
+    fontFamily: '"DengXian", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',
+  },
+  {
+    value: 'songti',
+    label: '宋体',
+    fontFamily: '"SimSun", "Songti SC", "STSong", serif',
+  },
+  {
+    value: 'heiti',
+    label: '黑体',
+    fontFamily: '"SimHei", "Heiti SC", "Microsoft YaHei", sans-serif',
+  },
+  {
+    value: 'kaiti',
+    label: '楷体',
+    fontFamily: '"KaiTi", "Kaiti SC", "STKaiti", serif',
+  },
+  {
+    value: 'arial',
+    label: 'Arial',
+    fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif',
+  },
+  {
+    value: 'georgia',
+    label: 'Georgia',
+    fontFamily: 'Georgia, "Times New Roman", serif',
+  },
+  {
+    value: 'mono',
+    label: '等宽字体',
+    fontFamily: '"Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
+  },
+] as const satisfies ReadonlyArray<{
+  value: LyricsFontPreset;
+  label: string;
+  fontFamily: string;
+}>;
 
 export interface LyricsSettings {
   showTranslation: boolean;
@@ -44,6 +106,7 @@ export interface LyricsSettings {
   playerFontScale: number;
   playerLineGap: number;
   playerAlignment: LyricsPlayerAlignment;
+  playerFontPreset: LyricsFontPreset;
 }
 
 const defaultLyricsSettings: LyricsSettings = {
@@ -55,6 +118,7 @@ const defaultLyricsSettings: LyricsSettings = {
   playerFontScale: DEFAULT_PLAYER_FONT_SCALE,
   playerLineGap: DEFAULT_PLAYER_LINE_GAP,
   playerAlignment: DEFAULT_PLAYER_ALIGNMENT,
+  playerFontPreset: DEFAULT_PLAYER_FONT_PRESET,
 };
 
 const TIMESTAMP_BLOCK_PATTERN = /\[(\d{1,}:\d{2}(?:\.\d+)?)\]/g;
@@ -75,6 +139,17 @@ function normalizePlayerAlignment(value: unknown): LyricsPlayerAlignment {
   return value === 'center' || value === 'right' ? value : DEFAULT_PLAYER_ALIGNMENT;
 }
 
+export function normalizeLyricsFontPreset(value: unknown): LyricsFontPreset {
+  return LYRICS_FONT_OPTIONS.some((option) => option.value === value)
+    ? value as LyricsFontPreset
+    : DEFAULT_PLAYER_FONT_PRESET;
+}
+
+export function getLyricsFontFamily(preset: LyricsFontPreset): string {
+  return LYRICS_FONT_OPTIONS.find((option) => option.value === preset)?.fontFamily
+    ?? LYRICS_FONT_OPTIONS[0].fontFamily;
+}
+
 export const lyricsSettings = reactive<LyricsSettings>({ ...defaultLyricsSettings });
 
 const storage = typeof localStorage === 'undefined' ? null : localStorage;
@@ -88,6 +163,7 @@ if (storedLyricsSettings) {
       playerFontScale: clampPlayerFontScale(parsed.playerFontScale ?? DEFAULT_PLAYER_FONT_SCALE),
       playerLineGap: clampPlayerLineGap(parsed.playerLineGap ?? DEFAULT_PLAYER_LINE_GAP),
       playerAlignment: normalizePlayerAlignment(parsed.playerAlignment),
+      playerFontPreset: normalizeLyricsFontPreset(parsed.playerFontPreset),
     });
   } catch (error) {
     console.error('Failed to parse lyrics settings:', error);
@@ -102,6 +178,7 @@ watch(
       playerFontScale: clampPlayerFontScale(nextSettings.playerFontScale),
       playerLineGap: clampPlayerLineGap(nextSettings.playerLineGap),
       playerAlignment: normalizePlayerAlignment(nextSettings.playerAlignment),
+      playerFontPreset: normalizeLyricsFontPreset(nextSettings.playerFontPreset),
     }));
   },
   { deep: true }

@@ -4,12 +4,17 @@ import { storeToRefs } from 'pinia';
 import type { LyricLine as AmlLyricLine, LyricLineMouseEvent } from '@applemusic-like-lyrics/core';
 import {
   DEFAULT_PLAYER_ALIGNMENT,
+  DEFAULT_PLAYER_FONT_PRESET,
   DEFAULT_PLAYER_FONT_SCALE,
   DEFAULT_PLAYER_LINE_GAP,
+  getLyricsFontFamily,
+  LYRICS_FONT_OPTIONS,
   MAX_PLAYER_FONT_SCALE,
   MAX_PLAYER_LINE_GAP,
   MIN_PLAYER_FONT_SCALE,
   MIN_PLAYER_LINE_GAP,
+  normalizeLyricsFontPreset,
+  type LyricsFontPreset,
   type LyricsPlayerAlignment,
   useLyrics,
 } from '../../composables/lyrics';
@@ -24,13 +29,14 @@ const { audioDelay } = storeToRefs(useSettingsStore());
 const FONT_SCALE_STEP = 0.05;
 const LINE_GAP_STEP = 0.05;
 const PLAYER_ALIGNMENT_OPTIONS: Array<{ value: LyricsPlayerAlignment; label: string }> = [
-  { value: 'left', label: 'Left' },
-  { value: 'center', label: 'Center' },
-  { value: 'right', label: 'Right' },
+  { value: 'left', label: '靠左' },
+  { value: 'center', label: '居中' },
+  { value: 'right', label: '靠右' },
 ];
 
 const fontPanelRef = ref<HTMLElement | null>(null);
 const isFontPanelOpen = ref(false);
+const isFontPresetMenuOpen = ref(false);
 
 function toMs(seconds: number): number {
   return Math.max(0, Math.round(seconds * 1000));
@@ -100,6 +106,10 @@ const emptyStateText = computed(() => {
 
 const fontScalePercent = computed(() => `${Math.round(lyricsSettings.playerFontScale * 100)}%`);
 const lineGapPercent = computed(() => `${Math.round(lyricsSettings.playerLineGap * 100)}%`);
+const selectedFontLabel = computed(() => {
+  return LYRICS_FONT_OPTIONS.find((option) => option.value === lyricsSettings.playerFontPreset)?.label
+    ?? LYRICS_FONT_OPTIONS[0].label;
+});
 
 const fontScaleProgress = computed(() => {
   return ((lyricsSettings.playerFontScale - MIN_PLAYER_FONT_SCALE) / (MAX_PLAYER_FONT_SCALE - MIN_PLAYER_FONT_SCALE)) * 100;
@@ -113,6 +123,7 @@ const lyricsAlignmentClass = computed(() => `lyrics-align-${lyricsSettings.playe
 
 const lyricsPlayerStyle = computed(() => ({
   '--lyrics-font-scale': lyricsSettings.playerFontScale.toString(),
+  '--lyrics-font-family': getLyricsFontFamily(lyricsSettings.playerFontPreset),
 }));
 
 function clampFontScale(value: number) {
@@ -135,6 +146,10 @@ function setPlayerAlignment(value: LyricsPlayerAlignment) {
   lyricsSettings.playerAlignment = value;
 }
 
+function setPlayerFontPreset(value: LyricsFontPreset) {
+  lyricsSettings.playerFontPreset = value;
+}
+
 function adjustPlayerFontScale(delta: number) {
   setPlayerFontScale(lyricsSettings.playerFontScale + delta);
 }
@@ -151,6 +166,11 @@ function resetPlayerAlignment() {
   setPlayerAlignment(DEFAULT_PLAYER_ALIGNMENT);
 }
 
+function resetPlayerFontPreset() {
+  setPlayerFontPreset(DEFAULT_PLAYER_FONT_PRESET);
+  isFontPresetMenuOpen.value = false;
+}
+
 function handleFontScaleInput(event: Event) {
   const target = event.target as HTMLInputElement | null;
   if (!target) return;
@@ -165,7 +185,19 @@ function handleLineGapInput(event: Event) {
   setPlayerLineGap(Number(target.value));
 }
 
+function selectFontPreset(value: LyricsFontPreset) {
+  setPlayerFontPreset(normalizeLyricsFontPreset(value));
+  isFontPresetMenuOpen.value = false;
+}
+
+function toggleFontPresetMenu() {
+  isFontPresetMenuOpen.value = !isFontPresetMenuOpen.value;
+}
+
 function toggleFontPanel() {
+  if (isFontPanelOpen.value) {
+    isFontPresetMenuOpen.value = false;
+  }
   isFontPanelOpen.value = !isFontPanelOpen.value;
 }
 
@@ -173,6 +205,7 @@ function handleClickOutside(event: MouseEvent) {
   const target = event.target as Node | null;
   if (!target) return;
   if (fontPanelRef.value?.contains(target)) return;
+  isFontPresetMenuOpen.value = false;
   isFontPanelOpen.value = false;
 }
 
@@ -317,7 +350,7 @@ onUnmounted(() => {
           <div class="mt-6 mb-3">
             <div class="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/30">Alignment</div>
             <div class="mt-1.5 flex items-center justify-between gap-3">
-              <span class="text-[13px] font-medium text-white/85">Lyrics Position</span>
+              <span class="text-[13px] font-medium text-white/85">歌词位置</span>
               <button
                 v-if="lyricsSettings.playerAlignment !== DEFAULT_PLAYER_ALIGNMENT"
                 type="button"
@@ -344,6 +377,77 @@ onUnmounted(() => {
               {{ option.label }}
             </button>
           </div>
+
+          <div class="mt-6 mb-3">
+            <div class="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/30">Font</div>
+            <div class="mt-1.5 flex items-center justify-between gap-3">
+              <span class="text-[13px] font-medium text-white/85">歌词字体</span>
+              <button
+                v-if="lyricsSettings.playerFontPreset !== DEFAULT_PLAYER_FONT_PRESET"
+                type="button"
+                class="flex h-5 w-5 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white"
+                @click="resetPlayerFontPreset"
+                title="Reset"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="relative">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left text-sm text-white transition hover:border-white/20 hover:bg-white/[0.06]"
+              :class="isFontPresetMenuOpen ? 'border-white/25 bg-white/[0.08] shadow-[0_18px_36px_rgba(0,0,0,0.16)]' : ''"
+              @click="toggleFontPresetMenu"
+            >
+              <span class="truncate">{{ selectedFontLabel }}</span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="shrink-0 text-white/45 transition-transform duration-200"
+                :class="isFontPresetMenuOpen ? 'rotate-180 text-white/70' : ''"
+              >
+                <path d="m6 9 6 6 6-6"/>
+              </svg>
+            </button>
+
+            <transition name="font-preset-menu">
+              <div
+                v-if="isFontPresetMenuOpen"
+                class="absolute left-0 right-0 top-[calc(100%+10px)] z-10 overflow-hidden rounded-2xl border border-white/10 bg-black/45 p-2 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-2xl"
+              >
+                <div class="max-h-64 space-y-1 overflow-y-auto pr-1 custom-scrollbar">
+                  <button
+                    v-for="option in LYRICS_FONT_OPTIONS"
+                    :key="option.value"
+                    type="button"
+                    class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition"
+                    :class="lyricsSettings.playerFontPreset === option.value
+                      ? 'bg-white/[0.14] text-white'
+                      : 'text-white/72 hover:bg-white/[0.07] hover:text-white'"
+                    @click="selectFontPreset(option.value)"
+                  >
+                    <span>{{ option.label }}</span>
+                    <span
+                      v-if="lyricsSettings.playerFontPreset === option.value"
+                      class="text-[11px] font-medium text-white/50"
+                    >
+                      当前
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </transition>
+          </div>
+
         </div>
       </transition>
     </div>
@@ -358,6 +462,7 @@ onUnmounted(() => {
         class="amll-host h-full min-h-0 w-full min-w-0"
         :lyric-lines="amllLines"
         :current-time="amllCurrentTime"
+        :layout-version="lyricsSettings.playerFontPreset"
         align-anchor="center"
         :align-position="0.42"
         :enable-spring="true"
@@ -419,6 +524,7 @@ onUnmounted(() => {
   --amll-lp-color: rgba(255, 255, 255, 0.95);
   --amll-lp-bg-color: transparent;
   --amll-lp-font-size: calc(max(max(5vh, 2.5vw), 12px) * var(--lyrics-font-scale, 1));
+  font-family: var(--lyrics-font-family, system-ui, sans-serif);
 }
 
 .amll-host :deep(.amll-lyric-player [class*="_lyricLine_"]) {
@@ -454,6 +560,17 @@ onUnmounted(() => {
 
 .font-panel-enter-from,
 .font-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+
+.font-preset-menu-enter-active,
+.font-preset-menu-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.font-preset-menu-enter-from,
+.font-preset-menu-leave-to {
   opacity: 0;
   transform: translateY(-6px) scale(0.98);
 }

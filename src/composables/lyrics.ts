@@ -124,6 +124,25 @@ const defaultLyricsSettings: LyricsSettings = {
 const TIMESTAMP_BLOCK_PATTERN = /\[(\d{1,}:\d{2}(?:\.\d+)?)\]/g;
 const ADJACENT_TIMESTAMPS_BEFORE_TEXT_PATTERN = /(?:\[(?:\d{1,}:\d{2}(?:\.\d+)?)\])+(?=[^\[\]\r\n])/g;
 const ESLRC_GAP_PLACEHOLDER = '\u2063';
+const ENHANCED_TIMESTAMP_PATTERN = /<(\d{1,}:\d{2}(?:\.\d+)?)>/g;
+const ENHANCED_TIMESTAMP_TEXT_PATTERN = /<\d{1,}:\d{2}(?:\.\d+)?>/;
+const LRC_LINE_TIMESTAMP_PATTERN = /^\[(\d{1,}:\d{2}(?:\.\d+)?)\](.*)$/;
+
+type ParserSource = 'enhanced' | 'yrc' | 'qrc' | 'lys' | 'eslrc' | 'lrc';
+
+interface ParserCandidate {
+  source: ParserSource;
+  lines: AmlLyricLine[];
+}
+
+const PARSER_PRIORITIES: Record<ParserSource, number> = {
+  enhanced: 5,
+  yrc: 4,
+  qrc: 3,
+  lys: 2,
+  eslrc: 1,
+  lrc: 0,
+};
 
 function clampPlayerFontScale(value: number) {
   if (!Number.isFinite(value)) return DEFAULT_PLAYER_FONT_SCALE;
@@ -227,6 +246,170 @@ export function normalizeEslrcSource(source: string): string {
         : `${timestamp[0]}${ESLRC_GAP_PLACEHOLDER}`))
       .join('');
   });
+}
+
+export function parseTimestampToMs(raw: string): number | null {
+  const match = /^(\d+):(\d{2})(?:\.(\d{1,3}))?$/.exec(raw.trim());
+  if (!match) return null;
+
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  const milliseconds = Number((match[3] ?? '').padEnd(3, '0').slice(0, 3) || '0');
+
+  if (!Number.isFinite(minutes) || !Number.isFinite(seconds) || !Number.isFinite(milliseconds)) {
+    return null;
+  }
+  if (seconds >= 60) return null;
+
+  return (minutes * 60 * 1000) + (seconds * 1000) + milliseconds;
+}
+
+export function isEnhancedLrcLine(line: string): boolean {
+  const match = LRC_LINE_TIMESTAMP_PATTERN.exec(line);
+  if (!match) return false;
+
+  return ENHANCED_TIMESTAMP_TEXT_PATTERN.test(match[2]);
+}
+
+export function parseEnhancedLrcLine(line: string): AmlLyricLine | null {
+  const lineMatch = LRC_LINE_TIMESTAMP_PATTERN.exec(line);
+  if (!lineMatch) return null;
+
+  const lineStartTime = parseTimestampToMs(lineMatch[1]);
+  if (lineStartTime === null) return null;
+
+  const body = lineMatch[2];
+  const markers = [...body.matchAll(ENHANCED_TIMESTAMP_PATTERN)];
+  if (markers.length < 2) return null;
+
+  const leadingText = body.slice(0, markers[0].index ?? 0);
+  if (leadingText.trim().length > 0) return null;
+
+  const words: AmlLyricWord[] = [];
+  let explicitEndTime: number | null = null;
+
+  for (let index = 0; index < markers.length; index += 1) {
+    const currentMarker = markers[index];
+    const nextMarker = markers[index + 1];
+    const currentStart = parseTimestampToMs(currentMarker[1]);
+    if (currentStart === null) return null;
+
+    const currentMarkerEnd = (currentMarker.index ?? 0) + currentMarker[0].length;
+    const nextMarkerIndex = nextMarker?.index ?? body.length;
+    const text = body.slice(currentMarkerEnd, nextMarkerIndex);
+
+    if (!nextMarker) {
+      if (text.length > 0) return null;
+      explicitEndTime = currentStart;
+      continue;
+    }
+
+    const nextStart = parseTimestampToMs(nextMarker[1]);
+    if (nextStart === null || nextStart < currentStart) return null;
+    if (text.length === 0) return null;
+
+    words.push({
+      startTime: currentStart,
+      endTime: nextStart,
+      word: text,
+      romanWord: '',
+    });
+  }
+
+  if (words.length === 0) return null;
+
+  const endTime = explicitEndTime ?? words[words.length - 1].endTime;
+  if (endTime < lineStartTime) return null;
+
+  return {
+    words,
+    translatedLyric: '',
+    romanLyric: '',
+    isBG: false,
+    isDuet: false,
+    startTime: lineStartTime,
+    endTime,
+  };
+}
+
+export function parseEnhancedLrc(source: string): AmlLyricLine[] {
+  const lines: AmlLyricLine[] = [];
+
+  for (const rawLine of source.split('\n')) {
+    if (!isEnhancedLrcLine(rawLine)) continue;
+
+    const parsedLine = parseEnhancedLrcLine(rawLine);
+    if (parsedLine) lines.push(parsedLine);
+  }
+
+  return lines;
+}
+
+function lineContainsEnhancedMarkup(line: AmlLyricLine): boolean {
+  if (ENHANCED_TIMESTAMP_TEXT_PATTERN.test(line.translatedLyric || '')) return true;
+  if (ENHANCED_TIMESTAMP_TEXT_PATTERN.test(line.romanLyric || '')) return true;
+
+  return (line.words || []).some((word) => ENHANCED_TIMESTAMP_TEXT_PATTERN.test(word.word || ''));
+}
+
+export function mergeEnhancedLinesIntoBaseLines(
+  enhancedLines: AmlLyricLine[],
+  baseLines: AmlLyricLine[],
+): AmlLyricLine[] {
+  if (enhancedLines.length === 0) return baseLines;
+  if (baseLines.length === 0) return enhancedLines;
+
+  const enhancedGroups = new Map<number, AmlLyricLine[]>();
+  for (const line of enhancedLines) {
+    const existingGroup = enhancedGroups.get(line.startTime);
+    if (existingGroup) {
+      existingGroup.push(line);
+    } else {
+      enhancedGroups.set(line.startTime, [line]);
+    }
+  }
+
+  const baseGroups = new Map<number, AmlLyricLine[]>();
+  for (const line of baseLines) {
+    const existingGroup = baseGroups.get(line.startTime);
+    if (existingGroup) {
+      existingGroup.push(line);
+    } else {
+      baseGroups.set(line.startTime, [line]);
+    }
+  }
+
+  const times = new Set<number>([
+    ...enhancedGroups.keys(),
+    ...baseGroups.keys(),
+  ]);
+
+  return [...times]
+    .sort((a, b) => a - b)
+    .flatMap((startTime) => {
+      const mergedGroup: AmlLyricLine[] = [];
+      const enhancedGroup = enhancedGroups.get(startTime) ?? [];
+      const baseGroup = baseGroups.get(startTime) ?? [];
+
+      if (enhancedGroup.length > 0) {
+        mergedGroup.push(...enhancedGroup);
+        mergedGroup.push(...baseGroup.filter((line) => !lineContainsEnhancedMarkup(line)));
+      } else {
+        mergedGroup.push(...baseGroup);
+      }
+
+      return mergedGroup;
+    });
+}
+
+function compareParserCandidates(left: ParserCandidate, right: ParserCandidate): number {
+  const scoreDiff = scoreParsedLines(right.lines) - scoreParsedLines(left.lines);
+  if (scoreDiff !== 0) return scoreDiff;
+
+  const lineCountDiff = right.lines.length - left.lines.length;
+  if (lineCountDiff !== 0) return lineCountDiff;
+
+  return PARSER_PRIORITIES[right.source] - PARSER_PRIORITIES[left.source];
 }
 
 function toSafeMs(value: number, fallback: number): number {
@@ -338,7 +521,7 @@ function scoreParsedLines(lines: AmlLyricLine[]): number {
   }, 0);
 }
 
-async function parseWithAml(raw: string): Promise<AmlLyricLine[]> {
+export async function parseWithAml(raw: string): Promise<AmlLyricLine[]> {
   const {
     decryptQrcHex,
     parseEslrc,
@@ -350,41 +533,56 @@ async function parseWithAml(raw: string): Promise<AmlLyricLine[]> {
   } = await getAmlModule();
   const source = raw.replace(/^\uFEFF/, '').replace(/\r/g, '');
   const normalizedEslrcSource = normalizeEslrcSource(source);
-  const candidates: AmlLyricLine[][] = [];
+  const candidates: ParserCandidate[] = [];
 
-  const collect = (parser: () => AmlLyricLine[]) => {
+  const collect = (candidateSource: ParserSource, parser: () => AmlLyricLine[]) => {
     try {
       const lines = parser();
-      if (Array.isArray(lines) && lines.length > 0) candidates.push(lines);
+      if (Array.isArray(lines) && lines.length > 0) {
+        candidates.push({
+          source: candidateSource,
+          lines,
+        });
+      }
     } catch {
       // Try next parser.
     }
   };
 
   if (/<tt[\s>]/i.test(source)) {
-    collect(() => parseTTML(source).lines);
+    collect('lrc', () => parseTTML(source).lines);
   }
 
   const compactHex = source.replace(/\s+/g, '');
   if (/^[0-9a-fA-F]+$/.test(compactHex) && compactHex.length > 64 && compactHex.length % 2 === 0) {
-    collect(() => parseQrc(decryptQrcHex(compactHex)));
+    collect('qrc', () => parseQrc(decryptQrcHex(compactHex)));
   }
 
-  collect(() => parseYrc(source));
-  collect(() => parseQrc(source));
-  collect(() => parseLys(source));
-  collect(() => parseEslrc(normalizedEslrcSource));
-  collect(() => parseLrc(source));
+  collect('yrc', () => parseYrc(source));
+  collect('qrc', () => parseQrc(source));
+  collect('lys', () => parseLys(source));
+  collect('eslrc', () => parseEslrc(normalizedEslrcSource));
+  collect('lrc', () => parseLrc(source));
+
+  const enhancedLines = parseEnhancedLrc(source);
+  if (enhancedLines.length > 0) {
+    const baselineCandidate = [...candidates]
+      .filter((candidate) => candidate.source !== 'enhanced')
+      .sort(compareParserCandidates)[0];
+
+    candidates.push({
+      source: 'enhanced',
+      lines: baselineCandidate
+        ? mergeEnhancedLinesIntoBaseLines(enhancedLines, baselineCandidate.lines)
+        : enhancedLines,
+    });
+  }
 
   if (candidates.length === 0) return [];
 
-  candidates.sort((a, b) => {
-    const scoreDiff = scoreParsedLines(b) - scoreParsedLines(a);
-    if (scoreDiff !== 0) return scoreDiff;
-    return b.length - a.length;
-  });
+  candidates.sort(compareParserCandidates);
 
-  return candidates[0];
+  return candidates[0].lines;
 }
 
 async function parseLyrics(raw: string): Promise<LyricLine[]> {

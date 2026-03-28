@@ -225,6 +225,13 @@ interface PreparedLine {
   translation: string;
   romaji: string;
   words: LyricWord[];
+  sourceIndex: number;
+}
+
+interface LineScriptProfile {
+  latinCount: number;
+  kanaCount: number;
+  hanCount: number;
 }
 
 function sanitizeLineText(text: string): string {
@@ -430,7 +437,7 @@ function normalizeWord(word: AmlLyricWord, fallbackStartMs: number, fallbackEndM
   };
 }
 
-function prepareLine(line: AmlLyricLine): PreparedLine | null {
+function prepareLine(line: AmlLyricLine, sourceIndex: number): PreparedLine | null {
   const fallbackStartMs = toSafeMs(line.startTime, 0);
   const fallbackEndMs = Math.max(fallbackStartMs + 80, toSafeMs(line.endTime, fallbackStartMs + 500));
 
@@ -459,13 +466,18 @@ function prepareLine(line: AmlLyricLine): PreparedLine | null {
     translation,
     romaji,
     words,
+    sourceIndex,
   };
 }
 
-function mergePreparedLines(lines: PreparedLine[]): LyricLine[] {
+export function mergePreparedLines(lines: PreparedLine[]): LyricLine[] {
   if (lines.length === 0) return [];
 
-  const sorted = [...lines].sort((a, b) => (a.startMs - b.startMs) || (a.endMs - b.endMs));
+  const sorted = [...lines].sort((a, b) => (
+    (a.startMs - b.startMs)
+    || (a.sourceIndex - b.sourceIndex)
+    || (a.endMs - b.endMs)
+  ));
   const groups: PreparedLine[][] = [];
 
   for (const line of sorted) {
@@ -483,11 +495,7 @@ function mergePreparedLines(lines: PreparedLine[]): LyricLine[] {
   }
 
   return groups.map((group) => {
-    const main = group.find((line) => line.text.length > 0) ?? group[0];
-    const extras = group.filter((line) => line !== main && line.text.length > 0);
-
-    const translation = main.translation || extras[0]?.text || '';
-    const romaji = main.romaji || extras[1]?.text || '';
+    const { main, translation, romaji } = classifyGroupLines(group);
 
     const endMs = Math.max(...group.map((line) => line.endMs), main.startMs + 80);
 
@@ -504,11 +512,92 @@ function mergePreparedLines(lines: PreparedLine[]): LyricLine[] {
       time: main.startMs / 1000,
       endTime: endMs / 1000,
       text: main.text || words[0].text,
-      translation,
-      romaji,
+      translation: main.translation || translation,
+      romaji: main.romaji || romaji,
       words,
     };
   }).filter((line) => line.text.length > 0 || line.translation.length > 0 || line.romaji.length > 0);
+}
+
+function getLineScriptProfile(text: string): LineScriptProfile {
+  const profile: LineScriptProfile = {
+    latinCount: 0,
+    kanaCount: 0,
+    hanCount: 0,
+  };
+
+  for (const char of text) {
+    if (/\p{Script=Latin}/u.test(char)) {
+      profile.latinCount += 1;
+      continue;
+    }
+    if (/[\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9f]/u.test(char)) {
+      profile.kanaCount += 1;
+      continue;
+    }
+    if (/\p{Script=Han}/u.test(char)) {
+      profile.hanCount += 1;
+    }
+  }
+
+  return profile;
+}
+
+function hasExplicitSecondaryContent(line: PreparedLine): boolean {
+  return line.translation.length > 0 || line.romaji.length > 0;
+}
+
+function isRomajiCandidate(line: PreparedLine): boolean {
+  const profile = getLineScriptProfile(line.text);
+  return profile.latinCount > 0 && profile.kanaCount === 0 && profile.hanCount === 0;
+}
+
+function isJapaneseCandidate(line: PreparedLine): boolean {
+  const profile = getLineScriptProfile(line.text);
+  return profile.kanaCount > 0;
+}
+
+function isHanOnlyCandidate(line: PreparedLine): boolean {
+  const profile = getLineScriptProfile(line.text);
+  return profile.hanCount > 0 && profile.kanaCount === 0 && profile.latinCount === 0;
+}
+
+function classifyGroupLines(group: PreparedLine[]) {
+  const textLines = group.filter((line) => line.text.length > 0);
+  const explicitMain = textLines.find((line) => hasExplicitSecondaryContent(line));
+  const japaneseCandidates = textLines.filter((line) => isJapaneseCandidate(line));
+  const hasJapaneseMain = japaneseCandidates.length > 0;
+  const romajiCandidates = hasJapaneseMain
+    ? textLines.filter((line) => !isJapaneseCandidate(line) && isRomajiCandidate(line))
+    : [];
+  const translationCandidates = hasJapaneseMain
+    ? textLines.filter((line) => !japaneseCandidates.includes(line) && !romajiCandidates.includes(line))
+    : [];
+
+  const main = explicitMain
+    ?? japaneseCandidates[0]
+    ?? textLines[0]
+    ?? group[0];
+
+  const translationLine = main.translation
+    ? null
+    : translationCandidates.find((line) => line !== main)
+      ?? (hasJapaneseMain
+        ? textLines.find((line) => line !== main && !romajiCandidates.includes(line) && isHanOnlyCandidate(line))
+        : textLines.find((line) => line !== main));
+
+  const romajiLine = main.romaji
+    ? null
+    : romajiCandidates.find((line) => line !== main)
+      ?? (translationLine
+        ? textLines.find((line) => line !== main && line !== translationLine)
+        : textLines.find((line) => line !== main));
+
+  return {
+    main,
+    translation: translationLine?.text || '',
+    romaji: romajiLine?.text || '',
+  };
 }
 
 function scoreParsedLines(lines: AmlLyricLine[]): number {
@@ -590,7 +679,7 @@ async function parseLyrics(raw: string): Promise<LyricLine[]> {
   if (parsed.length === 0) return [];
 
   const prepared = parsed
-    .map((line) => prepareLine(line))
+    .map((line, index) => prepareLine(line, index))
     .filter((line): line is PreparedLine => line !== null);
 
   return mergePreparedLines(prepared);

@@ -132,3 +132,171 @@ describe('enhanced lrc parser', async () => {
     expect(merged[1].words[0]?.word).toBe('Plain line');
   });
 });
+
+describe('mergePreparedLines', async () => {
+  const { mergePreparedLines } = await import('./lyrics');
+
+  it('keeps the earlier source line as the main line for bilingual groups', () => {
+    const merged = mergePreparedLines([
+      {
+        startMs: 35308,
+        endMs: 45395,
+        text: 'I sit by myself talking to the moon',
+        translation: '',
+        romaji: '',
+        words: [{
+          text: 'I sit by myself talking to the moon',
+          start: 35.308,
+          end: 45.395,
+          romaji: '',
+        }],
+        sourceIndex: 0,
+      },
+      {
+        startMs: 35308,
+        endMs: 45390,
+        text: '\u6211\u72ec\u81ea\u5750\u7740 \u5411\u768e\u6d01\u7684\u6708\u4eae\u503e\u8bc9\u5fc3\u58f0',
+        translation: '',
+        romaji: '',
+        words: [{
+          text: '\u6211\u72ec\u81ea\u5750\u7740 \u5411\u768e\u6d01\u7684\u6708\u4eae\u503e\u8bc9\u5fc3\u58f0',
+          start: 35.308,
+          end: 45.39,
+          romaji: '',
+        }],
+        sourceIndex: 1,
+      },
+    ]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].text).toBe('I sit by myself talking to the moon');
+    expect(merged[0].translation).toBe('\u6211\u72ec\u81ea\u5750\u7740 \u5411\u768e\u6d01\u7684\u6708\u4eae\u503e\u8bc9\u5fc3\u58f0');
+  });
+
+  it('still prefers explicit translation-bearing lines as the main carrier', () => {
+    const merged = mergePreparedLines([
+      {
+        startMs: 1000,
+        endMs: 3000,
+        text: 'Main',
+        translation: '\u526f\u884c',
+        romaji: '',
+        words: [{
+          text: 'Main',
+          start: 1,
+          end: 3,
+          romaji: '',
+        }],
+        sourceIndex: 1,
+      },
+      {
+        startMs: 1000,
+        endMs: 2990,
+        text: 'Alt',
+        translation: '',
+        romaji: '',
+        words: [{
+          text: 'Alt',
+          start: 1,
+          end: 2.99,
+          romaji: '',
+        }],
+        sourceIndex: 0,
+      },
+    ]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].text).toBe('Main');
+    expect(merged[0].translation).toBe('\u526f\u884c');
+  });
+
+  it('classifies japanese lyric groups by content instead of source order', () => {
+    const merged = mergePreparedLines([
+      {
+        startMs: 43802,
+        endMs: 46596,
+        text: 'so no hi ka ra na ni mo ka mo',
+        translation: '',
+        romaji: '',
+        words: [{
+          text: 'so no hi ka ra na ni mo ka mo',
+          start: 43.802,
+          end: 46.596,
+          romaji: '',
+        }],
+        sourceIndex: 0,
+      },
+      {
+        startMs: 43802,
+        endMs: 46596,
+        text: '\u305d\u306e\u65e5\u304b\u3089\u4f55\u3082\u304b\u3082',
+        translation: '',
+        romaji: '',
+        words: [{
+          text: '\u305d\u306e\u65e5\u304b\u3089\u4f55\u3082\u304b\u3082',
+          start: 43.802,
+          end: 46.596,
+          romaji: '',
+        }],
+        sourceIndex: 1,
+      },
+      {
+        startMs: 43802,
+        endMs: 46844,
+        text: '\u4ece\u90a3\u5929\u5f00\u59cb\u4f3c\u4e4e',
+        translation: '',
+        romaji: '',
+        words: [{
+          text: '\u4ece\u90a3\u5929\u5f00\u59cb\u4f3c\u4e4e',
+          start: 43.802,
+          end: 46.844,
+          romaji: '',
+        }],
+        sourceIndex: 2,
+      },
+    ]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].text).toBe('\u305d\u306e\u65e5\u304b\u3089\u4f55\u3082\u304b\u3082');
+    expect(merged[0].translation).toBe('\u4ece\u90a3\u5929\u5f00\u59cb\u4f3c\u4e4e');
+    expect(merged[0].romaji).toBe('so no hi ka ra na ni mo ka mo');
+  });
+
+  it('keeps english bilingual groups stable without treating english as romaji', () => {
+    const merged = mergePreparedLines([
+      {
+        startMs: 24139,
+        endMs: 26668,
+        text: 'You are all I had',
+        translation: '',
+        romaji: '',
+        words: [{
+          text: 'You are all I had',
+          start: 24.139,
+          end: 26.668,
+          romaji: '',
+        }],
+        sourceIndex: 0,
+      },
+      {
+        startMs: 24139,
+        endMs: 28900,
+        text: '\u4f60\u662f\u6211\u62e5\u6709\u7684\u4e00\u5207',
+        translation: '',
+        romaji: '',
+        words: [{
+          text: '\u4f60\u662f\u6211\u62e5\u6709\u7684\u4e00\u5207',
+          start: 24.139,
+          end: 28.9,
+          romaji: '',
+        }],
+        sourceIndex: 1,
+      },
+    ]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].text).toBe('You are all I had');
+    expect(merged[0].translation).toBe('\u4f60\u662f\u6211\u62e5\u6709\u7684\u4e00\u5207');
+    expect(merged[0].romaji).toBe('');
+  });
+});

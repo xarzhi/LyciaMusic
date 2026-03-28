@@ -134,7 +134,7 @@ describe('enhanced lrc parser', async () => {
 });
 
 describe('mergePreparedLines', async () => {
-  const { mergePreparedLines } = await import('./lyrics');
+  const { getCurrentLyricDisplayLines, getDisplaySubtitles, mergePreparedLines } = await import('./lyrics');
 
   it('keeps the earlier source line as the main line for bilingual groups', () => {
     const merged = mergePreparedLines([
@@ -260,6 +260,7 @@ describe('mergePreparedLines', async () => {
     expect(merged[0].text).toBe('\u305d\u306e\u65e5\u304b\u3089\u4f55\u3082\u304b\u3082');
     expect(merged[0].translation).toBe('\u4ece\u90a3\u5929\u5f00\u59cb\u4f3c\u4e4e');
     expect(merged[0].romaji).toBe('so no hi ka ra na ni mo ka mo');
+    expect(merged[0].words?.[0]?.romaji).toBe('so no hi ka ra na ni mo ka mo');
   });
 
   it('keeps english bilingual groups stable without treating english as romaji', () => {
@@ -298,5 +299,51 @@ describe('mergePreparedLines', async () => {
     expect(merged[0].text).toBe('You are all I had');
     expect(merged[0].translation).toBe('\u4f60\u662f\u6211\u62e5\u6709\u7684\u4e00\u5207');
     expect(merged[0].romaji).toBe('');
+  });
+
+  it('orders visible sublines as romaji first and translation second', () => {
+    const subtitles = getDisplaySubtitles({
+      translation: '\u4ece\u90a3\u5929\u5f00\u59cb\u4f3c\u4e4e',
+      romaji: 'so no hi ka ra na ni mo ka mo',
+    }, true, true);
+
+    expect(subtitles).toEqual({
+      upper: 'so no hi ka ra na ni mo ka mo',
+      lower: '\u4ece\u90a3\u5929\u5f00\u59cb\u4f3c\u4e4e',
+    });
+  });
+
+  it('hides romaji by default while keeping translation visible', () => {
+    const subtitles = getDisplaySubtitles({
+      translation: '\u4ece\u90a3\u5929\u5f00\u59cb\u4f3c\u4e4e',
+      romaji: 'so no hi ka ra na ni mo ka mo',
+    }, true, false);
+
+    expect(subtitles).toEqual({
+      upper: '\u4ece\u90a3\u5929\u5f00\u59cb\u4f3c\u4e4e',
+      lower: '',
+    });
+  });
+
+  it('exposes timed romaji words for the secondary display line', () => {
+    const displayLines = getCurrentLyricDisplayLines({
+      time: 43.802,
+      endTime: 46.596,
+      text: '\u305d\u306e\u65e5\u304b\u3089\u4f55\u3082\u304b\u3082',
+      translation: '\u4ece\u90a3\u5929\u5f00\u59cb\u4f3c\u4e4e',
+      romaji: 'so no hi ka ra na ni mo ka mo',
+      words: [
+        { text: '\u305d\u306e', start: 43.802, end: 44.2, romaji: 'so no ' },
+        { text: '\u65e5\u304b\u3089', start: 44.2, end: 45, romaji: 'hi ka ra ' },
+        { text: '\u4f55\u3082\u304b\u3082', start: 45, end: 46.596, romaji: 'na ni mo ka mo' },
+      ],
+    }, true, true);
+
+    expect(displayLines.map((line) => line.kind)).toEqual(['main', 'romaji', 'translation']);
+    expect(displayLines[1]?.words).toEqual([
+      { text: 'so no ', start: 43.802, end: 44.2 },
+      { text: 'hi ka ra ', start: 44.2, end: 45 },
+      { text: 'na ni mo ka mo', start: 45, end: 46.596 },
+    ]);
   });
 });

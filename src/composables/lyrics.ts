@@ -23,6 +23,18 @@ export interface LyricWord {
   romaji?: string;
 }
 
+export interface CurrentLyricDisplayLine {
+  kind: 'main' | 'romaji' | 'translation';
+  text: string;
+  words?: LyricWord[];
+}
+
+export interface CurrentLyricDisplayState {
+  text: string;
+  lines: string[];
+  displayLines: CurrentLyricDisplayLine[];
+}
+
 export type LyricsStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 
 const LYRICS_SETTINGS_KEY = 'lyrics_settings';
@@ -111,7 +123,7 @@ export interface LyricsSettings {
 
 const defaultLyricsSettings: LyricsSettings = {
   showTranslation: true,
-  showRomaji: true,
+  showRomaji: false,
   isAlwaysOnTop: false,
   isLocked: false,
   colorScheme: 'default' as 'default' | 'pink' | 'blue' | 'green',
@@ -232,6 +244,12 @@ interface LineScriptProfile {
   latinCount: number;
   kanaCount: number;
   hanCount: number;
+}
+
+interface ClassifiedGroupLines {
+  main: PreparedLine;
+  translationLine: PreparedLine | null;
+  romajiLine: PreparedLine | null;
 }
 
 function sanitizeLineText(text: string): string {
@@ -495,12 +513,14 @@ export function mergePreparedLines(lines: PreparedLine[]): LyricLine[] {
   }
 
   return groups.map((group) => {
-    const { main, translation, romaji } = classifyGroupLines(group);
+    const { main, translationLine, romajiLine } = classifyGroupLines(group);
+    const translation = translationLine?.text || '';
+    const romaji = romajiLine?.text || '';
 
     const endMs = Math.max(...group.map((line) => line.endMs), main.startMs + 80);
 
     const words = main.words.length > 0
-      ? main.words
+      ? mergeRomajiWords(main.words, romajiLine?.words ?? [])
       : [{
         text: main.text || translation || romaji || ' ',
         start: main.startMs / 1000,
@@ -543,6 +563,28 @@ function getLineScriptProfile(text: string): LineScriptProfile {
   return profile;
 }
 
+function approxSameWordTiming(left: LyricWord, right: LyricWord, toleranceMs = 80): boolean {
+  const leftStart = Math.round(left.start * 1000);
+  const rightStart = Math.round(right.start * 1000);
+  const leftEnd = Math.round(left.end * 1000);
+  const rightEnd = Math.round(right.end * 1000);
+
+  return Math.abs(leftStart - rightStart) <= toleranceMs && Math.abs(leftEnd - rightEnd) <= toleranceMs;
+}
+
+function mergeRomajiWords(mainWords: LyricWord[], romajiWords: LyricWord[]): LyricWord[] {
+  if (mainWords.length === 0 || romajiWords.length === 0) return mainWords;
+  if (mainWords.length !== romajiWords.length) return mainWords;
+
+  const allAligned = mainWords.every((word, index) => approxSameWordTiming(word, romajiWords[index]));
+  if (!allAligned) return mainWords;
+
+  return mainWords.map((word, index) => ({
+    ...word,
+    romaji: romajiWords[index].text || word.romaji || '',
+  }));
+}
+
 function hasExplicitSecondaryContent(line: PreparedLine): boolean {
   return line.translation.length > 0 || line.romaji.length > 0;
 }
@@ -562,7 +604,7 @@ function isHanOnlyCandidate(line: PreparedLine): boolean {
   return profile.hanCount > 0 && profile.kanaCount === 0 && profile.latinCount === 0;
 }
 
-function classifyGroupLines(group: PreparedLine[]) {
+function classifyGroupLines(group: PreparedLine[]): ClassifiedGroupLines {
   const textLines = group.filter((line) => line.text.length > 0);
   const explicitMain = textLines.find((line) => hasExplicitSecondaryContent(line));
   const japaneseCandidates = textLines.filter((line) => isJapaneseCandidate(line));
@@ -595,8 +637,63 @@ function classifyGroupLines(group: PreparedLine[]) {
 
   return {
     main,
-    translation: translationLine?.text || '',
-    romaji: romajiLine?.text || '',
+    translationLine: translationLine ?? null,
+    romajiLine: romajiLine ?? null,
+  };
+}
+
+function getOrderedSecondaryLyrics(line: Pick<LyricLine, 'translation' | 'romaji'>, showTranslation: boolean, showRomaji: boolean) {
+  const orderedLines: string[] = [];
+  if (showRomaji && line.romaji) orderedLines.push(line.romaji);
+  if (showTranslation && line.translation) orderedLines.push(line.translation);
+  return orderedLines;
+}
+
+export function getCurrentLyricDisplayLines(
+  line: LyricLine,
+  showTranslation: boolean,
+  showRomaji: boolean,
+): CurrentLyricDisplayLine[] {
+  const displayLines: CurrentLyricDisplayLine[] = [{
+    kind: 'main',
+    text: line.text,
+  }];
+
+  if (showRomaji && line.romaji) {
+    const romajiWords = (line.words ?? [])
+      .filter((word) => (word.romaji || '').length > 0)
+      .map((word) => ({
+        text: word.romaji || '',
+        start: word.start,
+        end: word.end,
+      }));
+
+    displayLines.push({
+      kind: 'romaji',
+      text: line.romaji,
+      words: romajiWords.length > 0 ? romajiWords : undefined,
+    });
+  }
+
+  if (showTranslation && line.translation) {
+    displayLines.push({
+      kind: 'translation',
+      text: line.translation,
+    });
+  }
+
+  return displayLines;
+}
+
+export function getDisplaySubtitles(
+  line: Pick<LyricLine, 'translation' | 'romaji'>,
+  showTranslation: boolean,
+  showRomaji: boolean,
+) {
+  const orderedLines = getOrderedSecondaryLyrics(line, showTranslation, showRomaji);
+  return {
+    upper: orderedLines[0] || '',
+    lower: orderedLines[1] || '',
   };
 }
 
@@ -747,33 +844,55 @@ const currentLyricIndex = computed(() => {
   return findLyricIndexByTime(parsedLyrics.value, targetTime);
 });
 
-const currentLyricLine = computed(() => {
+const currentLyricLine = computed<CurrentLyricDisplayState>(() => {
   if (lyricsStatus.value === 'loading') {
-    return { text: 'Loading lyrics...', lines: ['Loading lyrics...'] };
+    return {
+      text: 'Loading lyrics...',
+      lines: ['Loading lyrics...'],
+      displayLines: [{ kind: 'main', text: 'Loading lyrics...' }],
+    };
   }
 
   if (lyricsStatus.value === 'error') {
-    return { text: 'Lyrics unavailable', lines: ['Lyrics unavailable'] };
+    return {
+      text: 'Lyrics unavailable',
+      lines: ['Lyrics unavailable'],
+      displayLines: [{ kind: 'main', text: 'Lyrics unavailable' }],
+    };
   }
 
   if (parsedLyrics.value.length === 0) {
     const fallback = rawLyrics.value.trim() ? 'No synchronized lyrics' : 'Instrumental / No lyrics';
-    return { text: fallback, lines: [fallback] };
+    return {
+      text: fallback,
+      lines: [fallback],
+      displayLines: [{ kind: 'main', text: fallback }],
+    };
   }
 
   const idx = currentLyricIndex.value;
 
   if (idx !== -1) {
     const current = parsedLyrics.value[idx];
-    const linesToShow: string[] = [current.text];
-    if (lyricsSettings.showTranslation && current.translation) linesToShow.push(current.translation);
-    if (lyricsSettings.showRomaji && current.romaji) linesToShow.push(current.romaji);
+    const displayLines = getCurrentLyricDisplayLines(
+      current,
+      lyricsSettings.showTranslation,
+      lyricsSettings.showRomaji,
+    );
 
-    return { text: current.text, lines: linesToShow };
+    return {
+      text: current.text,
+      lines: displayLines.map((line) => line.text),
+      displayLines,
+    };
   }
 
   const first = parsedLyrics.value[0];
-  return { text: first.text, lines: [first.text] };
+  return {
+    text: first.text,
+    lines: [first.text],
+    displayLines: [{ kind: 'main', text: first.text }],
+  };
 });
 
 export function useLyrics() {

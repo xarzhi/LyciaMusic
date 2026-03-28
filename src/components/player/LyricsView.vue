@@ -67,10 +67,11 @@ const amllLines = computed<AmlLyricLine[]>(() => {
         word: word.text,
         startTime: wordStart,
         endTime: wordEnd,
-        romanWord: word.romaji || '',
+        romanWord: lyricsSettings.showRomaji ? (word.romaji || '') : '',
         obscene: false,
       };
     }).filter((word) => word.word.trim().length > 0);
+    const hasTimedRomaji = convertedWords.some((word) => (word.romanWord || '').trim().length > 0);
 
     const words = convertedWords.length > 0
       ? convertedWords
@@ -84,8 +85,8 @@ const amllLines = computed<AmlLyricLine[]>(() => {
 
     return {
       words,
-      translatedLyric: lyricsSettings.showTranslation ? (line.translation || '') : '',
-      romanLyric: lyricsSettings.showRomaji ? (line.romaji || '') : '',
+      translatedLyric: lyricsSettings.showTranslation ? line.translation : '',
+      romanLyric: lyricsSettings.showRomaji && !hasTimedRomaji ? line.romaji : '',
       startTime,
       endTime,
       isBG: false,
@@ -169,6 +170,14 @@ function resetPlayerAlignment() {
 function resetPlayerFontPreset() {
   setPlayerFontPreset(DEFAULT_PLAYER_FONT_PRESET);
   isFontPresetMenuOpen.value = false;
+}
+
+function toggleTranslation() {
+  lyricsSettings.showTranslation = !lyricsSettings.showTranslation;
+}
+
+function toggleRomaji() {
+  lyricsSettings.showRomaji = !lyricsSettings.showRomaji;
 }
 
 function handleFontScaleInput(event: Event) {
@@ -344,6 +353,40 @@ onUnmounted(() => {
               @click="setPlayerLineGap(lyricsSettings.playerLineGap + LINE_GAP_STEP)"
             >
               +
+            </button>
+          </div>
+
+          <div class="mt-6 mb-3">
+            <div class="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/30">Subtitles</div>
+            <div class="mt-1.5 flex items-center justify-between gap-3">
+              <span class="text-[13px] font-medium text-white/85">副行显示</span>
+              <span class="text-[11px] font-medium text-white/42">
+                {{ Number(lyricsSettings.showTranslation) + Number(lyricsSettings.showRomaji) }}/2
+              </span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              class="flex h-10 items-center justify-center rounded-2xl border px-3 text-sm font-medium transition"
+              :class="lyricsSettings.showTranslation
+                ? 'border-white/25 bg-white/14 text-white shadow-[0_10px_30px_rgba(0,0,0,0.18)]'
+                : 'border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:bg-white/[0.06] hover:text-white'"
+              @click="toggleTranslation"
+            >
+              显示翻译
+            </button>
+
+            <button
+              type="button"
+              class="flex h-10 items-center justify-center rounded-2xl border px-3 text-sm font-medium transition"
+              :class="lyricsSettings.showRomaji
+                ? 'border-white/25 bg-white/14 text-white shadow-[0_10px_30px_rgba(0,0,0,0.18)]'
+                : 'border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:bg-white/[0.06] hover:text-white'"
+              @click="toggleRomaji"
+            >
+              显示罗马音
             </button>
           </div>
 

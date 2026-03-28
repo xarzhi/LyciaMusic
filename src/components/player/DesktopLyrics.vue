@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { getLyricsFontFamily, useLyrics, lyricsSettings } from '../../composables/lyrics';
 import { usePlayer } from '../../composables/player';
+import { useSettingsStore } from '../../features/settings/store';
+import { storeToRefs } from 'pinia';
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 
 const { showDesktopLyrics, currentLyricLine } = useLyrics();
-const { stepSeek, prevSong, togglePlay, nextSong, isPlaying, toggleAlwaysOnTop } = usePlayer();
+const { stepSeek, prevSong, togglePlay, nextSong, isPlaying, toggleAlwaysOnTop, currentTime } = usePlayer();
+const { audioDelay } = storeToRefs(useSettingsStore());
 
 // --- 窗口移动逻辑 ---
 const lyricBoxRef = ref<HTMLElement | null>(null);
@@ -74,16 +77,39 @@ const closeLyrics = () => { showDesktopLyrics.value = false; };
 
 const colorStyles = computed(() => {
   switch(lyricsSettings.colorScheme) {
-    case 'pink': return { main: 'text-pink-400', sub: 'text-pink-200' };
-    case 'blue': return { main: 'text-blue-400', sub: 'text-blue-200' };
-    case 'green': return { main: 'text-emerald-400', sub: 'text-emerald-200' };
-    default: return { main: 'text-[#EC4141]', sub: 'text-gray-200' };
+    case 'pink': return { main: 'text-pink-400', sub: 'text-pink-200', active: '#f472b6', inactive: 'rgba(251, 207, 232, 0.38)' };
+    case 'blue': return { main: 'text-blue-400', sub: 'text-blue-200', active: '#60a5fa', inactive: 'rgba(191, 219, 254, 0.4)' };
+    case 'green': return { main: 'text-emerald-400', sub: 'text-emerald-200', active: '#34d399', inactive: 'rgba(167, 243, 208, 0.4)' };
+    default: return { main: 'text-[#EC4141]', sub: 'text-gray-200', active: '#EC4141', inactive: 'rgba(229, 231, 235, 0.38)' };
   }
 });
 
 const lyricsTextStyle = computed(() => ({
   fontFamily: getLyricsFontFamily(lyricsSettings.playerFontPreset),
 }));
+
+const syncedCurrentTime = computed(() => Math.max(0, currentTime.value - audioDelay.value));
+const displayLines = computed(() => currentLyricLine.value.displayLines ?? []);
+const mainDisplayLine = computed(() => displayLines.value[0] ?? null);
+const secondaryDisplayLine = computed(() => displayLines.value[1] ?? null);
+const tertiaryDisplayLine = computed(() => displayLines.value[2] ?? null);
+
+function getWordHighlightProgress(start: number, end: number) {
+  const duration = Math.max(0.001, end - start);
+  return Math.min(1, Math.max(0, (syncedCurrentTime.value - start) / duration));
+}
+
+function getKaraokeWordStyle(start: number, end: number) {
+  const progress = getWordHighlightProgress(start, end);
+  const fillPercent = `${(progress * 100).toFixed(2)}%`;
+
+  return {
+    backgroundImage: `linear-gradient(90deg, ${colorStyles.value.active} 0%, ${colorStyles.value.active} ${fillPercent}, ${colorStyles.value.inactive} ${fillPercent}, ${colorStyles.value.inactive} 100%)`,
+    WebkitBackgroundClip: 'text',
+    backgroundClip: 'text',
+    color: 'transparent',
+  };
+}
 
 watch(() => lyricsSettings.isAlwaysOnTop, (val) => toggleAlwaysOnTop(val));
 
@@ -209,24 +235,36 @@ watch(() => lyricsSettings.isAlwaysOnTop, (val) => toggleAlwaysOnTop(val));
 
         <div class="flex flex-col items-center justify-center w-full text-center" :style="lyricsTextStyle">
           
-          <div class="text-[28px] font-bold text-white tracking-wide drop-shadow-md text-glow leading-tight w-full truncate px-4" v-if="currentLyricLine.lines[0]">
-            {{ currentLyricLine.lines[0] }}
+          <div class="text-[28px] font-bold text-white tracking-wide drop-shadow-md text-glow leading-tight w-full truncate px-4" v-if="mainDisplayLine?.text">
+            {{ mainDisplayLine.text }}
           </div>
 
           <div 
-            v-if="currentLyricLine.lines[1]" 
+            v-if="secondaryDisplayLine?.text" 
             class="text-[20px] font-medium mt-1 drop-shadow-sm opacity-95 w-full truncate px-4"
             :class="colorStyles.main"
           >
-            {{ currentLyricLine.lines[1] }}
+            <template v-if="secondaryDisplayLine.kind === 'romaji' && secondaryDisplayLine.words?.length">
+              <span
+                v-for="(word, index) in secondaryDisplayLine.words"
+                :key="`${word.start}-${word.end}-${index}`"
+                class="inline-block whitespace-pre align-baseline desktop-karaoke-word"
+                :style="getKaraokeWordStyle(word.start, word.end)"
+              >
+                {{ word.text }}
+              </span>
+            </template>
+            <template v-else>
+              {{ secondaryDisplayLine.text }}
+            </template>
           </div>
 
           <div 
-            v-if="currentLyricLine.lines[2]" 
+            v-if="tertiaryDisplayLine?.text" 
             class="text-base font-medium mt-0.5 tracking-wider w-full truncate px-4"
             :class="colorStyles.sub"
           >
-            {{ currentLyricLine.lines[2] }}
+            {{ tertiaryDisplayLine.text }}
           </div>
 
         </div>
@@ -241,5 +279,9 @@ watch(() => lyricsSettings.isAlwaysOnTop, (val) => toggleAlwaysOnTop(val));
 }
 .settings-menu {
   z-index: 99999 !important; 
+}
+
+.desktop-karaoke-word {
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.32);
 }
 </style>

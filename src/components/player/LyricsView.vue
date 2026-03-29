@@ -224,7 +224,6 @@ function resetPlayerOffsetY() {
 
 function resetPlayerFontPreset() {
   setPlayerFontPreset(DEFAULT_PLAYER_FONT_PRESET);
-  isFontPresetMenuOpen.value = false;
 }
 
 function toggleTranslation() {
@@ -265,34 +264,34 @@ function handleOffsetYInput(event: Event) {
 
 function selectFontPreset(value: LyricsFontPreset) {
   setPlayerFontPreset(normalizeLyricsFontPreset(value));
-  isFontPresetMenuOpen.value = false;
 }
 
 function updateFontPresetMenuPosition() {
   const trigger = fontPresetTriggerRef.value;
   if (!trigger) return;
 
-  const rect = trigger.getBoundingClientRect();
+  const panel = trigger.closest('.pointer-events-auto');
+  if (!panel) return;
+
+  const panelRect = panel.getBoundingClientRect();
   const menuWidth = 280;
-  const gap = 26;
+  const gap = 0; // 8px gap for a "tightly attached" floating effect. You can change to 0 if you want it glued perfectly.
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
-  const estimatedMenuHeight = Math.min(420, viewportHeight - 48);
 
-  let left = rect.right + gap;
+  let left = panelRect.right + gap;
   if (left + menuWidth > viewportWidth - 16) {
-    left = Math.max(16, rect.left - gap - menuWidth);
+    left = Math.max(16, panelRect.left - gap - menuWidth);
   }
 
-  const centeredTop = rect.top + (rect.height / 2) - (estimatedMenuHeight / 2) - 170;
-  const top = Math.max(16, Math.min(centeredTop, viewportHeight - estimatedMenuHeight - 16));
+  const bottomDist = viewportHeight - panelRect.bottom;
 
   fontPresetMenuStyle.value = {
     position: 'fixed',
     left: `${Math.round(left)}px`,
-    top: `${Math.round(top)}px`,
+    bottom: `${Math.round(bottomDist)}px`,
     width: `${menuWidth}px`,
-    maxHeight: `${Math.round(Math.min(420, viewportHeight - 32))}px`,
+    maxHeight: `${Math.round(Math.min(420, panelRect.bottom - 16))}px`,
   };
 }
 
@@ -301,6 +300,22 @@ async function toggleFontPresetMenu() {
   if (isFontPresetMenuOpen.value) {
     await nextTick();
     updateFontPresetMenuPosition();
+
+    const menuEl = fontPresetMenuRef.value;
+    if (menuEl) {
+      const activeItem = menuEl.querySelector('.active-font-preset') as HTMLElement | null;
+      const scrollContainer = menuEl.querySelector('.custom-scrollbar') as HTMLElement | null;
+      if (activeItem && scrollContainer) {
+        // Disable smooth scrolling temporarily to jump instantly
+        scrollContainer.style.scrollBehavior = 'auto';
+        const itemTop = activeItem.offsetTop;
+        const itemHeight = activeItem.offsetHeight;
+        const containerHeight = scrollContainer.clientHeight;
+        scrollContainer.scrollTop = itemTop - (containerHeight / 2) + (itemHeight / 2);
+        // Restore smooth scrolling if needed
+        scrollContainer.style.scrollBehavior = '';
+      }
+    }
   }
 }
 
@@ -337,7 +352,7 @@ onUnmounted(() => {
     <div
       v-show="amllLines.length > 0"
       ref="fontPanelRef"
-      class="pointer-events-none absolute right-[100%] mr-[14vw] top-2 bottom-12 z-[85] flex min-h-0 min-w-[260px] max-w-[320px] flex-col justify-center"
+      class="pointer-events-none absolute right-[100%] mr-[14vw] 2xl:mr-[22vw] top-2 bottom-12 z-[85] flex min-h-0 min-w-[260px] max-w-[320px] flex-col justify-center"
       style="width: min(320px, calc(34vw - 24px));"
     >
       <transition name="font-panel">
@@ -621,9 +636,9 @@ onUnmounted(() => {
             <transition name="font-preset-menu">
               <div
                 v-if="false"
-                class="absolute left-[calc(100%+14px)] top-1/2 z-20 w-[280px] -translate-y-1/2 overflow-hidden rounded-2xl border border-white/10 bg-black/45 p-2 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-2xl"
+                class="absolute left-[calc(100%+14px)] top-1/2 z-20 w-[280px] -translate-y-1/2 flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-2 text-white shadow-[0_28px_70px_rgba(0,0,0,0.36)] backdrop-blur-2xl"
               >
-                <div class="max-h-[420px] space-y-1 overflow-y-auto pr-1 custom-scrollbar">
+                <div class="min-h-0 space-y-1 overflow-y-auto pr-1 custom-scrollbar">
                   <button
                     v-for="option in availableFontOptions"
                     :key="option.value"
@@ -689,19 +704,19 @@ onUnmounted(() => {
         <div
           v-if="isFontPresetMenuOpen"
           ref="fontPresetMenuRef"
-          class="z-[120] overflow-hidden rounded-2xl border border-white/10 bg-black/45 p-2 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-2xl"
+          class="z-[120] flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-black/30 p-2 text-white shadow-[0_28px_70px_rgba(0,0,0,0.36)] backdrop-blur-2xl"
           :style="fontPresetMenuStyle"
           @click.stop
           @mousedown.stop
         >
-          <div class="max-h-[inherit] space-y-1 overflow-y-auto pr-1 custom-scrollbar">
+          <div class="min-h-0 space-y-1 overflow-y-auto pr-1 custom-scrollbar">
             <button
               v-for="option in availableFontOptions"
               :key="option.value"
               type="button"
               class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition"
               :class="lyricsSettings.playerFontPreset === option.value
-                ? 'bg-white/[0.14] text-white'
+                ? 'bg-white/[0.14] text-white active-font-preset'
                 : 'text-white/72 hover:bg-white/[0.07] hover:text-white'"
               @click="selectFontPreset(option.value)"
             >
@@ -710,7 +725,7 @@ onUnmounted(() => {
                 v-if="lyricsSettings.playerFontPreset === option.value"
                 class="text-[11px] font-medium text-white/50"
               >
-                褰撳墠
+                当前
               </span>
             </button>
           </div>

@@ -186,10 +186,10 @@ const metaInfo = computed(() => {
       <PlayerDetailLeft :isExpanded="showPlayerDetail" />
 
       <div class="relative z-50 flex min-h-0 flex-1 pl-8 pr-0 pb-22">
-        <div class="pointer-events-none h-full w-[45%] min-w-[300px]"></div>
+        <div class="pointer-events-none h-full w-[40%] min-w-[300px]"></div>
 
         <div
-          class="flex h-full min-h-0 flex-1 flex-col justify-center pt-0 pb-0 pl-2 pr-0"
+          class="flex h-full min-h-0 flex-1 flex-col justify-center pt-0 pb-0 pl-2 pr-8"
           :style="staggerStyle(2, 'X', 20)"
         >
           <transition name="fade-scale" mode="out-in">

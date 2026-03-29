@@ -331,7 +331,10 @@ export function parseEnhancedLrcLine(line: string): AmlLyricLine | null {
 
     const nextStart = parseTimestampToMs(nextMarker[1]);
     if (nextStart === null || nextStart < currentStart) return null;
-    if (text.length === 0) return null;
+    // Some enhanced LRC generators emit consecutive timestamps to mark
+    // zero-length pauses or adjust the next word boundary. Skip those
+    // empty segments instead of dropping the whole line.
+    if (text.length === 0) continue;
 
     words.push({
       startTime: currentStart,

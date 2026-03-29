@@ -81,6 +81,21 @@ describe('enhanced lrc parser', async () => {
     ]);
   });
 
+  it('skips zero-length segments created by consecutive enhanced timestamps', () => {
+    const parsed = parseEnhancedLrcLine('[00:00.000]<00:00.000>ma<00:00.100><00:00.101>ga<00:00.200><00:00.201>shi<00:00.300>');
+
+    expect(parsed).not.toBeNull();
+    expect(parsed?.words.map((word) => ({
+      text: word.word,
+      start: word.startTime,
+      end: word.endTime,
+    }))).toEqual([
+      { text: 'ma', start: 0, end: 100 },
+      { text: 'ga', start: 101, end: 200 },
+      { text: 'shi', start: 201, end: 300 },
+    ]);
+  });
+
   it('falls back on malformed enhanced lines while preserving valid enhanced lines', () => {
     const parsed = parseEnhancedLrc([
       '[00:36.111]<00:36.111>A<00:36.551>B<00:36.991>',

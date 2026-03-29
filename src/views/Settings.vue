@@ -21,21 +21,21 @@ const tabs = [
 
 <template>
   <div class="flex-1 h-full flex flex-col overflow-hidden transition-colors duration-500">
-    
+
     <header class="h-20 flex items-end px-8 pb-4 shrink-0 sticky top-0 z-10">
       <h1 class="text-3xl font-bold text-gray-800 dark:text-gray-200 mr-12 mb-1 drop-shadow-sm">设置</h1>
-      
+
       <div class="flex gap-8 mb-1.5">
-        <button 
-          v-for="tab in tabs" 
+        <button
+          v-for="tab in tabs"
           :key="tab.id"
           @click="activeTab = tab.id as any"
           class="pb-2 text-base font-medium transition-all relative"
           :class="activeTab === tab.id ? 'text-[#EC4141] font-bold' : 'text-gray-800 dark:text-gray-200 hover:text-black dark:hover:text-white'"
         >
           {{ tab.name }}
-          <div 
-            v-if="activeTab === tab.id" 
+          <div
+            v-if="activeTab === tab.id"
             class="absolute bottom-[-2px] left-0 right-0 h-[3px] bg-[#EC4141] rounded-full shadow-sm"
           ></div>
         </button>
@@ -48,7 +48,7 @@ const tabs = [
       <SettingsToolbox v-else-if="activeTab === 'toolbox'" />
       <SettingsLibrary v-else-if="activeTab === 'library'" />
       <SettingsAbout v-else-if="activeTab === 'about'" />
-      
+
       <div v-else class="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
         <div class="text-4xl opacity-50">🚧</div>
         <div>{{ activeTab === 'shortcuts' ? '快捷键设置' : '关于信息' }} 模块正在施工中...</div>

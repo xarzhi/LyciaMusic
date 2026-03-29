@@ -45,7 +45,7 @@ const {
       >
         <div class="rounded-[28px] border border-white/35 bg-white/75 px-8 py-6 text-center shadow-[0_24px_60px_rgba(0,0,0,0.2)] dark:border-white/10 dark:bg-black/65">
           <div class="text-lg font-semibold text-gray-900 dark:text-white">松开即可导入或播放</div>
-          <div class="mt-2 text-sm text-gray-600 dark:text-white/70">音频文件将直接播放，文件夹将导入音乐库</div>
+          <div class="mt-2 text-sm text-gray-600 dark:text-white/70">音频文件将 directly 播放，文件夹将导入音乐库</div>
         </div>
       </div>
     </transition>

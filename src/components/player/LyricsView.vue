@@ -7,12 +7,18 @@ import {
   DEFAULT_PLAYER_FONT_PRESET,
   DEFAULT_PLAYER_FONT_SCALE,
   DEFAULT_PLAYER_LINE_GAP,
+  DEFAULT_PLAYER_OFFSET_X,
+  DEFAULT_PLAYER_OFFSET_Y,
   getLyricsFontFamily,
   LYRICS_FONT_OPTIONS,
   MAX_PLAYER_FONT_SCALE,
   MAX_PLAYER_LINE_GAP,
+  MAX_PLAYER_OFFSET_X,
+  MAX_PLAYER_OFFSET_Y,
   MIN_PLAYER_FONT_SCALE,
   MIN_PLAYER_LINE_GAP,
+  MIN_PLAYER_OFFSET_X,
+  MIN_PLAYER_OFFSET_Y,
   normalizeLyricsFontPreset,
   type LyricsFontPreset,
   type LyricsPlayerAlignment,
@@ -28,6 +34,7 @@ const { audioDelay } = storeToRefs(useSettingsStore());
 
 const FONT_SCALE_STEP = 0.05;
 const LINE_GAP_STEP = 0.05;
+const OFFSET_STEP = 1;
 const PLAYER_ALIGNMENT_OPTIONS: Array<{ value: LyricsPlayerAlignment; label: string }> = [
   { value: 'left', label: '靠左' },
   { value: 'center', label: '居中' },
@@ -107,6 +114,8 @@ const emptyStateText = computed(() => {
 
 const fontScalePercent = computed(() => `${Math.round(lyricsSettings.playerFontScale * 100)}%`);
 const lineGapPercent = computed(() => `${Math.round(lyricsSettings.playerLineGap * 100)}%`);
+const horizontalOffsetPercent = computed(() => formatOffsetValue(lyricsSettings.playerOffsetX));
+const verticalOffsetPercent = computed(() => formatOffsetValue(lyricsSettings.playerOffsetY));
 const selectedFontLabel = computed(() => {
   return LYRICS_FONT_OPTIONS.find((option) => option.value === lyricsSettings.playerFontPreset)?.label
     ?? LYRICS_FONT_OPTIONS[0].label;
@@ -120,11 +129,21 @@ const lineGapProgress = computed(() => {
   return ((lyricsSettings.playerLineGap - MIN_PLAYER_LINE_GAP) / (MAX_PLAYER_LINE_GAP - MIN_PLAYER_LINE_GAP)) * 100;
 });
 
+const horizontalOffsetProgress = computed(() => {
+  return ((lyricsSettings.playerOffsetX - MIN_PLAYER_OFFSET_X) / (MAX_PLAYER_OFFSET_X - MIN_PLAYER_OFFSET_X)) * 100;
+});
+
+const verticalOffsetProgress = computed(() => {
+  return ((lyricsSettings.playerOffsetY - MIN_PLAYER_OFFSET_Y) / (MAX_PLAYER_OFFSET_Y - MIN_PLAYER_OFFSET_Y)) * 100;
+});
+
 const lyricsAlignmentClass = computed(() => `lyrics-align-${lyricsSettings.playerAlignment}`);
 
 const lyricsPlayerStyle = computed(() => ({
   '--lyrics-font-scale': lyricsSettings.playerFontScale.toString(),
   '--lyrics-font-family': getLyricsFontFamily(lyricsSettings.playerFontPreset),
+  '--lyrics-offset-x': `${lyricsSettings.playerOffsetX}%`,
+  '--lyrics-offset-y': `${lyricsSettings.playerOffsetY}%`,
 }));
 
 function clampFontScale(value: number) {
@@ -135,12 +154,32 @@ function clampLineGap(value: number) {
   return Math.min(MAX_PLAYER_LINE_GAP, Math.max(MIN_PLAYER_LINE_GAP, value));
 }
 
+function clampOffsetX(value: number) {
+  return Math.min(MAX_PLAYER_OFFSET_X, Math.max(MIN_PLAYER_OFFSET_X, value));
+}
+
+function clampOffsetY(value: number) {
+  return Math.min(MAX_PLAYER_OFFSET_Y, Math.max(MIN_PLAYER_OFFSET_Y, value));
+}
+
+function formatOffsetValue(value: number) {
+  return `${value > 0 ? '+' : ''}${Math.round(value)}%`;
+}
+
 function setPlayerFontScale(value: number) {
   lyricsSettings.playerFontScale = Number(clampFontScale(value).toFixed(2));
 }
 
 function setPlayerLineGap(value: number) {
   lyricsSettings.playerLineGap = Number(clampLineGap(value).toFixed(2));
+}
+
+function setPlayerOffsetX(value: number) {
+  lyricsSettings.playerOffsetX = Number(clampOffsetX(value).toFixed(0));
+}
+
+function setPlayerOffsetY(value: number) {
+  lyricsSettings.playerOffsetY = Number(clampOffsetY(value).toFixed(0));
 }
 
 function setPlayerAlignment(value: LyricsPlayerAlignment) {
@@ -165,6 +204,14 @@ function resetPlayerLineGap() {
 
 function resetPlayerAlignment() {
   setPlayerAlignment(DEFAULT_PLAYER_ALIGNMENT);
+}
+
+function resetPlayerOffsetX() {
+  setPlayerOffsetX(DEFAULT_PLAYER_OFFSET_X);
+}
+
+function resetPlayerOffsetY() {
+  setPlayerOffsetY(DEFAULT_PLAYER_OFFSET_Y);
 }
 
 function resetPlayerFontPreset() {
@@ -192,6 +239,20 @@ function handleLineGapInput(event: Event) {
   if (!target) return;
 
   setPlayerLineGap(Number(target.value));
+}
+
+function handleOffsetXInput(event: Event) {
+  const target = event.target as HTMLInputElement | null;
+  if (!target) return;
+
+  setPlayerOffsetX(Number(target.value));
+}
+
+function handleOffsetYInput(event: Event) {
+  const target = event.target as HTMLInputElement | null;
+  if (!target) return;
+
+  setPlayerOffsetY(Number(target.value));
 }
 
 function selectFontPreset(value: LyricsFontPreset) {
@@ -422,6 +483,69 @@ onUnmounted(() => {
           </div>
 
           <div class="mt-6 mb-3">
+            <div class="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/30">Offset</div>
+            <div class="mt-1.5 flex items-center justify-between gap-3">
+              <span class="text-[13px] font-medium text-white/85">歌词偏移</span>
+              <div class="flex items-center gap-1">
+                <button
+                  v-if="lyricsSettings.playerOffsetX !== DEFAULT_PLAYER_OFFSET_X"
+                  type="button"
+                  class="flex h-5 w-5 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white"
+                  @click="resetPlayerOffsetX"
+                  title="Reset horizontal offset"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </button>
+                <button
+                  v-if="lyricsSettings.playerOffsetY !== DEFAULT_PLAYER_OFFSET_Y"
+                  type="button"
+                  class="flex h-5 w-5 items-center justify-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white"
+                  @click="resetPlayerOffsetY"
+                  title="Reset vertical offset"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <span class="text-[12px] font-medium text-white/70">水平</span>
+                <span class="text-[11px] font-medium tabular-nums text-white/48">{{ horizontalOffsetPercent }}</span>
+              </div>
+              <input
+                class="font-size-slider h-1 w-full cursor-pointer appearance-none rounded-full"
+                :style="{ background: `linear-gradient(to right, rgba(255,255,255,0.85) ${horizontalOffsetProgress}%, rgba(255,255,255,0.12) ${horizontalOffsetProgress}%)` }"
+                type="range"
+                :min="MIN_PLAYER_OFFSET_X"
+                :max="MAX_PLAYER_OFFSET_X"
+                :step="OFFSET_STEP"
+                :value="lyricsSettings.playerOffsetX"
+                @input="handleOffsetXInput"
+              />
+            </div>
+
+            <div>
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <span class="text-[12px] font-medium text-white/70">垂直</span>
+                <span class="text-[11px] font-medium tabular-nums text-white/48">{{ verticalOffsetPercent }}</span>
+              </div>
+              <input
+                class="font-size-slider h-1 w-full cursor-pointer appearance-none rounded-full"
+                :style="{ background: `linear-gradient(to right, rgba(255,255,255,0.85) ${verticalOffsetProgress}%, rgba(255,255,255,0.12) ${verticalOffsetProgress}%)` }"
+                type="range"
+                :min="MIN_PLAYER_OFFSET_Y"
+                :max="MAX_PLAYER_OFFSET_Y"
+                :step="OFFSET_STEP"
+                :value="lyricsSettings.playerOffsetY"
+                @input="handleOffsetYInput"
+              />
+            </div>
+          </div>
+
+          <div class="mt-6 mb-3">
             <div class="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/30">Font</div>
             <div class="mt-1.5 flex items-center justify-between gap-3">
               <span class="text-[13px] font-medium text-white/85">歌词字体</span>
@@ -501,21 +625,23 @@ onUnmounted(() => {
       :class="lyricsAlignmentClass"
       :style="lyricsPlayerStyle"
     >
-      <AmlLyricPlayer
-        class="amll-host h-full min-h-0 w-full min-w-0"
-        :lyric-lines="amllLines"
-        :current-time="amllCurrentTime"
-        :layout-version="lyricsSettings.playerFontPreset"
-        align-anchor="center"
-        :align-position="0.42"
-        :enable-spring="true"
-        :enable-blur="true"
-        :enable-scale="true"
-        :hide-passed-lines="false"
-        :word-fade-width="0.5"
-        :line-gap="lyricsSettings.playerLineGap"
-        @line-click="handleLineClick"
-      />
+      <div class="lyrics-position-frame h-full min-h-0 w-full min-w-0">
+        <AmlLyricPlayer
+          class="amll-host h-full min-h-0 w-full min-w-0"
+          :lyric-lines="amllLines"
+          :current-time="amllCurrentTime"
+          :layout-version="lyricsSettings.playerFontPreset"
+          align-anchor="center"
+          :align-position="0.42"
+          :enable-spring="true"
+          :enable-blur="true"
+          :enable-scale="true"
+          :hide-passed-lines="false"
+          :word-fade-width="0.5"
+          :line-gap="lyricsSettings.playerLineGap"
+          @line-click="handleLineClick"
+        />
+      </div>
     </div>
 
     <div
@@ -561,6 +687,12 @@ onUnmounted(() => {
 .amll-host {
   min-width: 0;
   min-height: 0;
+}
+
+.lyrics-position-frame {
+  transform: translate3d(var(--lyrics-offset-x, 0%), var(--lyrics-offset-y, 0%), 0);
+  transition: transform 180ms ease;
+  will-change: transform;
 }
 
 .amll-host :deep(.amll-lyric-player) {

@@ -44,6 +44,12 @@ export const MAX_PLAYER_FONT_SCALE = 1.5;
 export const DEFAULT_PLAYER_LINE_GAP = 1;
 export const MIN_PLAYER_LINE_GAP = 0.5;
 export const MAX_PLAYER_LINE_GAP = 1.5;
+export const DEFAULT_PLAYER_OFFSET_X = 0;
+export const MIN_PLAYER_OFFSET_X = -30;
+export const MAX_PLAYER_OFFSET_X = 30;
+export const DEFAULT_PLAYER_OFFSET_Y = 0;
+export const MIN_PLAYER_OFFSET_Y = -25;
+export const MAX_PLAYER_OFFSET_Y = 25;
 export type LyricsPlayerAlignment = 'left' | 'center' | 'right';
 export const DEFAULT_PLAYER_ALIGNMENT: LyricsPlayerAlignment = 'left';
 export type LyricsFontPreset =
@@ -117,6 +123,8 @@ export interface LyricsSettings {
   colorScheme: 'default' | 'pink' | 'blue' | 'green';
   playerFontScale: number;
   playerLineGap: number;
+  playerOffsetX: number;
+  playerOffsetY: number;
   playerAlignment: LyricsPlayerAlignment;
   playerFontPreset: LyricsFontPreset;
 }
@@ -129,6 +137,8 @@ const defaultLyricsSettings: LyricsSettings = {
   colorScheme: 'default' as 'default' | 'pink' | 'blue' | 'green',
   playerFontScale: DEFAULT_PLAYER_FONT_SCALE,
   playerLineGap: DEFAULT_PLAYER_LINE_GAP,
+  playerOffsetX: DEFAULT_PLAYER_OFFSET_X,
+  playerOffsetY: DEFAULT_PLAYER_OFFSET_Y,
   playerAlignment: DEFAULT_PLAYER_ALIGNMENT,
   playerFontPreset: DEFAULT_PLAYER_FONT_PRESET,
 };
@@ -166,6 +176,16 @@ function clampPlayerLineGap(value: number) {
   return Math.min(MAX_PLAYER_LINE_GAP, Math.max(MIN_PLAYER_LINE_GAP, value));
 }
 
+function clampPlayerOffsetX(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_PLAYER_OFFSET_X;
+  return Math.min(MAX_PLAYER_OFFSET_X, Math.max(MIN_PLAYER_OFFSET_X, value));
+}
+
+function clampPlayerOffsetY(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_PLAYER_OFFSET_Y;
+  return Math.min(MAX_PLAYER_OFFSET_Y, Math.max(MIN_PLAYER_OFFSET_Y, value));
+}
+
 function normalizePlayerAlignment(value: unknown): LyricsPlayerAlignment {
   return value === 'center' || value === 'right' ? value : DEFAULT_PLAYER_ALIGNMENT;
 }
@@ -193,6 +213,8 @@ if (storedLyricsSettings) {
       ...parsed,
       playerFontScale: clampPlayerFontScale(parsed.playerFontScale ?? DEFAULT_PLAYER_FONT_SCALE),
       playerLineGap: clampPlayerLineGap(parsed.playerLineGap ?? DEFAULT_PLAYER_LINE_GAP),
+      playerOffsetX: clampPlayerOffsetX(parsed.playerOffsetX ?? DEFAULT_PLAYER_OFFSET_X),
+      playerOffsetY: clampPlayerOffsetY(parsed.playerOffsetY ?? DEFAULT_PLAYER_OFFSET_Y),
       playerAlignment: normalizePlayerAlignment(parsed.playerAlignment),
       playerFontPreset: normalizeLyricsFontPreset(parsed.playerFontPreset),
     });
@@ -208,6 +230,8 @@ watch(
       ...nextSettings,
       playerFontScale: clampPlayerFontScale(nextSettings.playerFontScale),
       playerLineGap: clampPlayerLineGap(nextSettings.playerLineGap),
+      playerOffsetX: clampPlayerOffsetX(nextSettings.playerOffsetX),
+      playerOffsetY: clampPlayerOffsetY(nextSettings.playerOffsetY),
       playerAlignment: normalizePlayerAlignment(nextSettings.playerAlignment),
       playerFontPreset: normalizeLyricsFontPreset(nextSettings.playerFontPreset),
     }));

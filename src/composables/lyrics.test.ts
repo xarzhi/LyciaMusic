@@ -362,3 +362,29 @@ describe('mergePreparedLines', async () => {
     ]);
   });
 });
+
+describe('lyrics settings persistence', () => {
+  it('clamps persisted player offsets when loading settings', async () => {
+    vi.resetModules();
+
+    const getItem = vi.fn(() => JSON.stringify({
+      playerOffsetX: 999,
+      playerOffsetY: -999,
+    }));
+    const setItem = vi.fn();
+
+    vi.stubGlobal('localStorage', {
+      getItem,
+      setItem,
+    });
+
+    const {
+      MAX_PLAYER_OFFSET_X,
+      MIN_PLAYER_OFFSET_Y,
+      lyricsSettings,
+    } = await import('./lyrics');
+
+    expect(lyricsSettings.playerOffsetX).toBe(MAX_PLAYER_OFFSET_X);
+    expect(lyricsSettings.playerOffsetY).toBe(MIN_PLAYER_OFFSET_Y);
+  });
+});

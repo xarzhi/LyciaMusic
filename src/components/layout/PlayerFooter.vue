@@ -18,7 +18,7 @@ const handleOpenDetail = () => {
   togglePlayerDetail();
 };
 
-const { showDesktopLyrics } = useLyrics();
+const { showDesktopLyrics, showLyricsPlayerSettingsPanel } = useLyrics();
 
 // --- Context Menu State ---
 const showContextMenu = ref(false);
@@ -34,6 +34,9 @@ const handleContextMenu = (e: MouseEvent) => {
 };
 
 const toggleLyrics = () => { showDesktopLyrics.value = !showDesktopLyrics.value; };
+const toggleLyricsPlayerSettings = () => {
+  showLyricsPlayerSettingsPanel.value = !showLyricsPlayerSettingsPanel.value;
+};
 
 // 不再使用单独的模糊样式 -> 全透明
 
@@ -269,6 +272,19 @@ onUnmounted(() => {
       class="flex items-center justify-center flex-1 gap-6 transition-opacity duration-700"
       :class="{ 'opacity-0 pointer-events-none': isIdle }"
     >
+      <button
+        v-if="showPlayerDetail"
+        @mousedown.stop
+        @click.stop="toggleLyricsPlayerSettings"
+        class="flex items-center justify-center text-base font-semibold tracking-[0.02em] transition-colors"
+        :class="showLyricsPlayerSettingsPanel
+          ? 'text-white'
+          : 'text-white/60 hover:text-white'"
+        title="歌词样式"
+      >
+        A
+      </button>
+
       <button @click="toggleMode" class="transition-colors" 
         :class="showPlayerDetail ? 'text-white/60 hover:text-white' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white'"
         :title="['列表循环', '单曲循环', '随机播放'][playMode]">

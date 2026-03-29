@@ -21,6 +21,18 @@ describe('normalizeEslrcSource', async () => {
   });
 });
 
+describe('lyrics font preset normalization', async () => {
+  const { normalizeLyricsFontPreset } = await import('./lyrics');
+
+  it('keeps custom system font names', () => {
+    expect(normalizeLyricsFontPreset('Maple Mono NF CN')).toBe('Maple Mono NF CN');
+  });
+
+  it('falls back for blank values', () => {
+    expect(normalizeLyricsFontPreset('   ')).toBe('system');
+  });
+});
+
 describe('enhanced lrc parser', async () => {
   const {
     isEnhancedLrcLine,

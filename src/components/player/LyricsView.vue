@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import type { LyricLine as AmlLyricLine, LyricLineMouseEvent } from '@applemusic-like-lyrics/core';
 import {
@@ -19,7 +19,9 @@ import {
   MIN_PLAYER_LINE_GAP,
   MIN_PLAYER_OFFSET_X,
   MIN_PLAYER_OFFSET_Y,
+  loadSystemLyricsFonts,
   normalizeLyricsFontPreset,
+  systemLyricsFontOptions,
   type LyricsFontPreset,
   type LyricsPlayerAlignment,
   useLyrics,
@@ -28,7 +30,7 @@ import { usePlayer } from '../../composables/player';
 import { useSettingsStore } from '../../features/settings/store';
 import AmlLyricPlayer from './AmlLyricPlayer.vue';
 
-const { parsedLyrics, lyricsSettings, lyricsStatus } = useLyrics();
+const { parsedLyrics, lyricsSettings, lyricsStatus, showLyricsPlayerSettingsPanel } = useLyrics();
 const { seekTo, currentTime } = usePlayer();
 const { audioDelay } = storeToRefs(useSettingsStore());
 
@@ -42,8 +44,10 @@ const PLAYER_ALIGNMENT_OPTIONS: Array<{ value: LyricsPlayerAlignment; label: str
 ];
 
 const fontPanelRef = ref<HTMLElement | null>(null);
-const isFontPanelOpen = ref(false);
+const fontPresetTriggerRef = ref<HTMLElement | null>(null);
+const fontPresetMenuRef = ref<HTMLElement | null>(null);
 const isFontPresetMenuOpen = ref(false);
+const fontPresetMenuStyle = ref<Record<string, string>>({});
 
 function toMs(seconds: number): number {
   return Math.max(0, Math.round(seconds * 1000));
@@ -116,9 +120,13 @@ const fontScalePercent = computed(() => `${Math.round(lyricsSettings.playerFontS
 const lineGapPercent = computed(() => `${Math.round(lyricsSettings.playerLineGap * 100)}%`);
 const horizontalOffsetPercent = computed(() => formatOffsetValue(lyricsSettings.playerOffsetX));
 const verticalOffsetPercent = computed(() => formatOffsetValue(lyricsSettings.playerOffsetY));
+const availableFontOptions = computed(() => [
+  ...LYRICS_FONT_OPTIONS,
+  ...systemLyricsFontOptions.value,
+]);
 const selectedFontLabel = computed(() => {
-  return LYRICS_FONT_OPTIONS.find((option) => option.value === lyricsSettings.playerFontPreset)?.label
-    ?? LYRICS_FONT_OPTIONS[0].label;
+  return availableFontOptions.value.find((option) => option.value === lyricsSettings.playerFontPreset)?.label
+    ?? normalizeLyricsFontPreset(lyricsSettings.playerFontPreset);
 });
 
 const fontScaleProgress = computed(() => {
@@ -260,23 +268,49 @@ function selectFontPreset(value: LyricsFontPreset) {
   isFontPresetMenuOpen.value = false;
 }
 
-function toggleFontPresetMenu() {
-  isFontPresetMenuOpen.value = !isFontPresetMenuOpen.value;
+function updateFontPresetMenuPosition() {
+  const trigger = fontPresetTriggerRef.value;
+  if (!trigger) return;
+
+  const rect = trigger.getBoundingClientRect();
+  const menuWidth = 280;
+  const gap = 26;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const estimatedMenuHeight = Math.min(420, viewportHeight - 48);
+
+  let left = rect.right + gap;
+  if (left + menuWidth > viewportWidth - 16) {
+    left = Math.max(16, rect.left - gap - menuWidth);
+  }
+
+  const centeredTop = rect.top + (rect.height / 2) - (estimatedMenuHeight / 2) - 170;
+  const top = Math.max(16, Math.min(centeredTop, viewportHeight - estimatedMenuHeight - 16));
+
+  fontPresetMenuStyle.value = {
+    position: 'fixed',
+    left: `${Math.round(left)}px`,
+    top: `${Math.round(top)}px`,
+    width: `${menuWidth}px`,
+    maxHeight: `${Math.round(Math.min(420, viewportHeight - 32))}px`,
+  };
 }
 
-function toggleFontPanel() {
-  if (isFontPanelOpen.value) {
-    isFontPresetMenuOpen.value = false;
+async function toggleFontPresetMenu() {
+  isFontPresetMenuOpen.value = !isFontPresetMenuOpen.value;
+  if (isFontPresetMenuOpen.value) {
+    await nextTick();
+    updateFontPresetMenuPosition();
   }
-  isFontPanelOpen.value = !isFontPanelOpen.value;
 }
 
 function handleClickOutside(event: MouseEvent) {
   const target = event.target as Node | null;
   if (!target) return;
   if (fontPanelRef.value?.contains(target)) return;
+  if (fontPresetMenuRef.value?.contains(target)) return;
   isFontPresetMenuOpen.value = false;
-  isFontPanelOpen.value = false;
+  showLyricsPlayerSettingsPanel.value = false;
 }
 
 async function handleLineClick(event: LyricLineMouseEvent) {
@@ -286,37 +320,34 @@ async function handleLineClick(event: LyricLineMouseEvent) {
 
 onMounted(() => {
   window.addEventListener('mousedown', handleClickOutside);
+  window.addEventListener('resize', updateFontPresetMenuPosition);
+  void loadSystemLyricsFonts();
 });
 
 onUnmounted(() => {
   window.removeEventListener('mousedown', handleClickOutside);
+  window.removeEventListener('resize', updateFontPresetMenuPosition);
+  showLyricsPlayerSettingsPanel.value = false;
+  isFontPresetMenuOpen.value = false;
 });
 </script>
 
 <template>
   <div class="group/lyrics-view relative h-full min-h-0 w-full min-w-0">
     <div
-      v-if="amllLines.length > 0"
+      v-show="amllLines.length > 0"
       ref="fontPanelRef"
-      class="pointer-events-none absolute right-4 top-4 z-20 flex flex-col items-end gap-2"
+      class="pointer-events-none absolute right-[100%] mr-[14vw] top-2 bottom-12 z-[85] flex min-h-0 min-w-[260px] max-w-[320px] flex-col justify-center"
+      style="width: min(320px, calc(34vw - 24px));"
     >
-      <button
-        type="button"
-        class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-2 text-white/80 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-black/35 hover:text-white"
-        :class="isFontPanelOpen ? 'pointer-events-auto translate-y-0 opacity-100' : 'pointer-events-none translate-y-1 opacity-0 group-hover/lyrics-view:pointer-events-auto group-hover/lyrics-view:translate-y-0 group-hover/lyrics-view:opacity-100'"
-        @click.stop="toggleFontPanel"
-      >
-        <span class="text-[11px] font-semibold tracking-[0.24em] text-white/70">Aa</span>
-        <span class="text-[11px] font-medium tabular-nums text-white/55">{{ fontScalePercent }}</span>
-      </button>
-
       <transition name="font-panel">
         <div
-          v-if="isFontPanelOpen"
-          class="pointer-events-auto w-[286px] rounded-3xl border border-white/10 bg-black/30 p-4 text-white shadow-[0_28px_70px_rgba(0,0,0,0.36)] backdrop-blur-2xl"
+          v-if="showLyricsPlayerSettingsPanel"
+          class="pointer-events-auto flex max-h-[100%] min-h-0 w-full flex-col rounded-3xl border border-white/10 bg-black/30 text-white shadow-[0_28px_70px_rgba(0,0,0,0.36)] backdrop-blur-2xl"
           @click.stop
           @mousedown.stop
         >
+          <div class="min-h-0 overflow-y-auto px-4 py-4 custom-scrollbar">
           <div class="mb-3">
             <div class="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/30">Lyrics</div>
             <div class="mt-1.5 flex items-center justify-between">
@@ -561,8 +592,9 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="relative">
+          <div class="relative overflow-visible">
             <button
+              ref="fontPresetTriggerRef"
               type="button"
               class="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left text-sm text-white transition hover:border-white/20 hover:bg-white/[0.06]"
               :class="isFontPresetMenuOpen ? 'border-white/25 bg-white/[0.08] shadow-[0_18px_36px_rgba(0,0,0,0.16)]' : ''"
@@ -588,12 +620,12 @@ onUnmounted(() => {
 
             <transition name="font-preset-menu">
               <div
-                v-if="isFontPresetMenuOpen"
-                class="absolute left-0 right-0 top-[calc(100%+10px)] z-10 overflow-hidden rounded-2xl border border-white/10 bg-black/45 p-2 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-2xl"
+                v-if="false"
+                class="absolute left-[calc(100%+14px)] top-1/2 z-20 w-[280px] -translate-y-1/2 overflow-hidden rounded-2xl border border-white/10 bg-black/45 p-2 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-2xl"
               >
-                <div class="max-h-64 space-y-1 overflow-y-auto pr-1 custom-scrollbar">
+                <div class="max-h-[420px] space-y-1 overflow-y-auto pr-1 custom-scrollbar">
                   <button
-                    v-for="option in LYRICS_FONT_OPTIONS"
+                    v-for="option in availableFontOptions"
                     :key="option.value"
                     type="button"
                     class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition"
@@ -615,6 +647,7 @@ onUnmounted(() => {
             </transition>
           </div>
 
+          </div>
         </div>
       </transition>
     </div>
@@ -650,6 +683,40 @@ onUnmounted(() => {
     >
       {{ emptyStateText }}
     </div>
+
+    <Teleport to="body">
+      <transition name="font-preset-menu">
+        <div
+          v-if="isFontPresetMenuOpen"
+          ref="fontPresetMenuRef"
+          class="z-[120] overflow-hidden rounded-2xl border border-white/10 bg-black/45 p-2 shadow-[0_24px_60px_rgba(0,0,0,0.32)] backdrop-blur-2xl"
+          :style="fontPresetMenuStyle"
+          @click.stop
+          @mousedown.stop
+        >
+          <div class="max-h-[inherit] space-y-1 overflow-y-auto pr-1 custom-scrollbar">
+            <button
+              v-for="option in availableFontOptions"
+              :key="option.value"
+              type="button"
+              class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition"
+              :class="lyricsSettings.playerFontPreset === option.value
+                ? 'bg-white/[0.14] text-white'
+                : 'text-white/72 hover:bg-white/[0.07] hover:text-white'"
+              @click="selectFontPreset(option.value)"
+            >
+              <span>{{ option.label }}</span>
+              <span
+                v-if="lyricsSettings.playerFontPreset === option.value"
+                class="text-[11px] font-medium text-white/50"
+              >
+                褰撳墠
+              </span>
+            </button>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
   </div>
 </template>
 
@@ -730,13 +797,15 @@ onUnmounted(() => {
 
 .font-panel-enter-active,
 .font-panel-leave-active {
-  transition: opacity 180ms ease, transform 180ms ease;
+  transition: opacity 180ms ease, transform 180ms ease, backdrop-filter 180ms ease;
+  will-change: transform, opacity;
 }
 
 .font-panel-enter-from,
 .font-panel-leave-to {
   opacity: 0;
   transform: translateY(-6px) scale(0.98);
+  backdrop-filter: blur(0px);
 }
 
 .font-preset-menu-enter-active,

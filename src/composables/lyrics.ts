@@ -52,16 +52,13 @@ export const MIN_PLAYER_OFFSET_Y = -25;
 export const MAX_PLAYER_OFFSET_Y = 25;
 export type LyricsPlayerAlignment = 'left' | 'center' | 'right';
 export const DEFAULT_PLAYER_ALIGNMENT: LyricsPlayerAlignment = 'left';
-export type LyricsFontPreset =
-  | 'system'
-  | 'yahei'
-  | 'dengxian'
-  | 'songti'
-  | 'heiti'
-  | 'kaiti'
-  | 'arial'
-  | 'georgia'
-  | 'mono';
+export type LyricsFontPreset = string;
+export interface LyricsFontOption {
+  value: LyricsFontPreset;
+  label: string;
+  fontFamily: string;
+  isSystem?: boolean;
+}
 export const DEFAULT_PLAYER_FONT_PRESET: LyricsFontPreset = 'system';
 export const LYRICS_FONT_OPTIONS = [
   {
@@ -109,11 +106,7 @@ export const LYRICS_FONT_OPTIONS = [
     label: '等宽字体',
     fontFamily: '"Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
   },
-] as const satisfies ReadonlyArray<{
-  value: LyricsFontPreset;
-  label: string;
-  fontFamily: string;
-}>;
+] as const satisfies ReadonlyArray<LyricsFontOption>;
 
 export interface LyricsSettings {
   showTranslation: boolean;
@@ -190,15 +183,85 @@ function normalizePlayerAlignment(value: unknown): LyricsPlayerAlignment {
   return value === 'center' || value === 'right' ? value : DEFAULT_PLAYER_ALIGNMENT;
 }
 
+function normalizeCustomFontName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').slice(0, 160);
+}
+
+function escapeFontFamilyName(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function extractPrimaryFontFamily(fontFamily: string): string {
+  return fontFamily
+    .split(',')[0]
+    ?.trim()
+    .replace(/^["']|["']$/g, '')
+    ?? '';
+}
+
+const builtinPrimaryFontFamilies = new Set(
+  LYRICS_FONT_OPTIONS
+    .map((option) => extractPrimaryFontFamily(option.fontFamily).toLocaleLowerCase())
+    .filter(Boolean),
+);
+
 export function normalizeLyricsFontPreset(value: unknown): LyricsFontPreset {
-  return LYRICS_FONT_OPTIONS.some((option) => option.value === value)
-    ? value as LyricsFontPreset
-    : DEFAULT_PLAYER_FONT_PRESET;
+  if (typeof value !== 'string') return DEFAULT_PLAYER_FONT_PRESET;
+
+  const normalized = normalizeCustomFontName(value);
+  if (!normalized) return DEFAULT_PLAYER_FONT_PRESET;
+
+  return normalized;
 }
 
 export function getLyricsFontFamily(preset: LyricsFontPreset): string {
   return LYRICS_FONT_OPTIONS.find((option) => option.value === preset)?.fontFamily
-    ?? LYRICS_FONT_OPTIONS[0].fontFamily;
+    ?? `${escapeFontFamilyName(normalizeLyricsFontPreset(preset))}, system-ui, sans-serif`;
+}
+
+export const systemLyricsFontOptions = ref<LyricsFontOption[]>([]);
+export const showLyricsPlayerSettingsPanel = ref(false);
+let loadSystemLyricsFontsTask: Promise<void> | null = null;
+let systemLyricsFontsLoaded = false;
+
+function buildSystemLyricsFontOptions(fontFamilies: string[]): LyricsFontOption[] {
+  const uniqueFamilies = new Set<string>();
+
+  for (const family of fontFamilies) {
+    const normalized = normalizeCustomFontName(family);
+    if (!normalized) continue;
+    if (builtinPrimaryFontFamilies.has(normalized.toLocaleLowerCase())) continue;
+    uniqueFamilies.add(normalized);
+  }
+
+  return Array.from(uniqueFamilies)
+    .sort((left, right) => left.localeCompare(right, 'zh-CN'))
+    .map((family) => ({
+      value: family,
+      label: family,
+      fontFamily: `${escapeFontFamilyName(family)}, system-ui, sans-serif`,
+      isSystem: true,
+    }));
+}
+
+export async function loadSystemLyricsFonts(force = false) {
+  if (systemLyricsFontsLoaded && !force) return;
+  if (loadSystemLyricsFontsTask) return loadSystemLyricsFontsTask;
+
+  loadSystemLyricsFontsTask = (async () => {
+    try {
+      const fonts = await invoke<string[]>('get_system_fonts');
+      systemLyricsFontOptions.value = buildSystemLyricsFontOptions(fonts);
+    } catch (error) {
+      console.warn('Failed to load system fonts:', error);
+      systemLyricsFontOptions.value = [];
+    } finally {
+      systemLyricsFontsLoaded = true;
+      loadSystemLyricsFontsTask = null;
+    }
+  })();
+
+  return loadSystemLyricsFontsTask;
 }
 
 export const lyricsSettings = reactive<LyricsSettings>({ ...defaultLyricsSettings });
@@ -925,6 +988,7 @@ const currentLyricLine = computed<CurrentLyricDisplayState>(() => {
 export function useLyrics() {
   return {
     showDesktopLyrics,
+    showLyricsPlayerSettingsPanel,
     lyricsSettings,
     lyricsStatus,
     currentLyricLine,

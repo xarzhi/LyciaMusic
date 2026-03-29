@@ -4,6 +4,7 @@ pub mod error;
 mod music;
 mod player;
 mod statistics;
+mod system_fonts;
 mod toolbox;
 mod window_boundary;
 mod window_material;
@@ -28,6 +29,7 @@ use statistics::{
     get_library_stats, get_quality_distribution, get_recent_history, import_recent_history,
     record_play, remove_from_recent_history,
 };
+use system_fonts::get_system_fonts;
 use toolbox::{apply_rename, open_external_program, preview_rename, refresh_folder_songs};
 use window_boundary::set_mini_boundary_enabled;
 use window_material::get_window_material_capabilities;
@@ -98,7 +100,8 @@ pub fn run() {
             set_mini_boundary_enabled,
             get_window_material_capabilities,
             set_dark_mode_for_window,
-            consume_pending_open_paths
+            consume_pending_open_paths,
+            get_system_fonts
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

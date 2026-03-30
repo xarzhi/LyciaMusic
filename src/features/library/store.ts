@@ -27,8 +27,8 @@ export const useLibraryStore = defineStore('library', () => {
   const libraryScanSession = ref<LibraryScanSession | null>(null);
   const lastLibraryScanError = ref<string | null>(null);
   const watchedFolders = ref<string[]>([]);
-  const artistSortMode = ref<ArtistSortMode>('count');
-  const albumSortMode = ref<AlbumSortMode>('artist');
+  const artistSortMode = ref<ArtistSortMode>('name');
+  const albumSortMode = ref<AlbumSortMode>('name');
   const artistCustomOrder = ref<string[]>([]);
   const albumCustomOrder = ref<string[]>([]);
   const folderSortMode = ref<FolderSortMode>('title');

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { dragSession } from '../../composables/dragState';
@@ -164,6 +164,74 @@ const {
   scanLibrary,
 });
 
+const displayHeroTitle = computed(() => {
+  if (heroScanStatus.value === 'error') {
+    return '\u8fd9\u6bb5\u97f3\u4e50\u4e4b\u65c5\u6682\u65f6\u88ab\u6253\u65ad\u4e86';
+  }
+  if (heroScanStatus.value === 'success') {
+    return librarySongs.value.length > 0
+      ? '\u4e07\u7c41\u4ff1\u5bc2\uff0c\u9759\u5f85\u4e50\u8d77\u3002'
+      : '\u8fd9\u6b21\u6ca1\u6709\u53d1\u73b0\u53ef\u5bfc\u5165\u7684\u6b4c\u66f2';
+  }
+  return '\u5373\u5c06\u5f00\u59cb\u7f8e\u5999\u7684\u97f3\u4e50\u4e4b\u65c5...';
+});
+
+const heroPercentValue = computed(() => {
+  if (heroScanStatus.value === 'success') {
+    return 100;
+  }
+
+  return Math.round(libraryScanPercent.value);
+});
+
+const heroPercentText = computed(() => `${heroPercentValue.value}%`);
+
+const displayHeroProgressNote = computed(() => {
+  const progress = libraryScanProgress.value;
+  if (progress && progress.total > 0) {
+    return `${progress.current} / ${progress.total}`;
+  }
+  if (heroScanStatus.value === 'success') {
+    return librarySongs.value.length > 0 ? `${librarySongs.value.length} \u9996\u5df2\u5165\u5e93` : '\u672a\u53d1\u73b0\u6b4c\u66f2';
+  }
+  if (heroScanStatus.value === 'error') {
+    return '\u5bfc\u5165\u5df2\u4e2d\u65ad';
+  }
+  return libraryScanPhaseLabel.value;
+});
+
+const displayHeroProgressDetail = computed(() => {
+  const progress = libraryScanProgress.value;
+  if (progress && progress.total > 0) {
+    const folderPath = progress.folder_path?.trim();
+    return folderPath || libraryScanPhaseLabel.value;
+  }
+  if (heroScanStatus.value === 'success') {
+    return '\u73b0\u5728\u53ef\u4ee5\u5f00\u59cb\u6d4f\u89c8\u3001\u641c\u7d22\u548c\u64ad\u653e';
+  }
+  if (heroScanStatus.value === 'error') {
+    return '\u91cd\u65b0\u626b\u63cf\u540e\u4f1a\u7ee7\u7eed\u5efa\u7acb\u97f3\u4e50\u5e93';
+  }
+  return libraryScanFolderLabel.value || '\u6b63\u5728\u51c6\u5907\u5bfc\u5165';
+});
+
+const onboardingMessage = computed(() =>
+  showLibraryOnboarding.value
+    ? '\u97f3\u4e50\u5e93\u7a7a\u7a7a\u5982\u4e5f\uff0c\u5feb\u53bb\u6dfb\u52a0\u4f60\u7684\u672c\u5730\u97f3\u4e50\u5427'
+    : emptyStateMessage.value,
+);
+const libraryCheckingTitle = '\u6b63\u5728\u68c0\u67e5\u4f60\u7684\u97f3\u4e50\u5e93...';
+const libraryCheckingDescription = '\u542f\u52a8\u540e\u4f1a\u5728\u540e\u53f0\u5feb\u901f\u6838\u5bf9\u76ee\u5f55\u53d8\u5316\uff0c\u4e0d\u4f1a\u6253\u65ad\u5f53\u524d\u6d4f\u89c8\u3002';
+const emptyLibraryResultTitle = computed(() =>
+  lastLibraryScanError.value
+    ? '\u6682\u65f6\u65e0\u6cd5\u8bfb\u53d6\u4f60\u7684\u97f3\u4e50\u5e93'
+    : '\u672a\u5728\u5f53\u524d\u97f3\u4e50\u5e93\u4e2d\u53d1\u73b0\u53ef\u5bfc\u5165\u97f3\u9891',
+);
+const emptyLibraryResultDescription = computed(() =>
+  lastLibraryScanError.value
+    ? '\u4f60\u53ef\u4ee5\u524d\u5f80\u8bbe\u7f6e\u4e2d\u7684\u97f3\u4e50\u5e93\u9875\u91cd\u65b0\u626b\u63cf\uff0c\u6216\u68c0\u67e5\u76ee\u5f55\u662f\u5426\u4ecd\u7136\u53ef\u8bbf\u95ee\u3002'
+    : '\u53ef\u4ee5\u5c1d\u8bd5\u91cd\u65b0\u9009\u62e9\u6587\u4ef6\u5939\uff0c\u6216\u786e\u8ba4\u76ee\u5f55\u4e2d\u5305\u542b\u53d7\u652f\u6301\u7684\u97f3\u9891\u6587\u4ef6\u3002',
+);
 const getClickableArtistNames = (song: Song) =>
   (Array.isArray(song.artist_names) && song.artist_names.length > 0 ? song.artist_names : [song.artist]).filter(Boolean);
 
@@ -349,18 +417,18 @@ const getRowStyle = (songIndex: number, songPath: string) => {
             <circle cx="6" cy="18" r="3"></circle>
             <circle cx="18" cy="16" r="3"></circle>
           </svg>
-          <p class="mb-6 text-[15px]">{{ showLibraryOnboarding ? '音乐库空空如也，快去添加你的本地音乐吧' : emptyStateMessage }}</p>
+          <p class="mb-6 text-[15px]">{{ onboardingMessage }}</p>
           <button v-if="showLibraryOnboarding" @click="addLibraryFolder" class="flex items-center gap-2 px-6 py-2.5 bg-[#EC4141] text-white hover:bg-[#d73a3a] rounded-full text-[14px] font-medium transition-colors shadow-sm">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            添加本地音乐
+            &#28155;&#21152;&#26412;&#22320;&#38899;&#20048;
           </button>
         </template>
         <template v-else-if="showLibraryChecking">
           <div class="flex h-14 w-14 items-center justify-center rounded-full bg-white/70 shadow-[0_10px_30px_rgba(15,23,42,0.08)] dark:bg-white/10">
             <div class="h-6 w-6 rounded-full border-2 border-[#ec4141]/25 border-t-[#ec4141] scan-spinner"></div>
           </div>
-          <p class="mt-5 text-[15px] font-medium text-gray-700 dark:text-white/80">正在检查你的音乐库…</p>
-          <p class="mt-2 text-[13px] opacity-70">启动后会在后台快速核对目录变化，不会打断当前浏览。</p>
+          <p class="mt-5 text-[15px] font-medium text-gray-700 dark:text-white/80">{{ libraryCheckingTitle }}</p>
+          <p class="mt-2 text-[13px] opacity-70">{{ libraryCheckingDescription }}</p>
         </template>
         <template v-else-if="showLibraryEmptyResult">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mb-4 text-gray-300 dark:text-white/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -370,9 +438,9 @@ const getRowStyle = (songIndex: number, songPath: string) => {
             <circle cx="7" cy="17" r="2"></circle>
             <circle cx="17" cy="15" r="2"></circle>
           </svg>
-          <p class="mb-2 text-[15px]">{{ lastLibraryScanError ? '暂时无法读取你的音乐库' : '未在当前音乐库中发现可导入音频' }}</p>
+          <p class="mb-2 text-[15px]">{{ emptyLibraryResultTitle }}</p>
           <p class="text-[13px] opacity-70">
-            {{ lastLibraryScanError ? '你可以前往设置中的音乐库页重新扫描，或检查目录是否仍然可访问。' : '可以尝试重新选择文件夹，或确认目录中包含受支持的音频文件。' }}
+            {{ emptyLibraryResultDescription }}
           </p>
         </template>
         <template v-else-if="currentViewMode === 'playlist'">
@@ -384,70 +452,39 @@ const getRowStyle = (songIndex: number, songPath: string) => {
       </div>
     </div>
 
-    <transition name="library-hero">
-      <div
-        v-if="showHeroScanCard"
-        class="absolute inset-0 z-30 flex items-center justify-center px-6"
-      >
-        <div class="absolute inset-0 bg-white/72 backdrop-blur-md dark:bg-black/45"></div>
-        <div class="relative z-10 w-full max-w-[560px] overflow-hidden rounded-[32px] border border-white/60 bg-white/88 p-7 text-gray-800 shadow-[0_28px_80px_rgba(15,23,42,0.16)] backdrop-blur-2xl dark:border-white/10 dark:bg-black/70 dark:text-white">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <div class="text-[12px] font-semibold uppercase tracking-[0.24em] text-[#ec4141]/80">
-                {{ libraryScanPhaseLabel }}
-              </div>
-              <h3 class="mt-3 text-[28px] font-semibold leading-tight">
-                {{ heroScanStatus === 'error' ? '导入过程中出现问题' : heroScanStatus === 'success' ? '音乐库已经准备好了' : '正在导入你的音乐' }}
-              </h3>
-              <p class="mt-3 max-w-[420px] text-[14px] leading-6 text-gray-500 dark:text-white/65">
-                {{
-                  heroScanStatus === 'error'
-                    ? (lastLibraryScanError || '你可以重新扫描当前目录，或重新选择一个可访问的音乐文件夹。')
-                    : heroScanStatus === 'success'
-                      ? (librarySongs.length > 0 ? '已经完成首次建立音乐库，马上就可以开始浏览和播放。' : '这次扫描没有发现可导入的音频文件。')
-                      : '首次建立音乐库时会读取文件信息并写入数据库，通常只需要几十秒。'
-                }}
-              </p>
+    <Teleport to="body">
+      <transition name="library-hero">
+        <div
+          v-if="showHeroScanCard"
+          class="library-hero-overlay"
+        >
+          <div class="library-hero-backdrop"></div>
+
+          <div class="library-hero-card" :class="`library-hero-card-${heroScanStatus}`">
+            <p class="library-hero-phase">{{ libraryScanPhaseLabel }}</p>
+            <h3 class="library-hero-title">{{ displayHeroTitle }}</h3>
+
+            <div class="library-hero-progress-track">
+              <div
+                class="library-hero-progress-fill"
+                :class="{ 'scan-progress-indeterminate': libraryScanProgress && libraryScanProgress.total <= 0 && heroScanStatus === 'scanning' }"
+                :style="{ width: `${heroPercentValue}%` }"
+              ></div>
             </div>
-            <div
-              class="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
-              :class="heroScanStatus === 'error' ? 'bg-rose-500/12 text-rose-500' : heroScanStatus === 'success' ? 'bg-emerald-500/12 text-emerald-500' : 'bg-[#ec4141]/10 text-[#ec4141]'"
-            >
-              <svg v-if="heroScanStatus === 'success'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              <svg v-else-if="heroScanStatus === 'error'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86l-7.5 13A1 1 0 003.65 18h16.7a1 1 0 00.86-1.5l-7.5-13a1 1 0 00-1.72 0z" />
-              </svg>
-              <div v-else class="h-5 w-5 rounded-full border-2 border-current/25 border-t-current scan-spinner"></div>
+
+            <div class="library-hero-progress-meta">
+              <span class="library-hero-progress-note" :title="displayHeroProgressDetail">{{ displayHeroProgressDetail }}</span>
+              <span class="library-hero-progress-value">{{ displayHeroProgressNote }} &middot; {{ heroPercentText }}</span>
             </div>
-          </div>
 
-          <div class="mt-6 overflow-hidden rounded-full bg-black/6 dark:bg-white/10">
-            <div
-              class="h-2.5 rounded-full bg-gradient-to-r from-[#ec4141] via-[#ff7b63] to-[#f7b267] transition-[width] duration-300 ease-out"
-              :class="{ 'scan-progress-indeterminate': libraryScanProgress && libraryScanProgress.total <= 0 && heroScanStatus === 'scanning' }"
-              :style="{ width: `${heroScanStatus === 'success' ? 100 : libraryScanPercent}%` }"
-            ></div>
-          </div>
-
-          <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px] text-gray-500 dark:text-white/55">
-            <span v-if="libraryScanFolderLabel">{{ libraryScanFolderLabel }}</span>
-            <span v-if="libraryScanProgress && libraryScanProgress.total > 0">
-              {{ libraryScanProgress.current }}/{{ libraryScanProgress.total }}
-            </span>
-            <span v-if="libraryScanProgress?.folder_path" class="truncate max-w-[280px]" :title="libraryScanProgress.folder_path">
-              {{ libraryScanProgress.folder_path }}
-            </span>
-          </div>
-
-          <div v-if="heroScanStatus === 'error'" class="mt-7 flex flex-wrap gap-3">
-            <button type="button" class="hero-primary-btn" @click="retryHeroLibraryScan">重新扫描</button>
-            <button type="button" class="hero-secondary-btn" @click="addLibraryFolder">重新选择文件夹</button>
+            <div v-if="heroScanStatus === 'error'" class="library-hero-actions">
+              <button type="button" class="hero-primary-btn" @click="retryHeroLibraryScan">&#37325;&#26032;&#25195;&#25551;</button>
+              <button type="button" class="hero-secondary-btn" @click="addLibraryFolder">&#37325;&#26032;&#36873;&#25321;&#25991;&#20214;&#22841;</button>
+            </div>
           </div>
         </div>
-      </div>
-    </transition>
+      </transition>
+    </Teleport>
 
     <div
       v-if="showAlphabetIndex"
@@ -487,7 +524,7 @@ const getRowStyle = (songIndex: number, songPath: string) => {
           class="index-locate-btn"
           :class="{ 'index-locate-btn-disabled': !canLocateCurrentSong }"
           :disabled="!canLocateCurrentSong"
-          title="定位当前播放歌曲"
+          title="&#23450;&#20301;&#24403;&#21069;&#25773;&#25918;&#27468;&#26354;"
           @click="scrollToCurrentSong"
         >
           <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -523,42 +560,177 @@ const getRowStyle = (songIndex: number, songPath: string) => {
   animation: scan-spin 0.9s linear infinite;
 }
 
+.library-hero-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 170;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.library-hero-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(244, 246, 250, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.library-hero-card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 500px);
+  overflow: hidden;
+  padding: 1.55rem 1.6rem 1.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(248, 250, 252, 0.8));
+  box-shadow:
+    0 16px 40px rgba(15, 23, 42, 0.12),
+    0 2px 12px rgba(15, 23, 42, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(30px) saturate(1.04);
+}
+
+.library-hero-card-success {
+  background: linear-gradient(180deg, rgba(247, 252, 249, 0.8), rgba(242, 249, 245, 0.82));
+}
+
+.library-hero-card-error {
+  background: linear-gradient(180deg, rgba(255, 248, 248, 0.82), rgba(253, 243, 243, 0.84));
+}
+
+.library-hero-phase {
+  margin: 0 0 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(79, 92, 112, 0.78);
+}
+
+.library-hero-card-success .library-hero-phase {
+  color: rgba(6, 95, 70, 0.78);
+}
+
+.library-hero-card-error .library-hero-phase {
+  color: rgba(185, 28, 28, 0.78);
+}
+
+.library-hero-title {
+  margin: 0;
+  font-size: clamp(1.58rem, 2.7vw, 2.02rem);
+  line-height: 1.16;
+  letter-spacing: -0.025em;
+  color: rgb(15, 23, 42);
+}
+
+.library-hero-progress-track {
+  overflow: hidden;
+  height: 0.52rem;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.08);
+  margin-top: 1rem;
+}
+
+.library-hero-progress-fill {
+  position: relative;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0a66ff 0%, #3b82f6 100%);
+  transition: width 0.3s ease-out;
+}
+
+.library-hero-card-success .library-hero-progress-fill {
+  background: linear-gradient(90deg, #059669 0%, #10b981 100%);
+}
+
+.library-hero-card-error .library-hero-progress-fill {
+  background: linear-gradient(90deg, #dc2626 0%, #f87171 100%);
+}
+
+.library-hero-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  color: rgba(71, 85, 105, 0.78);
+}
+
+.library-hero-progress-note {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.library-hero-progress-value {
+  flex-shrink: 0;
+  color: rgba(15, 23, 42, 0.56);
+}
+
+.library-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+}
+
 .hero-primary-btn,
 .hero-secondary-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 124px;
+  min-width: 132px;
   border-radius: 9999px;
-  padding: 0.8rem 1.2rem;
-  font-size: 0.95rem;
-  font-weight: 600;
+  padding: 0.82rem 1.3rem;
+  font-size: 0.94rem;
+  font-weight: 700;
   transition:
     transform 0.18s ease,
     background-color 0.18s ease,
     border-color 0.18s ease,
-    color 0.18s ease;
+    color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .hero-primary-btn {
-  background: #ec4141;
   color: white;
+  background: linear-gradient(180deg, #1677ff, #0a66ff);
+  box-shadow: 0 10px 20px rgba(10, 102, 255, 0.18);
 }
 
 .hero-primary-btn:hover {
   transform: translateY(-1px);
-  background: #d73a3a;
+  box-shadow: 0 14px 24px rgba(10, 102, 255, 0.22);
 }
 
 .hero-secondary-btn {
   border: 1px solid rgba(15, 23, 42, 0.1);
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.72);
   color: rgb(31, 41, 55);
 }
 
 .hero-secondary-btn:hover {
   transform: translateY(-1px);
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+@media (max-width: 720px) {
+  .library-hero-overlay {
+    padding: 1rem;
+  }
+
+  .library-hero-card {
+    padding: 1.45rem 1.2rem 1.15rem;
+  }
+
+  .library-hero-progress-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 .index-nav-item {
@@ -623,6 +795,49 @@ const getRowStyle = (songIndex: number, songPath: string) => {
 .index-locate-btn-disabled {
   opacity: 0.42;
   cursor: not-allowed;
+}
+
+:global(.dark) .library-hero-backdrop {
+  background: rgba(2, 6, 23, 0.68);
+  backdrop-filter: blur(4px);
+}
+
+:global(.dark) .library-hero-card {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(12, 18, 28, 0.8), rgba(10, 16, 25, 0.84));
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+:global(.dark) .library-hero-card-success {
+  background: linear-gradient(180deg, rgba(7, 46, 39, 0.84), rgba(8, 58, 47, 0.86));
+}
+
+:global(.dark) .library-hero-card-error {
+  background: linear-gradient(180deg, rgba(67, 13, 13, 0.84), rgba(82, 18, 18, 0.86));
+}
+
+:global(.dark) .library-hero-title,
+:global(.dark) .library-hero-progress-value {
+  color: rgba(255, 255, 255, 0.96);
+}
+
+:global(.dark) .library-hero-phase {
+  color: rgba(191, 201, 216, 0.8);
+}
+
+:global(.dark) .library-hero-card-success .library-hero-phase {
+  color: rgba(110, 231, 183, 0.82);
+}
+
+:global(.dark) .library-hero-card-error .library-hero-phase {
+  color: rgba(252, 165, 165, 0.88);
+}
+
+:global(.dark) .library-hero-progress-meta,
+:global(.dark) .library-hero-progress-note {
+  color: rgba(226, 232, 240, 0.72);
 }
 
 :global(.dark) .index-nav-item {
@@ -721,3 +936,5 @@ const getRowStyle = (songIndex: number, songPath: string) => {
   75% { height: 12px; }
 }
 </style>
+
+

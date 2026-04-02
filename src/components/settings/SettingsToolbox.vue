@@ -250,7 +250,7 @@ const restart = () => {
     >
       <section class="p-7">
         <div class="space-y-4">
-          <div class="rounded-3xl border border-slate-200/70 bg-slate-50/85 p-5 dark:border-white/10 dark:bg-white/5">
+          <div class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-5 dark:border-white/10 dark:bg-white/5">
             <div class="mb-3 flex items-center justify-between gap-4">
               <div>
                 <label class="text-sm font-semibold text-slate-900 dark:text-white">MusicTag 路径</label>
@@ -263,13 +263,13 @@ const restart = () => {
                 选择路径
               </button>
             </div>
-            <div class="rounded-2xl border border-dashed border-slate-300 bg-white/85 px-4 py-3 text-sm text-slate-500 dark:border-white/10 dark:bg-black/20 dark:text-white/60">
+            <div class="rounded-2xl border border-dashed border-white/40 bg-white/50 backdrop-blur-sm px-4 py-3 text-sm text-slate-500 dark:border-white/10 dark:bg-black/20 dark:text-white/60">
               <span v-if="musicTagPath" class="break-all text-slate-700 dark:text-slate-200">{{ musicTagPath }}</span>
               <span v-else>请选择 MusicTag.exe</span>
             </div>
           </div>
 
-          <div class="rounded-3xl border border-slate-200/70 bg-slate-50/85 p-5 dark:border-white/10 dark:bg-white/5">
+          <div class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-5 dark:border-white/10 dark:bg-white/5">
             <div class="mb-3 flex items-center justify-between gap-4">
               <div>
                 <label class="text-sm font-semibold text-slate-900 dark:text-white">目标文件夹</label>
@@ -282,7 +282,7 @@ const restart = () => {
                 选择文件夹
               </button>
             </div>
-            <div class="rounded-2xl border border-dashed border-slate-300 bg-white/85 px-4 py-3 text-sm text-slate-500 dark:border-white/10 dark:bg-black/20 dark:text-white/60">
+            <div class="rounded-2xl border border-dashed border-white/40 bg-white/50 backdrop-blur-sm px-4 py-3 text-sm text-slate-500 dark:border-white/10 dark:bg-black/20 dark:text-white/60">
               <span v-if="targetPath" class="break-all text-slate-700 dark:text-slate-200">{{ targetPath }}</span>
               <span v-else>请选择要整理的歌曲目录</span>
             </div>
@@ -313,7 +313,7 @@ const restart = () => {
           </div>
 
           <div class="mt-5 space-y-4">
-            <div class="rounded-3xl border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+            <div class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-4 dark:border-white/10 dark:bg-white/5">
               <div class="text-xs uppercase tracking-[0.18em] text-slate-400">MusicTag</div>
               <div class="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
                 {{ musicTagPath ? '已连接' : '等待选择' }}
@@ -323,7 +323,7 @@ const restart = () => {
               </p>
             </div>
 
-            <div class="rounded-3xl border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+            <div class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-4 dark:border-white/10 dark:bg-white/5">
               <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Folder</div>
               <div class="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
                 {{ targetPath ? getPathLeaf(targetPath) : '等待选择' }}
@@ -400,7 +400,7 @@ const restart = () => {
             </div>
 
             <div class="mt-5 space-y-4">
-              <div class="rounded-3xl border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+              <div class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-4 dark:border-white/10 dark:bg-white/5">
                 <div class="text-xs uppercase tracking-[0.18em] text-slate-400">规则</div>
                 <div class="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
                   {{ preprocessPreview.removeTrackPrefix ? '去除序号前缀' : '未启用清洗规则' }}
@@ -412,14 +412,14 @@ const restart = () => {
 
               <div
                 v-if="preprocessPreview.isScanning"
-                class="rounded-3xl border border-slate-200/70 bg-slate-50/80 p-6 text-sm text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400"
+                class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-6 text-sm text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400"
               >
                 正在扫描文件名，请稍候…
               </div>
 
               <div
                 v-else-if="!preprocessPreview.hasScanned"
-                class="rounded-3xl border border-slate-200/70 bg-slate-50/80 p-6 text-sm text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400"
+                class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-6 text-sm text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400"
               >
                 点击左侧“扫描文件”后，这里会显示改名前后的预览列表。
               </div>
@@ -433,7 +433,7 @@ const restart = () => {
 
               <div
                 v-else
-                class="overflow-hidden rounded-3xl border border-slate-200/70 bg-white/80 dark:border-white/10 dark:bg-black/20"
+                class="overflow-hidden rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm dark:border-white/10 dark:bg-black/20"
               >
                 <div class="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900 dark:border-white/5 dark:text-white">
                   改名前后
@@ -472,12 +472,12 @@ const restart = () => {
             </div>
 
             <div class="mt-5 space-y-4">
-              <div class="rounded-3xl border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+              <div class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-4 dark:border-white/10 dark:bg-white/5">
                 <div class="text-xs uppercase tracking-[0.18em] text-slate-400">MusicTag</div>
                 <div class="mt-2 break-all text-sm font-medium text-slate-900 dark:text-white">{{ taggingPreview.musicTagPath || musicTagPath }}</div>
               </div>
 
-              <div class="rounded-3xl border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+              <div class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-4 dark:border-white/10 dark:bg-white/5">
                 <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Folder</div>
                 <div class="mt-2 break-all text-sm font-medium text-slate-900 dark:text-white">{{ taggingPreview.targetPath || targetPath }}</div>
               </div>
@@ -524,7 +524,7 @@ const restart = () => {
             </div>
 
             <div class="mt-5 space-y-4">
-              <div class="rounded-3xl border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+              <div class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-4 dark:border-white/10 dark:bg-white/5">
                 <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Template</div>
                 <div class="mt-2 font-mono text-sm font-medium text-slate-900 dark:text-white">{{ renamePreview.template }}</div>
                 <p class="mt-2 text-sm text-slate-600 dark:text-white/60">
@@ -534,14 +534,14 @@ const restart = () => {
 
               <div
                 v-if="renamePreview.isScanning"
-                class="rounded-3xl border border-slate-200/70 bg-slate-50/80 p-6 text-sm text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400"
+                class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-6 text-sm text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400"
               >
                 正在生成重命名预览，请稍候…
               </div>
 
               <div
                 v-else-if="!renamePreview.hasScanned"
-                class="rounded-3xl border border-slate-200/70 bg-slate-50/80 p-6 text-sm text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400"
+                class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-6 text-sm text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400"
               >
                 左侧调整模板后点击“扫描并预览”，这里会展示最终命名结果。
               </div>
@@ -555,7 +555,7 @@ const restart = () => {
 
               <div
                 v-else
-                class="overflow-hidden rounded-3xl border border-slate-200/70 bg-white/80 dark:border-white/10 dark:bg-black/20"
+                class="overflow-hidden rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm dark:border-white/10 dark:bg-black/20"
               >
                 <div class="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900 dark:border-white/5 dark:text-white">
                   重命名预览
@@ -594,7 +594,7 @@ const restart = () => {
             </div>
 
             <div class="mt-5 space-y-4">
-              <div class="rounded-3xl border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5">
+              <div class="rounded-3xl border border-white/30 bg-white/40 backdrop-blur-md shadow-sm p-4 dark:border-white/10 dark:bg-white/5">
                 <div class="text-xs uppercase tracking-[0.18em] text-slate-400">Folder</div>
                 <div class="mt-2 break-all text-sm font-medium text-slate-900 dark:text-white">{{ refreshPreview.targetPath || targetPath }}</div>
               </div>

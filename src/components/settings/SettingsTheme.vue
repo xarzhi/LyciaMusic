@@ -63,13 +63,13 @@ const {
 </script>
 
 <template>
-  <div class="max-w-4xl space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+  <div class="w-full space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
     <section class="space-y-3">
       <h2 class="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
         <span class="h-4 w-1 rounded-full bg-[#EC4141]"></span>
         {{ TEXT.paletteTitle }}
       </h2>
-      <div class="rounded-xl border border-white/40 bg-white/30 p-4 backdrop-blur-md shadow-sm dark:border-white/10 dark:bg-black/20">
+      <div class="">
         <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
           <button
             type="button"
@@ -110,7 +110,7 @@ const {
         {{ TEXT.dynamicTitle }}
       </h2>
       <div
-        class="space-y-4 rounded-xl border border-white/40 bg-white/30 p-4 backdrop-blur-md shadow-sm dark:border-white/10 dark:bg-black/20"
+        class="space-y-4"
         :class="isDynamicBgDisabled ? 'pointer-events-none opacity-50' : ''"
       >
         <div>
@@ -296,7 +296,7 @@ const {
         {{ TEXT.windowMaterialTitle }}
       </h2>
       <div
-        class="rounded-xl border border-white/40 bg-white/30 p-4 backdrop-blur-md shadow-sm dark:border-white/10 dark:bg-black/20"
+        class=""
         :class="isWindowMaterialDisabled ? 'pointer-events-none opacity-50' : ''"
       >
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">

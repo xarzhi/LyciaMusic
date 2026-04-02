@@ -2,16 +2,18 @@
 import { ref } from 'vue';
 import SettingsGeneral from "../components/settings/SettingsGeneral.vue";
 import SettingsTheme from "../components/settings/SettingsTheme.vue";
+import SettingsSidebar from "../components/settings/SettingsSidebar.vue";
 import SettingsToolbox from "../components/settings/SettingsToolbox.vue";
 import SettingsAbout from "../components/settings/SettingsAbout.vue";
 import SettingsLibrary from "../components/settings/SettingsLibrary.vue"; // Added import
 
 // 定义 Tabs
-const activeTab = ref<'general' | 'theme' | 'toolbox' | 'library' | 'shortcuts' | 'about'>('general'); // Updated type
+const activeTab = ref<'general' | 'theme' | 'sidebar' | 'toolbox' | 'library' | 'shortcuts' | 'about'>('general'); // Updated type
 
 const tabs = [
   { id: 'general', name: '常规' },
   { id: 'theme', name: '外观' },
+  { id: 'sidebar', name: '侧边栏管理' },
   { id: 'toolbox', name: '工具箱' },
   { id: 'library', name: '音乐库' }, // Added tab
   { id: 'shortcuts', name: '快捷键' },
@@ -20,43 +22,47 @@ const tabs = [
 </script>
 
 <template>
-  <div class="flex-1 h-full flex flex-col overflow-hidden transition-colors duration-500">
+  <div class="flex-1 h-full flex overflow-hidden transition-colors duration-500">
 
-    <header class="h-20 flex items-end px-8 pb-4 shrink-0 sticky top-0 z-10">
-      <h1 class="text-3xl font-bold text-gray-800 dark:text-gray-200 mr-12 mb-1 drop-shadow-sm">设置</h1>
+    <!-- Secondary Sidebar -->
+    <aside class="w-[220px] md:w-[240px] shrink-0 border-r border-white/20 dark:border-white/5 flex flex-col p-4 z-10">
+      
 
-      <div class="flex gap-8 mb-1.5">
+      <nav class="flex-1 space-y-1.5 overflow-y-auto custom-scrollbar">
         <button
           v-for="tab in tabs"
           :key="tab.id"
           @click="activeTab = tab.id as any"
-          class="pb-2 text-base font-medium transition-all relative"
-          :class="activeTab === tab.id ? 'text-[#EC4141] font-bold' : 'text-gray-800 dark:text-gray-200 hover:text-black dark:hover:text-white'"
+          class="w-full text-left px-4 py-2.5 rounded-lg text-sm transition-all relative flex items-center group"
+          :class="activeTab === tab.id ? 'text-gray-900 dark:text-white bg-white/40 dark:bg-white/10 shadow-sm font-bold' : 'text-gray-600 dark:text-gray-400 font-medium hover:bg-white/20 dark:hover:bg-white/5 hover:text-gray-800 dark:hover:text-gray-200'"
         >
-          {{ tab.name }}
+          <!-- Active Indicator -->
           <div
             v-if="activeTab === tab.id"
-            class="absolute bottom-[-2px] left-0 right-0 h-[3px] bg-[#EC4141] rounded-full shadow-sm"
+            class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-[18px] bg-[#EC4141] rounded-r-md"
           ></div>
+          {{ tab.name }}
         </button>
+      </nav>
+    </aside>
+
+    <!-- Content Pane -->
+    <main class="flex-1 min-w-0 h-full overflow-y-auto px-10 py-10 xl:px-16 custom-scrollbar relative">
+      <div class="w-full max-w-5xl mx-auto pb-16">
+        <SettingsGeneral v-if="activeTab === 'general'" />
+        <SettingsTheme v-else-if="activeTab === 'theme'" />
+        <SettingsSidebar v-else-if="activeTab === 'sidebar'" />
+        <SettingsToolbox v-else-if="activeTab === 'toolbox'" />
+        <SettingsLibrary v-else-if="activeTab === 'library'" />
+        <SettingsAbout v-else-if="activeTab === 'about'" />
+
+        <div v-else class="flex flex-col items-center justify-center h-[50vh] text-gray-400 space-y-4">
+          <div class="text-4xl opacity-50">🚧</div>
+          <div>{{ activeTab === 'shortcuts' ? '快捷键设置' : '关于信息' }} 模块正在施工中...</div>
+        </div>
       </div>
-    </header>
+    </main>
 
-    <section class="flex-1 min-h-0 w-full overflow-y-auto p-8 custom-scrollbar relative">
-      <SettingsGeneral v-if="activeTab === 'general'" />
-      <SettingsTheme v-else-if="activeTab === 'theme'" />
-      <SettingsToolbox v-else-if="activeTab === 'toolbox'" />
-      <SettingsLibrary v-else-if="activeTab === 'library'" />
-      <SettingsAbout v-else-if="activeTab === 'about'" />
-
-      <div v-else class="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
-        <div class="text-4xl opacity-50">🚧</div>
-        <div>{{ activeTab === 'shortcuts' ? '快捷键设置' : '关于信息' }} 模块正在施工中...</div>
-      </div>
-
-      <!-- 底部留白，确保能完全滚出阴影区 -->
-      <div class="h-12"></div>
-    </section>
   </div>
 </template>
 

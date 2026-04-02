@@ -201,7 +201,7 @@ const restart = () => {
 
 <template>
   <div class="w-full space-y-6 pb-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
-    <section class="w-full rounded-[28px] border border-white/50 bg-white/72 px-5 py-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.3)] backdrop-blur dark:border-white/10 dark:bg-black/20">
+    <section class="w-full px-5 py-5">
       <div class="grid items-start gap-y-3 [grid-template-columns:repeat(4,minmax(0,1fr)_88px)_minmax(0,1fr)]">
         <template v-for="(step, index) in progressSteps" :key="step.key">
           <div class="flex flex-col items-center gap-3">
@@ -248,7 +248,7 @@ const restart = () => {
       v-if="currentView === 'setup'"
       class="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(520px,3fr)]"
     >
-      <section class="rounded-[30px] border border-white/50 bg-white/72 p-7 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.35)] backdrop-blur dark:border-white/10 dark:bg-black/20">
+      <section class="p-7">
         <div class="space-y-4">
           <div class="rounded-3xl border border-slate-200/70 bg-slate-50/85 p-5 dark:border-white/10 dark:bg-white/5">
             <div class="mb-3 flex items-center justify-between gap-4">
@@ -301,7 +301,7 @@ const restart = () => {
       </section>
 
       <aside class="xl:sticky xl:top-6 xl:self-start">
-        <section class="rounded-[30px] border border-white/50 bg-white/72 p-6 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.35)] backdrop-blur dark:border-white/10 dark:bg-black/20">
+        <section class="p-6">
           <div class="flex items-center justify-between">
             <div>
               <h3 class="text-lg font-semibold text-slate-900 dark:text-white">实时预览</h3>
@@ -350,7 +350,7 @@ const restart = () => {
       v-else
       class="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(520px,3fr)]"
     >
-      <section class="rounded-[30px] border border-white/50 bg-white/72 p-6 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.35)] backdrop-blur dark:border-white/10 dark:bg-black/20">
+      <section class="p-6">
         <ToolboxStep1
           v-if="currentView === 'preprocess'"
           :target-path="targetPath"
@@ -387,7 +387,7 @@ const restart = () => {
       </section>
 
       <aside class="xl:sticky xl:top-6 xl:self-start">
-        <section class="rounded-[30px] border border-white/50 bg-white/72 p-6 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.35)] backdrop-blur dark:border-white/10 dark:bg-black/20">
+        <section class="p-6">
           <template v-if="currentView === 'preprocess'">
             <div class="flex items-center justify-between">
               <div>

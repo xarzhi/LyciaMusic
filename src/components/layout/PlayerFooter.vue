@@ -141,13 +141,25 @@ const handleVolumeLeave = () => {
 };
 
 // --- Idle State for Auto-Hide ---
+const isPinned = ref(localStorage.getItem('footer_pinned') === 'true');
 const isIdle = ref(false);
 let idleTimer: any = null;
+
+const togglePin = () => {
+  isPinned.value = !isPinned.value;
+  localStorage.setItem('footer_pinned', isPinned.value.toString());
+  if (!isPinned.value) {
+    startIdleTimer();
+  } else {
+    isIdle.value = false;
+    if (idleTimer) clearTimeout(idleTimer);
+  }
+};
 
 const startIdleTimer = () => {
   if (idleTimer) clearTimeout(idleTimer);
   // Do not hide if context menu, dragging, or volume slider is active
-  if (showContextMenu.value || isDraggingProgress.value || isDraggingVolume.value || showVolumeSlider.value) return;
+  if (showContextMenu.value || isDraggingProgress.value || isDraggingVolume.value || showVolumeSlider.value || isPinned.value) return;
   
   idleTimer = setTimeout(() => {
     isIdle.value = true;
@@ -369,6 +381,17 @@ onUnmounted(() => {
         :class="showPlaylist ? 'text-[#EC4141]' : (showPlayerDetail ? 'text-white/60 hover:text-white' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white')"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+      </button>
+
+      <button @click="togglePin"
+        class="relative transition-colors ml-1"
+        :class="showPlayerDetail ? 'text-white/60 hover:text-white' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white'"
+        :title="isPinned ? '取消固定 (当前已常驻)' : '固定状态栏 (当前离开后消失)'"
+      >
+        <!-- 已固定：完整图钉 -->
+        <svg v-if="isPinned" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
+        <!-- 未固定：带取消斜线的图钉 -->
+        <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-.82"/><path d="M12 17v5"/><path d="M15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0-1.16.37"/></svg>
       </button>
     </div>
 

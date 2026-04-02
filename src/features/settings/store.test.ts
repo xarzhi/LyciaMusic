@@ -81,4 +81,28 @@ describe('settings store', () => {
 
     expect(settingsStore.settings.theme.customBackground.foregroundStyle).toBe('light');
   });
+
+  it('merges shortcut settings without dropping untouched bindings', () => {
+    const settingsStore = useSettingsStore();
+
+    settingsStore.patchSettings({
+      shortcuts: {
+        enabled: false,
+        local: {
+          togglePlay: {
+            code: 'Enter',
+            ctrl: false,
+            alt: false,
+            shift: false,
+            meta: false,
+          },
+        },
+      },
+    });
+
+    expect(settingsStore.settings.shortcuts.enabled).toBe(false);
+    expect(settingsStore.settings.shortcuts.local.togglePlay?.code).toBe('Enter');
+    expect(settingsStore.settings.shortcuts.local.nextSong?.code).toBe('ArrowRight');
+    expect(settingsStore.settings.shortcuts.global.togglePlay?.code).toBe('KeyP');
+  });
 });

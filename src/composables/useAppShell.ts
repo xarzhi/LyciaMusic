@@ -5,6 +5,7 @@ import { useAppThemeSync } from './useAppThemeSync';
 import { useExternalPathBridge } from './useExternalPathBridge';
 import { useAppShellTheme } from './useAppShellTheme';
 import { useMiniModeWindow } from './useMiniModeWindow';
+import { useKeyboardShortcuts } from './useKeyboardShortcuts';
 import { useLibraryCollections } from '../features/collections/useLibraryCollections';
 import { useHomeRouteSync } from './useHomeRouteSync';
 import { usePlayerViewState } from './usePlayerViewState';
@@ -62,6 +63,7 @@ export function useAppShell() {
     closeMiniPlaylist,
     syncWindowMaterial,
   });
+  useKeyboardShortcuts();
 
   init();
 

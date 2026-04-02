@@ -2,6 +2,11 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 
 import type { AppSettings, SidebarSettings, ThemeSettings } from '../../types';
+import {
+  createDefaultShortcutSettings,
+  mergeShortcutSettings,
+  type ShortcutSettingsPatch,
+} from './shortcuts';
 
 export type ThemeSettingsPatch = Partial<Omit<ThemeSettings, 'customBackground'>> & {
   customBackground?: Partial<ThemeSettings['customBackground']>;
@@ -9,9 +14,10 @@ export type ThemeSettingsPatch = Partial<Omit<ThemeSettings, 'customBackground'>
 
 export type SidebarSettingsPatch = Partial<SidebarSettings>;
 
-export interface AppSettingsPatch extends Partial<Omit<AppSettings, 'theme' | 'sidebar'>> {
+export interface AppSettingsPatch extends Partial<Omit<AppSettings, 'theme' | 'sidebar' | 'shortcuts'>> {
   theme?: ThemeSettingsPatch;
   sidebar?: SidebarSettingsPatch;
+  shortcuts?: ShortcutSettingsPatch;
 }
 
 export const normalizeForegroundStyle = (
@@ -62,6 +68,7 @@ export const defaultAppSettings: AppSettings = {
   organizeRule: '{Artist}/{Album}/{Title}',
   theme: defaultThemeSettings,
   sidebar: defaultSidebarSettings,
+  shortcuts: createDefaultShortcutSettings(),
 };
 
 export const createDefaultThemeSettings = (): ThemeSettings => ({
@@ -79,6 +86,7 @@ export const createDefaultAppSettings = (): AppSettings => ({
   ...defaultAppSettings,
   theme: createDefaultThemeSettings(),
   sidebar: createDefaultSidebarSettings(),
+  shortcuts: createDefaultShortcutSettings(),
 });
 
 export const mergeThemeSettings = (
@@ -116,6 +124,7 @@ export const mergeAppSettings = (
   ...patch,
   theme: mergeThemeSettings(base.theme, patch.theme ?? {}),
   sidebar: mergeSidebarSettings(base.sidebar, patch.sidebar ?? {}),
+  shortcuts: mergeShortcutSettings(base.shortcuts, patch.shortcuts ?? {}),
 });
 
 export const useSettingsStore = defineStore('settings', () => {

@@ -6,6 +6,7 @@ import SettingsSidebar from "../components/settings/SettingsSidebar.vue";
 import SettingsToolbox from "../components/settings/SettingsToolbox.vue";
 import SettingsAbout from "../components/settings/SettingsAbout.vue";
 import SettingsLibrary from "../components/settings/SettingsLibrary.vue"; // Added import
+import SettingsShortcuts from "../components/settings/SettingsShortcuts.vue";
 
 // 定义 Tabs
 const activeTab = ref<'general' | 'theme' | 'sidebar' | 'toolbox' | 'library' | 'shortcuts' | 'about'>('general'); // Updated type
@@ -33,8 +34,8 @@ const tabs = [
           v-for="tab in tabs"
           :key="tab.id"
           @click="activeTab = tab.id as any"
-          class="w-full text-left px-4 py-2.5 rounded-lg text-sm transition-all relative flex items-center group"
-          :class="activeTab === tab.id ? 'text-gray-900 dark:text-white bg-white/40 dark:bg-white/10 shadow-sm font-bold' : 'text-gray-600 dark:text-gray-400 font-medium hover:bg-white/20 dark:hover:bg-white/5 hover:text-gray-800 dark:hover:text-gray-200'"
+          class="w-full text-left px-4 py-2.5 rounded-md text-sm transition-all duration-300 relative flex items-center cursor-pointer active:scale-[0.97]"
+          :class="activeTab === tab.id ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white font-semibold shadow-sm translate-x-1' : 'text-gray-800 dark:text-gray-200 font-medium hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white hover:translate-x-1'"
         >
           <!-- Active Indicator -->
           <div
@@ -54,6 +55,7 @@ const tabs = [
         <SettingsSidebar v-else-if="activeTab === 'sidebar'" />
         <SettingsToolbox v-else-if="activeTab === 'toolbox'" />
         <SettingsLibrary v-else-if="activeTab === 'library'" />
+        <SettingsShortcuts v-else-if="activeTab === 'shortcuts'" />
         <SettingsAbout v-else-if="activeTab === 'about'" />
 
         <div v-else class="flex flex-col items-center justify-center h-[50vh] text-gray-400 space-y-4">

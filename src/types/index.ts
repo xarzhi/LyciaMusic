@@ -113,6 +113,35 @@ export interface SidebarSettings {
   showStatistics: boolean;
 }
 
+export type ShortcutActionId =
+  | 'togglePlay'
+  | 'prevSong'
+  | 'nextSong'
+  | 'volumeUp'
+  | 'volumeDown'
+  | 'toggleMiniMode'
+  | 'toggleFavorite'
+  | 'toggleDesktopLyrics'
+  | 'toggleLyricTranslation';
+
+export interface ShortcutBinding {
+  code: string;
+  ctrl: boolean;
+  alt: boolean;
+  shift: boolean;
+  meta: boolean;
+}
+
+export type ShortcutBindingMap = Record<ShortcutActionId, ShortcutBinding | null>;
+
+export interface ShortcutSettings {
+  enabled: boolean;
+  globalEnabled: boolean;
+  useSystemMediaKeys: boolean;
+  local: ShortcutBindingMap;
+  global: ShortcutBindingMap;
+}
+
 export interface AppSettings {
   minimizeToTray: boolean;
   closeToTray: boolean;
@@ -125,4 +154,5 @@ export interface AppSettings {
   organizeRule: string;
   theme: ThemeSettings;
   sidebar: SidebarSettings;
+  shortcuts: ShortcutSettings;
 }

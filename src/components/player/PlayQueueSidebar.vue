@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { nextTick, ref, watch } from 'vue';
+import type { ComponentPublicInstance } from 'vue';
 import { usePlayer } from '../../composables/player';
 import { useThemeSettings } from '../../composables/useThemeSettings';
 import ModernModal from '../common/ModernModal.vue';
@@ -17,6 +18,7 @@ const {
 const { theme } = useThemeSettings();
 
 const showClearModal = ref(false);
+const itemRefs = ref<HTMLElement[]>([]);
 
 const handleClearClick = () => {
   showClearModal.value = true;
@@ -31,6 +33,42 @@ const handleRemove = (song: any, e: Event) => {
   e.stopPropagation();
   removeSongFromQueue(song);
 };
+
+const setItemRef = (el: Element | ComponentPublicInstance | null, index: number) => {
+  if (el instanceof HTMLElement) {
+    itemRefs.value[index] = el;
+  }
+};
+
+const scrollToCurrentSong = async (behavior: ScrollBehavior = 'auto') => {
+  if (!currentSong.value) return;
+
+  await nextTick();
+
+  const currentIndex = playQueue.value.findIndex(song => song.path === currentSong.value?.path);
+  if (currentIndex === -1) return;
+
+  itemRefs.value[currentIndex]?.scrollIntoView({
+    behavior,
+    block: 'center',
+  });
+};
+
+watch(
+  () => showPlaylist.value,
+  visible => {
+    if (!visible) return;
+    void scrollToCurrentSong();
+  },
+);
+
+watch(
+  () => currentSong.value?.path,
+  () => {
+    if (!showPlaylist.value) return;
+    void scrollToCurrentSong('smooth');
+  },
+);
 </script>
 
 <template>
@@ -79,6 +117,7 @@ const handleRemove = (song: any, e: Event) => {
           <div
             v-for="(song, index) in playQueue"
             :key="song.path + index"
+            :ref="el => setItemRef(el, index)"
             @click="playSong(song)"
             class="group relative p-2.5 rounded-xl flex justify-between items-center cursor-pointer transition-all duration-200 border border-transparent"
             :class="[

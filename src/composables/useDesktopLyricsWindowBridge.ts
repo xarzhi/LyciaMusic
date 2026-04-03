@@ -23,18 +23,16 @@ import {
   DESKTOP_LYRICS_WINDOW_LABEL,
   DESKTOP_LYRICS_WINDOW_MIN_HEIGHT,
   DESKTOP_LYRICS_WINDOW_MIN_WIDTH,
+  normalizeDesktopLyricsBounds,
   type DesktopLyricsAction,
   type DesktopLyricsPlaybackPayload,
   type DesktopLyricsStatePayload,
+  type DesktopLyricsWorkArea,
   type DesktopLyricsWindowBounds,
 } from '../features/desktopLyrics/shared';
 
 let desktopLyricsWindowPromise: Promise<WebviewWindow> | null = null;
 const DESKTOP_LYRICS_PLAYBACK_SYNC_INTERVAL_MS = 400;
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
 
 function readDesktopLyricsBounds(): DesktopLyricsWindowBounds | null {
   if (typeof localStorage === 'undefined') return null;
@@ -89,36 +87,21 @@ async function resolveDesktopLyricsBounds() {
   if (!bounds) return null;
 
   try {
-    const monitors = await availableMonitors();
-    if (monitors.length === 0) {
+    const workAreas: DesktopLyricsWorkArea[] = (await availableMonitors()).map((monitor) => ({
+      x: monitor.workArea.position.x,
+      y: monitor.workArea.position.y,
+      width: monitor.workArea.size.width,
+      height: monitor.workArea.size.height,
+    }));
+
+    if (workAreas.length === 0) {
       return bounds;
     }
 
-    for (const monitor of monitors) {
-      const { position, size } = monitor.workArea;
-      const width = Math.min(bounds.width, size.width);
-      const height = Math.min(bounds.height, size.height);
-      const intersectsHorizontally =
-        bounds.x < position.x + size.width - 48 && bounds.x + width > position.x + 48;
-      const intersectsVertically =
-        bounds.y < position.y + size.height - 48 && bounds.y + height > position.y + 48;
-
-      if (!intersectsHorizontally || !intersectsVertically) {
-        continue;
-      }
-
-      return {
-        x: clamp(bounds.x, position.x, position.x + Math.max(0, size.width - width)),
-        y: clamp(bounds.y, position.y, position.y + Math.max(0, size.height - height)),
-        width,
-        height,
-      };
-    }
+    return normalizeDesktopLyricsBounds(bounds, workAreas);
   } catch {
     return bounds;
   }
-
-  return null;
 }
 
 async function getDesktopLyricsWindow() {
@@ -254,8 +237,6 @@ export function useDesktopLyricsWindowBridge() {
     if (!targetWindow) return;
 
     await targetWindow.setAlwaysOnTop(desktopLyricsSettings.isAlwaysOnTop);
-    await targetWindow.setIgnoreCursorEvents(desktopLyricsSettings.isLocked);
-    await targetWindow.setFocusable(!desktopLyricsSettings.isLocked);
   };
 
   const stopSyncLoop = () => {

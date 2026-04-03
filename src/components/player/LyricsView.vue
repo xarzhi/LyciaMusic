@@ -36,7 +36,6 @@ const {
   lyricsSettings,
   lyricsStatus,
   showLyricsPlayerSettingsPanel,
-  desktopLyricsSettings,
 } = useLyrics();
 const { seekTo, currentTime } = usePlayer();
 const { audioDelay } = storeToRefs(useSettingsStore());
@@ -321,22 +320,6 @@ onUnmounted(() => {
           @mousedown.stop
         >
           <div class="min-h-0 overflow-y-auto px-4 py-4 custom-scrollbar">
-          <div
-            v-if="desktopLyricsSettings.isLocked"
-            class="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-3"
-          >
-            <div class="min-w-0">
-              <div class="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200/70">Desktop Lyrics</div>
-              <div class="mt-1 text-[12px] leading-5 text-amber-50/90">桌面歌词已锁定，可在这里直接解锁。</div>
-            </div>
-            <button
-              type="button"
-              class="shrink-0 rounded-full border border-amber-200/30 px-3 py-1.5 text-[12px] font-medium text-amber-50 transition hover:bg-amber-100/10"
-              @click="desktopLyricsSettings.isLocked = false"
-            >
-              解锁
-            </button>
-          </div>
           <div class="mb-3">
             <div class="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/30">Lyrics</div>
             <div class="mt-1.5 flex items-center justify-between">

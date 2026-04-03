@@ -17,7 +17,7 @@ const handleOpenDetail = () => {
   togglePlayerDetail();
 };
 
-const { showDesktopLyrics, showLyricsPlayerSettingsPanel, desktopLyricsSettings } = useLyrics();
+const { showDesktopLyrics, showLyricsPlayerSettingsPanel } = useLyrics();
 
 // --- Context Menu State ---
 const showContextMenu = ref(false);
@@ -33,18 +33,9 @@ const handleContextMenu = (e: MouseEvent) => {
 };
 
 const toggleLyrics = () => { showDesktopLyrics.value = !showDesktopLyrics.value; };
-const unlockDesktopLyrics = () => {
-  if (!desktopLyricsSettings.isLocked) return;
-  desktopLyricsSettings.isLocked = false;
-};
 const toggleLyricsPlayerSettings = () => {
   showLyricsPlayerSettingsPanel.value = !showLyricsPlayerSettingsPanel.value;
 };
-const desktopLyricsButtonTitle = computed(() => (
-  desktopLyricsSettings.isLocked
-    ? '桌面歌词已锁定，右键可解锁'
-    : '桌面歌词'
-));
 
 // 不再使用单独的模糊样式 -> 全透明
 
@@ -395,9 +386,7 @@ onUnmounted(() => {
       
       <button 
         @click="toggleLyrics"
-        @contextmenu.prevent="unlockDesktopLyrics"
         :class="['text-[14px] font-bold transition-colors w-8 h-8 flex items-center justify-center rounded-full', showDesktopLyrics ? 'text-[#EC4141] bg-[#EC4141]/10' : (showPlayerDetail ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10')]"
-        v-bind="{ title: desktopLyricsButtonTitle }"
         title="桌面歌词"
       >
         词

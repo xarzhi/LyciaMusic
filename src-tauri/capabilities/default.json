@@ -35,6 +35,8 @@
     "core:window:allow-set-ignore-cursor-events",
     "core:window:allow-set-background-color",
     "core:window:allow-set-effects",
+    "core:window:allow-start-resize-dragging",
+    "core:window:allow-outer-size",
     "opener:default",
     "dialog:default"
   ]

@@ -393,10 +393,41 @@ describe('lyrics settings persistence', () => {
     const {
       MAX_PLAYER_OFFSET_X,
       MIN_PLAYER_OFFSET_Y,
+      desktopLyricsSettings,
       lyricsSettings,
     } = await import('./lyrics');
 
     expect(lyricsSettings.playerOffsetX).toBe(MAX_PLAYER_OFFSET_X);
     expect(lyricsSettings.playerOffsetY).toBe(MIN_PLAYER_OFFSET_Y);
+    expect(desktopLyricsSettings.playerOffsetX).toBe(MAX_PLAYER_OFFSET_X);
+    expect(desktopLyricsSettings.playerOffsetY).toBe(MIN_PLAYER_OFFSET_Y);
+  });
+
+  it('only persists locked state when desktop lock persistence is enabled', async () => {
+    vi.resetModules();
+
+    const getItem = vi.fn(() => null);
+    const setItem = vi.fn();
+
+    vi.stubGlobal('localStorage', {
+      getItem,
+      setItem,
+    });
+
+    const { desktopLyricsSettings } = await import('./lyrics');
+
+    desktopLyricsSettings.isLocked = true;
+    desktopLyricsSettings.persistLock = false;
+    await Promise.resolve();
+
+    const desktopPayloadWithoutPersistence = JSON.parse(String(setItem.mock.lastCall?.[1] ?? '{}'));
+    expect(desktopPayloadWithoutPersistence.isLocked).toBe(false);
+
+    desktopLyricsSettings.persistLock = true;
+    desktopLyricsSettings.isLocked = true;
+    await Promise.resolve();
+
+    const desktopPayloadWithPersistence = JSON.parse(String(setItem.mock.lastCall?.[1] ?? '{}'));
+    expect(desktopPayloadWithPersistence.isLocked).toBe(true);
   });
 });

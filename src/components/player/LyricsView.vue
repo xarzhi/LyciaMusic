@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import type { LyricLine as AmlLyricLine, LyricLineMouseEvent } from '@applemusic-like-lyrics/core';
 import {
+  convertLyricsToAmlLines,
   DEFAULT_PLAYER_ALIGNMENT,
   DEFAULT_PLAYER_FONT_PRESET,
   DEFAULT_PLAYER_FONT_SCALE,
@@ -30,7 +31,13 @@ import { usePlayer } from '../../composables/player';
 import { useSettingsStore } from '../../features/settings/store';
 import AmlLyricPlayer from './AmlLyricPlayer.vue';
 
-const { parsedLyrics, lyricsSettings, lyricsStatus, showLyricsPlayerSettingsPanel } = useLyrics();
+const {
+  parsedLyrics,
+  lyricsSettings,
+  lyricsStatus,
+  showLyricsPlayerSettingsPanel,
+  desktopLyricsSettings,
+} = useLyrics();
 const { seekTo, currentTime } = usePlayer();
 const { audioDelay } = storeToRefs(useSettingsStore());
 
@@ -49,61 +56,12 @@ const fontPresetMenuRef = ref<HTMLElement | null>(null);
 const isFontPresetMenuOpen = ref(false);
 const fontPresetMenuStyle = ref<Record<string, string>>({});
 
-function toMs(seconds: number): number {
-  return Math.max(0, Math.round(seconds * 1000));
-}
-
 const amllLines = computed<AmlLyricLine[]>(() => {
-  const lines = parsedLyrics.value;
-
-  return lines.map((line, lineIndex) => {
-    const startTime = toMs(line.time);
-    const parsedEndTime = toMs(line.endTime || line.time);
-    const nextStartTime = toMs(lines[lineIndex + 1]?.time ?? line.time + 3);
-    const endTime = Math.max(
-      startTime + 40,
-      parsedEndTime > startTime ? parsedEndTime : nextStartTime,
-    );
-
-    const sourceWords = line.words ?? [];
-    const convertedWords = sourceWords.map((word, wordIndex) => {
-      const wordStart = toMs(word.start);
-      const nextWordStart = sourceWords[wordIndex + 1]?.start;
-      const rawWordEnd = nextWordStart !== undefined
-        ? toMs(nextWordStart)
-        : toMs(word.end > word.start ? word.end : endTime / 1000);
-      const wordEnd = Math.max(wordStart + 20, Math.min(endTime, rawWordEnd));
-
-      return {
-        word: word.text,
-        startTime: wordStart,
-        endTime: wordEnd,
-        romanWord: lyricsSettings.showRomaji ? (word.romaji || '') : '',
-        obscene: false,
-      };
-    }).filter((word) => word.word.trim().length > 0);
-    const hasTimedRomaji = convertedWords.some((word) => (word.romanWord || '').trim().length > 0);
-
-    const words = convertedWords.length > 0
-      ? convertedWords
-      : [{
-          word: line.text || ' ',
-          startTime,
-          endTime,
-          romanWord: '',
-          obscene: false,
-        }];
-
-    return {
-      words,
-      translatedLyric: lyricsSettings.showTranslation ? line.translation : '',
-      romanLyric: lyricsSettings.showRomaji && !hasTimedRomaji ? line.romaji : '',
-      startTime,
-      endTime,
-      isBG: false,
-      isDuet: false,
-    };
-  });
+  return convertLyricsToAmlLines(
+    parsedLyrics.value,
+    lyricsSettings.showTranslation,
+    lyricsSettings.showRomaji,
+  );
 });
 
 const amllCurrentTime = computed(() => {
@@ -363,6 +321,22 @@ onUnmounted(() => {
           @mousedown.stop
         >
           <div class="min-h-0 overflow-y-auto px-4 py-4 custom-scrollbar">
+          <div
+            v-if="desktopLyricsSettings.isLocked"
+            class="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-3"
+          >
+            <div class="min-w-0">
+              <div class="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200/70">Desktop Lyrics</div>
+              <div class="mt-1 text-[12px] leading-5 text-amber-50/90">桌面歌词已锁定，可在这里直接解锁。</div>
+            </div>
+            <button
+              type="button"
+              class="shrink-0 rounded-full border border-amber-200/30 px-3 py-1.5 text-[12px] font-medium text-amber-50 transition hover:bg-amber-100/10"
+              @click="desktopLyricsSettings.isLocked = false"
+            >
+              解锁
+            </button>
+          </div>
           <div class="mb-3">
             <div class="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/30">Lyrics</div>
             <div class="mt-1.5 flex items-center justify-between">

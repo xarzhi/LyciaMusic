@@ -53,6 +53,10 @@ export interface WindowMaterialCapabilities {
   windowsBuildNumber: number | null;
 }
 
+export interface ForegroundFullscreenState {
+  isFullscreen: boolean;
+}
+
 export interface TauriCommandMap {
   add_library_folder: { payload: { path: string }; response: void };
   // Deprecated compat command. Do not use in new main-flow code.
@@ -111,6 +115,10 @@ export interface TauriCommandMap {
   get_window_material_capabilities: {
     payload: undefined;
     response: WindowMaterialCapabilities;
+  };
+  get_foreground_fullscreen_state: {
+    payload: undefined;
+    response: ForegroundFullscreenState;
   };
   clear_all_app_data: { payload: undefined; response: void };
   open_external_program: {

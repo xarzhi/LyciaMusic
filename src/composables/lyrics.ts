@@ -1,5 +1,6 @@
 import { ref, computed, reactive, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import type { LyricLine as CoreAmlLyricLine } from '@applemusic-like-lyrics/core';
 import { usePlaybackStore } from '../features/playback/store';
 import type {
   LyricLine as AmlLyricLine,
@@ -38,6 +39,7 @@ export interface CurrentLyricDisplayState {
 export type LyricsStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 
 const LYRICS_SETTINGS_KEY = 'lyrics_settings';
+const DESKTOP_LYRICS_SETTINGS_KEY = 'desktop_lyrics_settings';
 export const DEFAULT_PLAYER_FONT_SCALE = 1;
 export const MIN_PLAYER_FONT_SCALE = 0.5;
 export const MAX_PLAYER_FONT_SCALE = 1.5;
@@ -52,6 +54,8 @@ export const MIN_PLAYER_OFFSET_Y = -25;
 export const MAX_PLAYER_OFFSET_Y = 25;
 export type LyricsPlayerAlignment = 'left' | 'center' | 'right';
 export const DEFAULT_PLAYER_ALIGNMENT: LyricsPlayerAlignment = 'left';
+export const DEFAULT_DESKTOP_PLAYER_ALIGNMENT: LyricsPlayerAlignment = 'center';
+export type LyricsColorScheme = 'auto' | 'default' | 'pink' | 'blue' | 'green';
 export type LyricsFontPreset = string;
 export interface LyricsFontOption {
   value: LyricsFontPreset;
@@ -111,9 +115,19 @@ export const LYRICS_FONT_OPTIONS = [
 export interface LyricsSettings {
   showTranslation: boolean;
   showRomaji: boolean;
+  playerFontScale: number;
+  playerLineGap: number;
+  playerOffsetX: number;
+  playerOffsetY: number;
+  playerAlignment: LyricsPlayerAlignment;
+  playerFontPreset: LyricsFontPreset;
+}
+
+export interface DesktopLyricsSettings {
   isAlwaysOnTop: boolean;
   isLocked: boolean;
-  colorScheme: 'default' | 'pink' | 'blue' | 'green';
+  persistLock: boolean;
+  colorScheme: LyricsColorScheme;
   playerFontScale: number;
   playerLineGap: number;
   playerOffsetX: number;
@@ -125,14 +139,24 @@ export interface LyricsSettings {
 const defaultLyricsSettings: LyricsSettings = {
   showTranslation: true,
   showRomaji: false,
-  isAlwaysOnTop: false,
-  isLocked: false,
-  colorScheme: 'default' as 'default' | 'pink' | 'blue' | 'green',
   playerFontScale: DEFAULT_PLAYER_FONT_SCALE,
   playerLineGap: DEFAULT_PLAYER_LINE_GAP,
   playerOffsetX: DEFAULT_PLAYER_OFFSET_X,
   playerOffsetY: DEFAULT_PLAYER_OFFSET_Y,
   playerAlignment: DEFAULT_PLAYER_ALIGNMENT,
+  playerFontPreset: DEFAULT_PLAYER_FONT_PRESET,
+};
+
+const defaultDesktopLyricsSettings: DesktopLyricsSettings = {
+  isAlwaysOnTop: false,
+  isLocked: false,
+  persistLock: false,
+  colorScheme: 'auto',
+  playerFontScale: DEFAULT_PLAYER_FONT_SCALE,
+  playerLineGap: DEFAULT_PLAYER_LINE_GAP,
+  playerOffsetX: DEFAULT_PLAYER_OFFSET_X,
+  playerOffsetY: DEFAULT_PLAYER_OFFSET_Y,
+  playerAlignment: DEFAULT_DESKTOP_PLAYER_ALIGNMENT,
   playerFontPreset: DEFAULT_PLAYER_FONT_PRESET,
 };
 
@@ -181,6 +205,12 @@ function clampPlayerOffsetY(value: number) {
 
 function normalizePlayerAlignment(value: unknown): LyricsPlayerAlignment {
   return value === 'center' || value === 'right' ? value : DEFAULT_PLAYER_ALIGNMENT;
+}
+
+function normalizeLyricsColorScheme(value: unknown): LyricsColorScheme {
+  return value === 'default' || value === 'pink' || value === 'blue' || value === 'green'
+    ? value
+    : 'auto';
 }
 
 function normalizeCustomFontName(value: string): string {
@@ -265,6 +295,7 @@ export async function loadSystemLyricsFonts(force = false) {
 }
 
 export const lyricsSettings = reactive<LyricsSettings>({ ...defaultLyricsSettings });
+export const desktopLyricsSettings = reactive<DesktopLyricsSettings>({ ...defaultDesktopLyricsSettings });
 
 const storage = typeof localStorage === 'undefined' ? null : localStorage;
 const storedLyricsSettings = storage?.getItem(LYRICS_SETTINGS_KEY);
@@ -291,6 +322,48 @@ watch(
   (nextSettings) => {
     storage?.setItem(LYRICS_SETTINGS_KEY, JSON.stringify({
       ...nextSettings,
+      playerFontScale: clampPlayerFontScale(nextSettings.playerFontScale),
+      playerLineGap: clampPlayerLineGap(nextSettings.playerLineGap),
+      playerOffsetX: clampPlayerOffsetX(nextSettings.playerOffsetX),
+      playerOffsetY: clampPlayerOffsetY(nextSettings.playerOffsetY),
+      playerAlignment: normalizePlayerAlignment(nextSettings.playerAlignment),
+      playerFontPreset: normalizeLyricsFontPreset(nextSettings.playerFontPreset),
+    }));
+  },
+  { deep: true }
+);
+
+const storedDesktopLyricsSettings = storage?.getItem(DESKTOP_LYRICS_SETTINGS_KEY);
+if (storedDesktopLyricsSettings || storedLyricsSettings) {
+  try {
+    const parsed = JSON.parse(storedDesktopLyricsSettings ?? storedLyricsSettings ?? '{}') as Partial<
+      DesktopLyricsSettings
+    >;
+    Object.assign(desktopLyricsSettings, {
+      ...defaultDesktopLyricsSettings,
+      ...parsed,
+      persistLock: typeof parsed.persistLock === 'boolean' ? parsed.persistLock : false,
+      isLocked: false,
+      colorScheme: normalizeLyricsColorScheme(parsed.colorScheme),
+      playerFontScale: clampPlayerFontScale(parsed.playerFontScale ?? DEFAULT_PLAYER_FONT_SCALE),
+      playerLineGap: clampPlayerLineGap(parsed.playerLineGap ?? DEFAULT_PLAYER_LINE_GAP),
+      playerOffsetX: clampPlayerOffsetX(parsed.playerOffsetX ?? DEFAULT_PLAYER_OFFSET_X),
+      playerOffsetY: clampPlayerOffsetY(parsed.playerOffsetY ?? DEFAULT_PLAYER_OFFSET_Y),
+      playerAlignment: normalizePlayerAlignment(parsed.playerAlignment ?? DEFAULT_DESKTOP_PLAYER_ALIGNMENT),
+      playerFontPreset: normalizeLyricsFontPreset(parsed.playerFontPreset),
+    });
+  } catch (error) {
+    console.error('Failed to parse desktop lyrics settings:', error);
+  }
+}
+
+watch(
+  desktopLyricsSettings,
+  (nextSettings) => {
+    storage?.setItem(DESKTOP_LYRICS_SETTINGS_KEY, JSON.stringify({
+      ...nextSettings,
+      isLocked: nextSettings.persistLock ? nextSettings.isLocked : false,
+      colorScheme: normalizeLyricsColorScheme(nextSettings.colorScheme),
       playerFontScale: clampPlayerFontScale(nextSettings.playerFontScale),
       playerLineGap: clampPlayerLineGap(nextSettings.playerLineGap),
       playerOffsetX: clampPlayerOffsetX(nextSettings.playerOffsetX),
@@ -739,6 +812,65 @@ function getOrderedSecondaryLyrics(line: Pick<LyricLine, 'translation' | 'romaji
   return orderedLines;
 }
 
+function toMs(seconds: number): number {
+  return Math.max(0, Math.round(seconds * 1000));
+}
+
+export function convertLyricsToAmlLines(
+  lines: LyricLine[],
+  showTranslation: boolean,
+  showRomaji: boolean,
+): CoreAmlLyricLine[] {
+  return lines.map((line, lineIndex) => {
+    const startTime = toMs(line.time);
+    const parsedEndTime = toMs(line.endTime || line.time);
+    const nextStartTime = toMs(lines[lineIndex + 1]?.time ?? line.time + 3);
+    const endTime = Math.max(
+      startTime + 40,
+      parsedEndTime > startTime ? parsedEndTime : nextStartTime,
+    );
+
+    const sourceWords = line.words ?? [];
+    const convertedWords = sourceWords.map((word, wordIndex) => {
+      const wordStart = toMs(word.start);
+      const nextWordStart = sourceWords[wordIndex + 1]?.start;
+      const rawWordEnd = nextWordStart !== undefined
+        ? toMs(nextWordStart)
+        : toMs(word.end > word.start ? word.end : endTime / 1000);
+      const wordEnd = Math.max(wordStart + 20, Math.min(endTime, rawWordEnd));
+
+      return {
+        word: word.text,
+        startTime: wordStart,
+        endTime: wordEnd,
+        romanWord: showRomaji ? (word.romaji || '') : '',
+        obscene: false,
+      };
+    }).filter((word) => word.word.trim().length > 0);
+    const hasTimedRomaji = convertedWords.some((word) => (word.romanWord || '').trim().length > 0);
+
+    const words = convertedWords.length > 0
+      ? convertedWords
+      : [{
+          word: line.text || ' ',
+          startTime,
+          endTime,
+          romanWord: '',
+          obscene: false,
+        }];
+
+    return {
+      words,
+      translatedLyric: showTranslation ? line.translation : '',
+      romanLyric: showRomaji && !hasTimedRomaji ? line.romaji : '',
+      startTime,
+      endTime,
+      isBG: false,
+      isDuet: false,
+    };
+  });
+}
+
 export function getCurrentLyricDisplayLines(
   line: LyricLine,
   showTranslation: boolean,
@@ -990,6 +1122,7 @@ export function useLyrics() {
     showDesktopLyrics,
     showLyricsPlayerSettingsPanel,
     lyricsSettings,
+    desktopLyricsSettings,
     lyricsStatus,
     currentLyricLine,
     currentLyricIndex,

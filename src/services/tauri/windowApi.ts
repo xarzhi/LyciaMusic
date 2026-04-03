@@ -1,6 +1,6 @@
 import { tauriInvoke } from './invoke';
-import type { WindowMaterialCapabilities } from './contracts';
-export type { WindowMaterialCapabilities } from './contracts';
+import type { ForegroundFullscreenState, WindowMaterialCapabilities } from './contracts';
+export type { ForegroundFullscreenState, WindowMaterialCapabilities } from './contracts';
 
 export const windowApi = {
   setMiniBoundaryEnabled: (enabled: boolean) =>
@@ -9,4 +9,6 @@ export const windowApi = {
     tauriInvoke('set_dark_mode_for_window', { dark }),
   getWindowMaterialCapabilities: () =>
     tauriInvoke('get_window_material_capabilities') as Promise<WindowMaterialCapabilities>,
+  getForegroundFullscreenState: () =>
+    tauriInvoke('get_foreground_fullscreen_state') as Promise<ForegroundFullscreenState>,
 };

@@ -74,14 +74,15 @@ const updateContainerHeight = () => {
 };
 
 const virtualData = computed(() => {
-  const total = props.songs.length;
+  const songs = Array.isArray(props.songs) ? props.songs : [];
+  const total = songs.length;
   const start = Math.floor(scrollTop.value / ROW_HEIGHT);
   const visibleCount = Math.ceil(containerHeight.value / ROW_HEIGHT);
   const renderStart = Math.max(0, start - OVERSCAN);
   const renderEnd = Math.min(total, start + visibleCount + OVERSCAN);
 
   return {
-    items: props.songs.slice(renderStart, renderEnd).map((song, index) => ({
+    items: songs.slice(renderStart, renderEnd).map((song, index) => ({
       ...song,
       virtualIndex: renderStart + index,
     })),
@@ -89,6 +90,10 @@ const virtualData = computed(() => {
     paddingBottom: (total - renderEnd) * ROW_HEIGHT,
   };
 });
+
+const virtualPaddingTop = computed(() => `${virtualData.value?.paddingTop ?? 0}px`);
+const virtualPaddingBottom = computed(() => `${virtualData.value?.paddingBottom ?? 0}px`);
+const virtualItems = computed(() => virtualData.value?.items ?? []);
 
 const onScroll = (event: Event) => {
   scrollTop.value = (event.target as HTMLElement).scrollTop;
@@ -315,10 +320,10 @@ const getRowStyle = (songIndex: number, songPath: string) => {
       @scroll="onScroll"
     >
       <div class="w-full relative">
-        <div :style="{ height: virtualData.paddingTop + 'px' }"></div>
+        <div :style="{ height: virtualPaddingTop }"></div>
 
         <div
-          v-for="song in virtualData.items"
+          v-for="song in virtualItems"
           :key="song.path"
           :data-index="song.virtualIndex"
           @mousedown="handleMouseDown($event, song, song.virtualIndex)"
@@ -407,7 +412,7 @@ const getRowStyle = (songIndex: number, songPath: string) => {
           </div>
         </div>
 
-        <div :style="{ height: virtualData.paddingBottom + 'px' }"></div>
+        <div :style="{ height: virtualPaddingBottom }"></div>
       </div>
 
       <div v-if="songs.length === 0" class="py-20 flex flex-col justify-center items-center select-none text-gray-500 dark:text-white/60">

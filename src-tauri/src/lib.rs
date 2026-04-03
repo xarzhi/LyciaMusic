@@ -1,6 +1,7 @@
 mod app_runtime;
 mod database;
 pub mod error;
+mod foreground_window;
 mod music;
 mod player;
 mod statistics;
@@ -12,6 +13,7 @@ mod window_theme;
 
 use app_runtime::{consume_pending_open_paths, handle_single_instance, setup_app};
 use database::clear_all_app_data;
+use foreground_window::get_foreground_fullscreen_state;
 use music::{
     add_library_folder, add_sidebar_folder, batch_move_music_files, create_folder, delete_folder,
     delete_music_file, get_folder_children, get_folder_first_song, get_library_folders,
@@ -99,6 +101,7 @@ pub fn run() {
             refresh_folder_songs,
             set_mini_boundary_enabled,
             get_window_material_capabilities,
+            get_foreground_fullscreen_state,
             set_dark_mode_for_window,
             consume_pending_open_paths,
             get_system_fonts

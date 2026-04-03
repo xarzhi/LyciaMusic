@@ -2,7 +2,6 @@
 import { useLibraryCollections } from '../../features/collections/useLibraryCollections';
 import { useLyrics } from '../../composables/lyrics';
 import { usePlaybackController } from '../../features/playback/usePlaybackController';
-import DesktopLyrics from "../player/DesktopLyrics.vue";
 import FooterContextMenu from "../overlays/FooterContextMenu.vue";
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 
@@ -18,7 +17,7 @@ const handleOpenDetail = () => {
   togglePlayerDetail();
 };
 
-const { showDesktopLyrics, showLyricsPlayerSettingsPanel } = useLyrics();
+const { showDesktopLyrics, showLyricsPlayerSettingsPanel, desktopLyricsSettings } = useLyrics();
 
 // --- Context Menu State ---
 const showContextMenu = ref(false);
@@ -34,9 +33,18 @@ const handleContextMenu = (e: MouseEvent) => {
 };
 
 const toggleLyrics = () => { showDesktopLyrics.value = !showDesktopLyrics.value; };
+const unlockDesktopLyrics = () => {
+  if (!desktopLyricsSettings.isLocked) return;
+  desktopLyricsSettings.isLocked = false;
+};
 const toggleLyricsPlayerSettings = () => {
   showLyricsPlayerSettingsPanel.value = !showLyricsPlayerSettingsPanel.value;
 };
+const desktopLyricsButtonTitle = computed(() => (
+  desktopLyricsSettings.isLocked
+    ? '桌面歌词已锁定，右键可解锁'
+    : '桌面歌词'
+));
 
 // 不再使用单独的模糊样式 -> 全透明
 
@@ -387,7 +395,9 @@ onUnmounted(() => {
       
       <button 
         @click="toggleLyrics"
+        @contextmenu.prevent="unlockDesktopLyrics"
         :class="['text-[14px] font-bold transition-colors w-8 h-8 flex items-center justify-center rounded-full', showDesktopLyrics ? 'text-[#EC4141] bg-[#EC4141]/10' : (showPlayerDetail ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10')]"
+        v-bind="{ title: desktopLyricsButtonTitle }"
         title="桌面歌词"
       >
         词
@@ -404,11 +414,6 @@ onUnmounted(() => {
         <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-.82"/><path d="M12 17v5"/><path d="M15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0-1.16.37"/></svg>
       </button>
     </div>
-
-        <DesktopLyrics />
-
-    
-
         <FooterContextMenu 
 
           :visible="showContextMenu" 

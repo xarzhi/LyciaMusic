@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { getLyricsFontFamily, useLyrics, lyricsSettings } from '../../composables/lyrics';
+import { desktopLyricsSettings, getLyricsFontFamily, useLyrics } from '../../composables/lyrics';
 import { usePlayer } from '../../composables/player';
 import { useSettingsStore } from '../../features/settings/store';
 import { storeToRefs } from 'pinia';
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 
-const { showDesktopLyrics, currentLyricLine } = useLyrics();
+const { showDesktopLyrics, currentLyricLine, lyricsSettings } = useLyrics();
 const { stepSeek, prevSong, togglePlay, nextSong, isPlaying, toggleAlwaysOnTop, currentTime } = usePlayer();
 const { audioDelay } = storeToRefs(useSettingsStore());
 
@@ -16,7 +16,7 @@ const isDragging = ref(false);
 const dragOffset = ref({ x: 0, y: 0 });
 
 const startDrag = (e: MouseEvent) => {
-  if (lyricsSettings.isLocked) return; 
+  if (desktopLyricsSettings.isLocked) return; 
   if ((e.target as HTMLElement).closest('button, .settings-menu')) return;
   
   isDragging.value = true;
@@ -69,14 +69,14 @@ const keepSettingsOpen = () => {
 };
 
 const toggleTop = () => {
-  lyricsSettings.isAlwaysOnTop = !lyricsSettings.isAlwaysOnTop;
+  desktopLyricsSettings.isAlwaysOnTop = !desktopLyricsSettings.isAlwaysOnTop;
 };
 
-const toggleLock = () => { lyricsSettings.isLocked = !lyricsSettings.isLocked; };
+const toggleLock = () => { desktopLyricsSettings.isLocked = !desktopLyricsSettings.isLocked; };
 const closeLyrics = () => { showDesktopLyrics.value = false; };
 
 const colorStyles = computed(() => {
-  switch(lyricsSettings.colorScheme) {
+  switch(desktopLyricsSettings.colorScheme) {
     case 'pink': return { main: 'text-pink-400', sub: 'text-pink-200', active: '#f472b6', inactive: 'rgba(251, 207, 232, 0.38)' };
     case 'blue': return { main: 'text-blue-400', sub: 'text-blue-200', active: '#60a5fa', inactive: 'rgba(191, 219, 254, 0.4)' };
     case 'green': return { main: 'text-emerald-400', sub: 'text-emerald-200', active: '#34d399', inactive: 'rgba(167, 243, 208, 0.4)' };
@@ -85,7 +85,7 @@ const colorStyles = computed(() => {
 });
 
 const lyricsTextStyle = computed(() => ({
-  fontFamily: getLyricsFontFamily(lyricsSettings.playerFontPreset),
+  fontFamily: getLyricsFontFamily(desktopLyricsSettings.playerFontPreset),
 }));
 
 const syncedCurrentTime = computed(() => Math.max(0, currentTime.value - audioDelay.value));
@@ -111,7 +111,7 @@ function getKaraokeWordStyle(start: number, end: number) {
   };
 }
 
-watch(() => lyricsSettings.isAlwaysOnTop, (val) => toggleAlwaysOnTop(val));
+watch(() => desktopLyricsSettings.isAlwaysOnTop, (val) => toggleAlwaysOnTop(val));
 
 </script>
 
@@ -162,7 +162,7 @@ watch(() => lyricsSettings.isAlwaysOnTop, (val) => toggleAlwaysOnTop(val));
             >
               <div @click="toggleTop" class="px-4 py-2.5 hover:bg-gray-100 cursor-pointer flex justify-between items-center transition-colors">
                 <div class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>总在最前</div>
-                <span v-if="lyricsSettings.isAlwaysOnTop" class="text-[#EC4141] font-bold">✓</span>
+                <span v-if="desktopLyricsSettings.isAlwaysOnTop" class="text-[#EC4141] font-bold">✓</span>
               </div>
               
               <div class="relative" @mouseenter="showForeignSubmenu=true; showColorSubmenu=false" @mouseleave="showForeignSubmenu=false">
@@ -188,21 +188,21 @@ watch(() => lyricsSettings.isAlwaysOnTop, (val) => toggleAlwaysOnTop(val));
                   <span class="text-gray-400">›</span>
                 </div>
                 <div v-show="showColorSubmenu" class="absolute left-full top-0 ml-1 w-36 bg-white/95 backdrop-blur rounded-lg shadow-xl border border-gray-100 py-1 z-50">
-                  <div @click="lyricsSettings.colorScheme = 'default'" class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between">
+                  <div @click="desktopLyricsSettings.colorScheme = 'default'" class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between">
                     <span class="text-[#EC4141]">默认红</span>
-                    <span v-if="lyricsSettings.colorScheme === 'default'" class="text-[#EC4141] font-bold">✓</span>
+                    <span v-if="desktopLyricsSettings.colorScheme === 'default'" class="text-[#EC4141] font-bold">✓</span>
                   </div>
-                  <div @click="lyricsSettings.colorScheme = 'pink'" class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between">
+                  <div @click="desktopLyricsSettings.colorScheme = 'pink'" class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between">
                     <span class="text-pink-500">樱花粉</span>
-                    <span v-if="lyricsSettings.colorScheme === 'pink'" class="text-[#EC4141] font-bold">✓</span>
+                    <span v-if="desktopLyricsSettings.colorScheme === 'pink'" class="text-[#EC4141] font-bold">✓</span>
                   </div>
-                  <div @click="lyricsSettings.colorScheme = 'blue'" class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between">
+                  <div @click="desktopLyricsSettings.colorScheme = 'blue'" class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between">
                     <span class="text-blue-500">天空蓝</span>
-                    <span v-if="lyricsSettings.colorScheme === 'blue'" class="text-[#EC4141] font-bold">✓</span>
+                    <span v-if="desktopLyricsSettings.colorScheme === 'blue'" class="text-[#EC4141] font-bold">✓</span>
                   </div>
-                  <div @click="lyricsSettings.colorScheme = 'green'" class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between">
+                  <div @click="desktopLyricsSettings.colorScheme = 'green'" class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between">
                     <span class="text-emerald-500">清新绿</span>
-                    <span v-if="lyricsSettings.colorScheme === 'green'" class="text-[#EC4141] font-bold">✓</span>
+                    <span v-if="desktopLyricsSettings.colorScheme === 'green'" class="text-[#EC4141] font-bold">✓</span>
                   </div>
                 </div>
               </div>
@@ -211,8 +211,8 @@ watch(() => lyricsSettings.isAlwaysOnTop, (val) => toggleAlwaysOnTop(val));
 
           <div class="w-[1px] h-3 bg-gray-600 mx-1"></div>
 
-          <button @click="toggleLock" class="p-1.5 rounded hover:bg-white/10 transition" :class="lyricsSettings.isLocked ? 'text-[#EC4141]' : 'text-gray-300 hover:text-white'" title="锁定位置">
-            <svg v-if="lyricsSettings.isLocked" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clip-rule="evenodd" /></svg>
+          <button @click="toggleLock" class="p-1.5 rounded hover:bg-white/10 transition" :class="desktopLyricsSettings.isLocked ? 'text-[#EC4141]' : 'text-gray-300 hover:text-white'" title="锁定位置">
+            <svg v-if="desktopLyricsSettings.isLocked" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clip-rule="evenodd" /></svg>
             <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
           </button>
 
@@ -226,12 +226,12 @@ watch(() => lyricsSettings.isAlwaysOnTop, (val) => toggleAlwaysOnTop(val));
         class="group/lyrics relative bg-black/60 backdrop-blur-md rounded-2xl shadow-2xl border border-white/5 transition-all duration-300 flex flex-col justify-center items-center px-6 z-10"
         style="width: 700px; height: 130px;"
         :style="{ 
-          cursor: lyricsSettings.isLocked ? 'default' : (isDragging ? 'grabbing' : 'grab'),
+          cursor: desktopLyricsSettings.isLocked ? 'default' : (isDragging ? 'grabbing' : 'grab'),
           opacity: isDragging ? 0.9 : 1
         }"
         @mousedown="startDrag"
       >
-        <div v-if="!lyricsSettings.isLocked" class="absolute inset-0 rounded-2xl border-2 border-white/0 group-hover/lyrics:border-white/10 transition-colors pointer-events-none"></div>
+        <div v-if="!desktopLyricsSettings.isLocked" class="absolute inset-0 rounded-2xl border-2 border-white/0 group-hover/lyrics:border-white/10 transition-colors pointer-events-none"></div>
 
         <div class="flex flex-col items-center justify-center w-full text-center" :style="lyricsTextStyle">
           

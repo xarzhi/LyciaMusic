@@ -78,6 +78,11 @@ export function useDesktopLyricsWindowController(options: {
     stopAutoHideLoop();
 
     const pollForegroundFullscreen = async () => {
+      if (!settings.value.autoHideWhenFullscreen) {
+        isSystemHidden.value = false;
+        return;
+      }
+
       try {
         const state = await windowApi.getForegroundFullscreenState();
         isSystemHidden.value = state.isFullscreen;
@@ -237,6 +242,15 @@ export function useDesktopLyricsWindowController(options: {
       void applyTransientWindowFlags();
     },
     { immediate: true },
+  );
+
+  watch(
+    () => settings.value.autoHideWhenFullscreen,
+    (enabled) => {
+      if (!enabled) {
+        isSystemHidden.value = false;
+      }
+    },
   );
 
   watch(toolbarMenuVisible, (visible) => {

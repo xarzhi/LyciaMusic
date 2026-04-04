@@ -430,4 +430,44 @@ describe('lyrics settings persistence', () => {
     const desktopPayloadWithPersistence = JSON.parse(String(setItem.mock.lastCall?.[1] ?? '{}'));
     expect(desktopPayloadWithPersistence.isLocked).toBe(true);
   });
+
+  it('defaults desktop auto-hide on fullscreen to enabled', async () => {
+    vi.resetModules();
+
+    const getItem = vi.fn(() => null);
+    const setItem = vi.fn();
+
+    vi.stubGlobal('localStorage', {
+      getItem,
+      setItem,
+    });
+
+    const { desktopLyricsSettings } = await import('./lyrics');
+
+    expect(desktopLyricsSettings.autoHideWhenFullscreen).toBe(true);
+  });
+
+  it('restores desktop auto-hide on fullscreen from storage', async () => {
+    vi.resetModules();
+
+    const getItem = vi.fn((key: string) => {
+      if (key === 'desktop_lyrics_settings') {
+        return JSON.stringify({
+          autoHideWhenFullscreen: false,
+        });
+      }
+
+      return null;
+    });
+    const setItem = vi.fn();
+
+    vi.stubGlobal('localStorage', {
+      getItem,
+      setItem,
+    });
+
+    const { desktopLyricsSettings } = await import('./lyrics');
+
+    expect(desktopLyricsSettings.autoHideWhenFullscreen).toBe(false);
+  });
 });

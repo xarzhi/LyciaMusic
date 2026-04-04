@@ -163,7 +163,7 @@ function handleToolbarMenuVisibilityChange(visible: boolean) {
 
 .desktop-widget-toolbar {
   position: absolute;
-  top: 0;
+  top: 8px;
   left: 50%;
   z-index: 20;
   transform: translateX(-50%);
@@ -171,7 +171,7 @@ function handleToolbarMenuVisibilityChange(visible: boolean) {
 
 .desktop-widget {
   position: absolute;
-  inset: 20px 0 0;
+  inset: 50px 0 0;
   border: 1px solid transparent;
   border-radius: 10px;
   background-color: rgba(0, 0, 0, 0.4);

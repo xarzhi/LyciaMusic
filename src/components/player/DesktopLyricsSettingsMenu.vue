@@ -60,6 +60,10 @@ function updateFontPreset(event: Event) {
           <span>窗口置顶</span>
           <span>{{ settings.isAlwaysOnTop ? 'ON' : 'OFF' }}</span>
         </button>
+        <button type="button" class="settings-item" @click="emitPatch({ autoHideWhenFullscreen: !settings.autoHideWhenFullscreen })">
+          <span>全屏时自动隐藏</span>
+          <span>{{ settings.autoHideWhenFullscreen ? 'ON' : 'OFF' }}</span>
+        </button>
         <button type="button" class="settings-item" @click="emitPatch({ showTranslation: !settings.showTranslation })">
           <span>翻译</span>
           <span>{{ settings.showTranslation ? 'ON' : 'OFF' }}</span>

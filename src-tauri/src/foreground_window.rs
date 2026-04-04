@@ -19,9 +19,7 @@ fn platform_is_foreground_fullscreen() -> bool {
     use windows_sys::Win32::{
         Foundation::RECT,
         Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST},
-        UI::WindowsAndMessaging::{
-            GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
-        },
+        UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible},
     };
 
     unsafe {
@@ -38,6 +36,12 @@ fn platform_is_foreground_fullscreen() -> bool {
         GetWindowThreadProcessId(hwnd, &mut foreground_pid);
         if foreground_pid == std::process::id() {
             return false;
+        }
+
+        if let Some(class_name) = window_class_name(hwnd) {
+            if is_excluded_shell_window_class(&class_name) {
+                return false;
+            }
         }
 
         let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
@@ -74,4 +78,56 @@ fn platform_is_foreground_fullscreen() -> bool {
 #[cfg(not(target_os = "windows"))]
 fn platform_is_foreground_fullscreen() -> bool {
     false
+}
+
+#[cfg(target_os = "windows")]
+fn window_class_name(hwnd: windows_sys::Win32::Foundation::HWND) -> Option<String> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetClassNameW;
+
+    unsafe {
+        let mut buffer = [0u16; 256];
+        let len = GetClassNameW(hwnd, buffer.as_mut_ptr(), buffer.len() as i32);
+        if len <= 0 {
+            return None;
+        }
+
+        String::from_utf16(&buffer[..len as usize]).ok()
+    }
+}
+
+fn is_excluded_shell_window_class(class_name: &str) -> bool {
+    matches!(
+        class_name,
+        "Progman"
+            | "WorkerW"
+            | "SHELLDLL_DefView"
+            | "CabinetWClass"
+            | "ExploreWClass"
+            | "Shell_TrayWnd"
+            | "NotifyIconOverflowWindow"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_excluded_shell_window_class;
+
+    #[test]
+    fn excludes_desktop_shell_classes() {
+        assert!(is_excluded_shell_window_class("Progman"));
+        assert!(is_excluded_shell_window_class("WorkerW"));
+        assert!(is_excluded_shell_window_class("SHELLDLL_DefView"));
+    }
+
+    #[test]
+    fn excludes_explorer_shell_classes() {
+        assert!(is_excluded_shell_window_class("CabinetWClass"));
+        assert!(is_excluded_shell_window_class("ExploreWClass"));
+    }
+
+    #[test]
+    fn keeps_regular_window_classes() {
+        assert!(!is_excluded_shell_window_class("Chrome_WidgetWin_1"));
+        assert!(!is_excluded_shell_window_class("Notepad"));
+    }
 }

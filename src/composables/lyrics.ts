@@ -125,6 +125,7 @@ export interface LyricsSettings {
 
 export interface DesktopLyricsSettings {
   isAlwaysOnTop: boolean;
+  autoHideWhenFullscreen: boolean;
   isLocked: boolean;
   persistLock: boolean;
   colorScheme: LyricsColorScheme;
@@ -149,6 +150,7 @@ const defaultLyricsSettings: LyricsSettings = {
 
 const defaultDesktopLyricsSettings: DesktopLyricsSettings = {
   isAlwaysOnTop: false,
+  autoHideWhenFullscreen: true,
   isLocked: false,
   persistLock: false,
   colorScheme: 'auto',
@@ -342,6 +344,9 @@ if (storedDesktopLyricsSettings || storedLyricsSettings) {
     Object.assign(desktopLyricsSettings, {
       ...defaultDesktopLyricsSettings,
       ...parsed,
+      autoHideWhenFullscreen: typeof parsed.autoHideWhenFullscreen === 'boolean'
+        ? parsed.autoHideWhenFullscreen
+        : true,
       persistLock: typeof parsed.persistLock === 'boolean' ? parsed.persistLock : false,
       isLocked: false,
       colorScheme: normalizeLyricsColorScheme(parsed.colorScheme),

@@ -61,6 +61,7 @@ export function useDesktopLyricsDisplay(showDragShadow: Ref<boolean>) {
     showTranslation: true,
     showRomaji: false,
     isAlwaysOnTop: false,
+    autoHideWhenFullscreen: true,
     isLocked: false,
     persistLock: false,
     colorScheme: 'auto',

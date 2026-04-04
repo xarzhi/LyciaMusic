@@ -16,6 +16,7 @@ import {
   DESKTOP_LYRICS_BOUNDS_EVENT,
   DESKTOP_LYRICS_BOUNDS_KEY,
   DESKTOP_LYRICS_PLAYBACK_EVENT,
+  DESKTOP_LYRICS_REVEAL_SURFACE_EVENT,
   DESKTOP_LYRICS_REQUEST_STATE_EVENT,
   DESKTOP_LYRICS_STATE_EVENT,
   DESKTOP_LYRICS_VISIBILITY_EVENT,
@@ -244,6 +245,13 @@ export function useDesktopLyricsWindowBridge() {
     );
   };
 
+  const revealDesktopLyricsSurface = async () => {
+    const targetWindow = await getDesktopLyricsWindow();
+    if (!targetWindow) return;
+
+    await emitTo(DESKTOP_LYRICS_WINDOW_LABEL, DESKTOP_LYRICS_REVEAL_SURFACE_EVENT);
+  };
+
   const syncWindowFlags = async () => {
     const targetWindow = await getDesktopLyricsWindow();
     if (!targetWindow) return;
@@ -367,6 +375,7 @@ export function useDesktopLyricsWindowBridge() {
       await emitStateToDesktopLyrics();
       await emitPlaybackToDesktopLyrics();
       await targetWindow.show();
+      await revealDesktopLyricsSurface();
       startSyncLoop();
       return;
     }

@@ -13,6 +13,7 @@ export const DESKTOP_LYRICS_REQUEST_STATE_EVENT = 'desktop-lyrics:request-state'
 export const DESKTOP_LYRICS_ACTION_EVENT = 'desktop-lyrics:action';
 export const DESKTOP_LYRICS_VISIBILITY_EVENT = 'desktop-lyrics:visibility';
 export const DESKTOP_LYRICS_BOUNDS_EVENT = 'desktop-lyrics:bounds';
+export const DESKTOP_LYRICS_REVEAL_SURFACE_EVENT = 'desktop-lyrics:reveal-surface';
 export const DESKTOP_LYRICS_BOUNDS_KEY = 'desktop_lyrics_window_bounds';
 
 export const DESKTOP_LYRICS_WINDOW_DEFAULT_WIDTH = 900;

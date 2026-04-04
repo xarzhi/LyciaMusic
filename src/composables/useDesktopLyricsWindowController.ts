@@ -6,6 +6,7 @@ import { loadSystemLyricsFonts } from './lyrics';
 import {
   DESKTOP_LYRICS_BOUNDS_EVENT,
   DESKTOP_LYRICS_PLAYBACK_EVENT,
+  DESKTOP_LYRICS_REVEAL_SURFACE_EVENT,
   DESKTOP_LYRICS_REQUEST_STATE_EVENT,
   DESKTOP_LYRICS_STATE_EVENT,
   DESKTOP_LYRICS_VISIBILITY_EVENT,
@@ -47,6 +48,7 @@ export function useDesktopLyricsWindowController(options: {
   let dragShadowTimer: ReturnType<typeof setTimeout> | null = null;
   let unlistenState: (() => void) | null = null;
   let unlistenPlayback: (() => void) | null = null;
+  let unlistenRevealSurface: (() => void) | null = null;
   let unlistenCloseRequested: (() => void) | null = null;
   let unlistenMoved: (() => void) | null = null;
   let unlistenResized: (() => void) | null = null;
@@ -145,6 +147,19 @@ export function useDesktopLyricsWindowController(options: {
     }, delay);
   }
 
+  function revealDragShadow() {
+    showDragShadow.value = true;
+
+    if (dragShadowTimer) {
+      clearTimeout(dragShadowTimer);
+    }
+
+    dragShadowTimer = setTimeout(() => {
+      showDragShadow.value = false;
+      dragShadowTimer = null;
+    }, 1500);
+  }
+
   function queueHoverDim() {
     clearHoverDimTimer();
 
@@ -183,6 +198,7 @@ export function useDesktopLyricsWindowController(options: {
     if (settings.value.isLocked || isSystemHidden.value) return;
     if ((event.target as HTMLElement).closest('button, .settings-menu')) return;
 
+    revealDragShadow();
     await appWindow.startDragging();
   }
 
@@ -215,6 +231,12 @@ export function useDesktopLyricsWindowController(options: {
       handlePlaybackPayload(event.payload);
     });
 
+    unlistenRevealSurface = await appWindow.listen(DESKTOP_LYRICS_REVEAL_SURFACE_EVENT, () => {
+      revealDragShadow();
+    });
+
+    revealDragShadow();
+
     unlistenCloseRequested = await appWindow.onCloseRequested(async (event) => {
       event.preventDefault();
       await appWindow.hide();
@@ -222,11 +244,7 @@ export function useDesktopLyricsWindowController(options: {
     });
 
     unlistenMoved = await appWindow.onMoved(async ({ payload }) => {
-      showDragShadow.value = true;
-      if (dragShadowTimer) clearTimeout(dragShadowTimer);
-      dragShadowTimer = setTimeout(() => {
-        showDragShadow.value = false;
-      }, 1200);
+      revealDragShadow();
 
       const size = await appWindow.outerSize();
       await emitWindowBounds({
@@ -257,6 +275,7 @@ export function useDesktopLyricsWindowController(options: {
     clearToolbarHideTimer();
     unlistenState?.();
     unlistenPlayback?.();
+    unlistenRevealSurface?.();
     unlistenCloseRequested?.();
     unlistenMoved?.();
     unlistenResized?.();

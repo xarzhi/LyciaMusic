@@ -62,7 +62,13 @@ const {
 
         <div
           class="desktop-widget relative flex h-full w-full select-none flex-col overflow-hidden"
-          :class="[lyricsAlignmentClass, { 'desktop-widget--dragging': showDragShadow }]"
+          :class="[
+            lyricsAlignmentClass,
+            {
+              'desktop-widget--dragging': showDragShadow,
+              'desktop-widget--surface-visible': showDragShadow,
+            },
+          ]"
           :style="widgetStyle"
           @mousedown="startWindowDrag"
         >
@@ -155,8 +161,22 @@ const {
 .desktop-widget {
   position: absolute;
   inset: 0;
-  border: 1px solid color-mix(in srgb, var(--desktop-accent-b) 22%, transparent);
+  border: 1px solid transparent;
   border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  overflow: visible;
+  transition:
+    background 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease,
+    outline-color 220ms ease;
+}
+
+.desktop-widget--surface-visible {
+  border-color: color-mix(in srgb, var(--desktop-accent-b) 22%, transparent);
   background:
     radial-gradient(circle at top center, color-mix(in srgb, var(--desktop-accent-a) 24%, transparent), transparent 42%),
     radial-gradient(circle at bottom right, color-mix(in srgb, var(--desktop-accent-c) 16%, transparent), transparent 38%),
@@ -166,9 +186,6 @@ const {
     0 22px 56px rgba(0, 0, 0, 0.18),
     0 6px 18px rgba(0, 0, 0, 0.08),
     0 0 0 1px color-mix(in srgb, var(--desktop-accent-a) 8%, transparent);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  overflow: visible;
 }
 
 .desktop-widget::before {

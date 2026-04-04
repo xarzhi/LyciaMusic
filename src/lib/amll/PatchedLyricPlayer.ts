@@ -3,6 +3,10 @@ import { DomLyricPlayer } from '@applemusic-like-lyrics/core';
 export class PatchedLyricPlayer extends DomLyricPlayer {
   private lineGap = 1;
 
+  private hasFiniteTime(value: number | undefined): value is number {
+    return Number.isFinite(value);
+  }
+
   private clamp(min: number, value: number, max: number) {
     return Math.max(min, Math.min(value, max));
   }
@@ -253,6 +257,87 @@ export class PatchedLyricPlayer extends DomLyricPlayer {
     }
 
     this.lineGap = this.clamp(0.6, value, 2);
+  }
+
+  protected override getCurrentInterlude(): [number, number, number, boolean] | undefined {
+    if (this.bufferedLines.size > 0) return undefined;
+
+    const currentTime = this.currentTime + 20;
+    const index = this.scrollToIndex;
+    const currentLine = this.processedLines[index];
+    const nextLine = this.processedLines[index + 1];
+    const lineAfterNext = this.processedLines[index + 2];
+
+    if (index === 0) {
+      const firstLine = this.processedLines[0];
+      const secondLine = this.processedLines[1];
+
+      if (
+        firstLine &&
+        this.hasFiniteTime(firstLine.startTime) &&
+        firstLine.startTime > currentTime
+      ) {
+        return [
+          currentTime,
+          Math.max(currentTime, firstLine.startTime - 250),
+          -2,
+          firstLine.isDuet,
+        ];
+      }
+
+      if (
+        firstLine &&
+        secondLine &&
+        this.hasFiniteTime(firstLine.endTime) &&
+        this.hasFiniteTime(secondLine.startTime) &&
+        secondLine.startTime > currentTime &&
+        firstLine.endTime < currentTime
+      ) {
+        return [
+          Math.max(firstLine.endTime, currentTime),
+          secondLine.startTime,
+          0,
+          secondLine.isDuet,
+        ];
+      }
+
+      return undefined;
+    }
+
+    if (
+      !currentLine ||
+      !nextLine ||
+      !this.hasFiniteTime(currentLine.endTime) ||
+      !this.hasFiniteTime(nextLine.startTime)
+    ) {
+      return undefined;
+    }
+
+    if (nextLine.startTime > currentTime && currentLine.endTime < currentTime) {
+      return [
+        Math.max(currentLine.endTime, currentTime),
+        nextLine.startTime,
+        index,
+        nextLine.isDuet,
+      ];
+    }
+
+    if (
+      lineAfterNext &&
+      this.hasFiniteTime(nextLine.endTime) &&
+      this.hasFiniteTime(lineAfterNext.startTime) &&
+      lineAfterNext.startTime > currentTime &&
+      nextLine.endTime < currentTime
+    ) {
+      return [
+        Math.max(nextLine.endTime, currentTime),
+        lineAfterNext.startTime,
+        index + 1,
+        lineAfterNext.isDuet,
+      ];
+    }
+
+    return undefined;
   }
 
   override onResize(): void {

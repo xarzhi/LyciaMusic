@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { Check, ChevronDown, Type } from 'lucide-vue-next';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 
 import {
   DEFAULT_DESKTOP_PLAYER_ALIGNMENT,
@@ -17,6 +18,7 @@ import {
   MIN_PLAYER_LINE_GAP,
   MIN_PLAYER_OFFSET_X,
   MIN_PLAYER_OFFSET_Y,
+  getLyricsFontFamily,
   loadSystemLyricsFonts,
   normalizeLyricsFontPreset,
   systemLyricsFontOptions,
@@ -52,6 +54,9 @@ const COLOR_SCHEME_OPTIONS: Array<{
 
 const { settings } = useSettings();
 const { lyricsSettings, desktopLyricsSettings } = useLyrics();
+const fontPresetFieldRef = ref<HTMLElement | null>(null);
+const fontPresetMenuRef = ref<HTMLElement | null>(null);
+const isFontPresetMenuOpen = ref(false);
 
 const availableFontOptions = computed(() => [
   ...LYRICS_FONT_OPTIONS,
@@ -61,6 +66,10 @@ const availableFontOptions = computed(() => [
 const selectedFontLabel = computed(() => {
   return availableFontOptions.value.find((option) => option.value === desktopLyricsSettings.playerFontPreset)?.label
     ?? normalizeLyricsFontPreset(desktopLyricsSettings.playerFontPreset);
+});
+const selectedFontFamily = computed(() => {
+  return availableFontOptions.value.find((option) => option.value === desktopLyricsSettings.playerFontPreset)?.fontFamily
+    ?? getLyricsFontFamily(desktopLyricsSettings.playerFontPreset);
 });
 
 const fontScaleLabel = computed(() => `${Math.round(desktopLyricsSettings.playerFontScale * 100)}%`);
@@ -139,15 +148,49 @@ function resetLyricsSyncOffset() {
   lyricsSyncOffsetMs.value = 0;
 }
 
-function handleFontPresetChange(event: Event) {
-  const target = event.target as HTMLSelectElement | null;
-  if (!target) return;
+async function toggleFontPresetMenu() {
+  isFontPresetMenuOpen.value = !isFontPresetMenuOpen.value;
 
-  setDesktopFontPreset(target.value);
+  if (!isFontPresetMenuOpen.value) return;
+
+  await nextTick();
+
+  const activeItem = fontPresetMenuRef.value?.querySelector('.desktop-font-option--active') as HTMLElement | null;
+  activeItem?.scrollIntoView({ block: 'nearest' });
+}
+
+function closeFontPresetMenu() {
+  isFontPresetMenuOpen.value = false;
+}
+
+function selectDesktopFontPreset(value: LyricsFontPreset) {
+  setDesktopFontPreset(value);
+  closeFontPresetMenu();
+}
+
+function handlePointerDownOutside(event: MouseEvent) {
+  const target = event.target as Node | null;
+  if (!target) return;
+  if (fontPresetFieldRef.value?.contains(target)) return;
+  if (fontPresetMenuRef.value?.contains(target)) return;
+  closeFontPresetMenu();
+}
+
+function handleWindowEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    closeFontPresetMenu();
+  }
 }
 
 onMounted(() => {
+  window.addEventListener('mousedown', handlePointerDownOutside);
+  window.addEventListener('keydown', handleWindowEscape);
   void loadSystemLyricsFonts();
+});
+
+onUnmounted(() => {
+  window.removeEventListener('mousedown', handlePointerDownOutside);
+  window.removeEventListener('keydown', handleWindowEscape);
 });
 </script>
 
@@ -488,16 +531,66 @@ onMounted(() => {
             重置
           </button>
         </div>
-        <div class="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
-          <select
-            class="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#EC4141] dark:border-white/10 dark:bg-white/5 dark:text-gray-100"
-            :value="desktopLyricsSettings.playerFontPreset"
-            @change="handleFontPresetChange"
-          >
-            <option v-for="option in availableFontOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
+        <div class="mt-4 flex flex-col gap-3 md:flex-row md:items-start">
+          <div ref="fontPresetFieldRef" class="desktop-font-picker min-w-0 flex-1">
+            <button
+              type="button"
+              class="desktop-font-trigger"
+              :class="isFontPresetMenuOpen ? 'desktop-font-trigger--open' : ''"
+              @click="toggleFontPresetMenu"
+            >
+              <div class="desktop-font-trigger-icon">
+                <Type :size="16" />
+              </div>
+              <div class="min-w-0 flex-1 text-left">
+                <div class="truncate text-[15px] font-semibold text-gray-800 dark:text-gray-100" :style="{ fontFamily: selectedFontFamily }">
+                  {{ selectedFontLabel }}
+                </div>
+                <div class="mt-1 truncate text-xs text-gray-500 dark:text-white/45">
+                  点击选择桌面歌词字体
+                </div>
+              </div>
+              <ChevronDown
+                :size="18"
+                class="shrink-0 text-gray-400 transition-transform duration-200 dark:text-white/45"
+                :class="isFontPresetMenuOpen ? 'rotate-180 text-[#EC4141]' : ''"
+              />
+            </button>
+
+            <transition name="desktop-font-menu">
+              <div
+                v-if="isFontPresetMenuOpen"
+                ref="fontPresetMenuRef"
+                class="desktop-font-menu"
+              >
+                <div class="desktop-font-menu-header">
+                  <span>字体方案</span>
+                  <span>{{ availableFontOptions.length }} 项</span>
+                </div>
+                <div class="desktop-font-menu-list custom-scrollbar">
+                  <button
+                    v-for="option in availableFontOptions"
+                    :key="option.value"
+                    type="button"
+                    class="desktop-font-option"
+                    :class="desktopLyricsSettings.playerFontPreset === option.value ? 'desktop-font-option--active' : ''"
+                    @click="selectDesktopFontPreset(option.value)"
+                  >
+                    <div class="min-w-0 flex-1">
+                      <div class="truncate text-sm font-semibold" :style="{ fontFamily: option.fontFamily }">
+                        {{ option.label }}
+                      </div>
+                    </div>
+                    <Check
+                      v-if="desktopLyricsSettings.playerFontPreset === option.value"
+                      :size="16"
+                      class="shrink-0 text-[#EC4141]"
+                    />
+                  </button>
+                </div>
+              </div>
+            </transition>
+          </div>
           <div class="rounded-full bg-black/5 px-3 py-1.5 text-xs text-gray-600 dark:bg-white/8 dark:text-white/70">
             {{ selectedFontLabel }}
           </div>
@@ -604,6 +697,63 @@ onMounted(() => {
   background: rgba(0, 0, 0, 0.2);
 }
 
+:global(.dark) .desktop-font-trigger {
+  border-color: rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.04));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 28px rgba(0, 0, 0, 0.18);
+}
+
+:global(.dark) .desktop-font-trigger:hover,
+:global(.dark) .desktop-font-trigger--open {
+  border-color: rgba(236, 65, 65, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 36px rgba(0, 0, 0, 0.24);
+}
+
+:global(.dark) .desktop-font-trigger--open {
+  background:
+    linear-gradient(180deg, rgba(236, 65, 65, 0.16), rgba(255, 255, 255, 0.05));
+}
+
+:global(.dark) .desktop-font-trigger-icon {
+  background: rgba(236, 65, 65, 0.14);
+  color: #ff9a9a;
+}
+
+:global(.dark) .desktop-font-menu {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(17, 17, 19, 0.88);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.34),
+    0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
+:global(.dark) .desktop-font-menu-header {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.58);
+}
+
+:global(.dark) .desktop-font-option {
+  color: rgba(255, 255, 255, 0.84);
+}
+
+:global(.dark) .desktop-font-option:hover {
+  border-color: rgba(236, 65, 65, 0.22);
+  background: rgba(236, 65, 65, 0.1);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+:global(.dark) .desktop-font-option--active {
+  border-color: rgba(236, 65, 65, 0.28);
+  background:
+    linear-gradient(180deg, rgba(236, 65, 65, 0.18), rgba(236, 65, 65, 0.08));
+  color: #ff9a9a;
+}
+
 .desktop-card-header {
   display: flex;
   align-items: flex-start;
@@ -617,6 +767,134 @@ onMounted(() => {
   font-size: 1.4rem;
   font-weight: 700;
   line-height: 1;
+}
+
+.desktop-font-picker {
+  position: relative;
+}
+
+.desktop-font-trigger {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.68));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 10px 26px rgba(15, 23, 42, 0.05);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.desktop-font-trigger:hover,
+.desktop-font-trigger--open {
+  border-color: rgba(236, 65, 65, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 14px 30px rgba(236, 65, 65, 0.08);
+}
+
+.desktop-font-trigger--open {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 244, 244, 0.78));
+}
+
+.desktop-font-trigger-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(236, 65, 65, 0.1);
+  color: #ec4141;
+  flex-shrink: 0;
+}
+
+.desktop-font-menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.16),
+    0 10px 24px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+}
+
+.desktop-font-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  color: rgba(71, 85, 105, 0.92);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.desktop-font-menu-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.desktop-font-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  text-align: left;
+  color: rgb(55 65 81);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.desktop-font-option:hover {
+  border-color: rgba(236, 65, 65, 0.16);
+  background: rgba(236, 65, 65, 0.06);
+  color: rgb(17 24 39);
+}
+
+.desktop-font-option--active {
+  border-color: rgba(236, 65, 65, 0.2);
+  background:
+    linear-gradient(180deg, rgba(236, 65, 65, 0.12), rgba(236, 65, 65, 0.06));
+  color: #ec4141;
+}
+
+.desktop-font-menu-enter-active,
+.desktop-font-menu-leave-active {
+  transition: opacity 180ms ease, transform 200ms ease;
+  transform-origin: top center;
+}
+
+.desktop-font-menu-enter-from,
+.desktop-font-menu-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.98);
 }
 
 .desktop-slider-row {

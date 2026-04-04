@@ -155,12 +155,17 @@ const {
 .desktop-widget {
   position: absolute;
   inset: 0;
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--desktop-accent-b) 22%, transparent);
   border-radius: 0;
-  background-color: rgba(0, 0, 0, 0.4);
+  background:
+    radial-gradient(circle at top center, color-mix(in srgb, var(--desktop-accent-a) 24%, transparent), transparent 42%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--desktop-accent-c) 16%, transparent), transparent 38%),
+    linear-gradient(180deg, rgba(20, 20, 24, 0.68), rgba(12, 12, 16, 0.54));
   box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--desktop-accent-d) 18%, transparent),
     0 22px 56px rgba(0, 0, 0, 0.18),
-    0 6px 18px rgba(0, 0, 0, 0.08);
+    0 6px 18px rgba(0, 0, 0, 0.08),
+    0 0 0 1px color-mix(in srgb, var(--desktop-accent-a) 8%, transparent);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   overflow: visible;
@@ -232,9 +237,12 @@ const {
   font-weight: 700;
   line-height: 1.18;
   letter-spacing: 0.01em;
-  color: rgba(255, 255, 255, 1);
+  color: var(--desktop-text-primary);
   overflow-wrap: anywhere;
   word-break: break-word;
+  text-shadow:
+    0 1px 10px rgba(0, 0, 0, 0.18),
+    0 0 24px color-mix(in srgb, var(--desktop-accent-a) 14%, transparent);
 }
 
 .desktop-lyric-word {
@@ -252,11 +260,13 @@ const {
 }
 
 .desktop-lyric-sub--romaji {
-  color: rgba(255, 255, 255, 0.94);
+  color: color-mix(in srgb, var(--desktop-accent-d) 42%, var(--desktop-text-secondary));
+  text-shadow: 0 0 16px color-mix(in srgb, var(--desktop-accent-d) 14%, transparent);
 }
 
 .desktop-lyric-sub--translation {
-  color: rgba(255, 255, 255, 0.9);
+  color: color-mix(in srgb, var(--desktop-accent-c) 28%, var(--desktop-text-tertiary));
+  text-shadow: 0 0 12px color-mix(in srgb, var(--desktop-accent-c) 10%, transparent);
 }
 
 .lyrics-align-left {
@@ -275,10 +285,11 @@ const {
 }
 
 .desktop-empty-state {
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--desktop-text-secondary);
   font-size: 1.1rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+  text-shadow: 0 0 16px color-mix(in srgb, var(--desktop-accent-a) 12%, transparent);
 }
 
 .desktop-block-enter-active,

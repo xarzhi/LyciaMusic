@@ -55,7 +55,7 @@ export const MAX_PLAYER_OFFSET_Y = 25;
 export type LyricsPlayerAlignment = 'left' | 'center' | 'right';
 export const DEFAULT_PLAYER_ALIGNMENT: LyricsPlayerAlignment = 'left';
 export const DEFAULT_DESKTOP_PLAYER_ALIGNMENT: LyricsPlayerAlignment = 'center';
-export type LyricsColorScheme = 'auto' | 'default' | 'pink' | 'blue' | 'green';
+export type LyricsColorScheme = 'auto' | 'default' | 'pink' | 'blue' | 'green' | 'white';
 export type LyricsFontPreset = string;
 export interface LyricsFontOption {
   value: LyricsFontPreset;
@@ -210,7 +210,7 @@ function normalizePlayerAlignment(value: unknown): LyricsPlayerAlignment {
 }
 
 function normalizeLyricsColorScheme(value: unknown): LyricsColorScheme {
-  return value === 'default' || value === 'pink' || value === 'blue' || value === 'green'
+  return value === 'default' || value === 'pink' || value === 'blue' || value === 'green' || value === 'white'
     ? value
     : 'auto';
 }

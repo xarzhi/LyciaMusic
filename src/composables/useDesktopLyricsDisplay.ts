@@ -1,5 +1,5 @@
 import { emitTo } from '@tauri-apps/api/event';
-import { computed, ref, type Ref } from 'vue';
+import { computed, ref, type CSSProperties, type Ref } from 'vue';
 
 import {
   DEFAULT_DESKTOP_PLAYER_ALIGNMENT,
@@ -38,6 +38,7 @@ const FIXED_PALETTES = {
   pink: ['#f472b6', '#fb7185', '#f9a8d4', '#fbcfe8'],
   blue: ['#60a5fa', '#38bdf8', '#93c5fd', '#bfdbfe'],
   green: ['#34d399', '#22c55e', '#6ee7b7', '#bbf7d0'],
+  white: ['#ffffff', '#f3f4f6', '#d1d5db', '#9ca3af'],
 } as const;
 
 export const DESKTOP_LYRICS_ALIGNMENT_OPTIONS: Array<{
@@ -219,6 +220,9 @@ export function useDesktopLyricsDisplay(showDragShadow: Ref<boolean>) {
       '--desktop-accent-b': resolvedPalette.value[1],
       '--desktop-accent-c': resolvedPalette.value[2],
       '--desktop-accent-d': resolvedPalette.value[3],
+      '--desktop-text-primary': 'rgba(255, 255, 255, 0.98)',
+      '--desktop-text-secondary': 'rgba(255, 255, 255, 0.88)',
+      '--desktop-text-tertiary': 'rgba(255, 255, 255, 0.76)',
       outline: showDragShadow.value ? '1px solid rgba(255, 255, 255, 0.16)' : 'none',
     } as Record<string, string>;
   });
@@ -259,9 +263,28 @@ export function useDesktopLyricsDisplay(showDragShadow: Ref<boolean>) {
     '--desktop-line-gap': settings.value.playerLineGap.toString(),
   }));
 
-  function getWordStyle(_start: number, _end: number) {
+  function getWordStyle(start: number, end: number): CSSProperties {
+    const duration = Math.max(0.001, end - start);
+    const progress = Math.max(0, Math.min(1, (syncedCurrentTime.value - start) / duration));
+
+    if (progress <= 0) {
+      return {
+        color: 'var(--desktop-text-primary)',
+        textShadow: '0 1px 8px rgba(0, 0, 0, 0.18)',
+      };
+    }
+
+    const highlightStop = `${Math.round(progress * 100)}%`;
+
     return {
-      color: 'rgba(255,255,255,1)',
+      backgroundImage: `linear-gradient(90deg, var(--desktop-accent-a) 0%, var(--desktop-accent-b) ${highlightStop}, var(--desktop-text-primary) ${highlightStop}, var(--desktop-text-primary) 100%)`,
+      WebkitBackgroundClip: 'text',
+      backgroundClip: 'text',
+      color: 'transparent',
+      WebkitTextFillColor: 'transparent',
+      textShadow: progress >= 1 ? '0 0 14px color-mix(in srgb, var(--desktop-accent-b) 45%, transparent)' : 'none',
+      filter: progress > 0 && progress < 1 ? 'drop-shadow(0 0 10px color-mix(in srgb, var(--desktop-accent-a) 30%, transparent))' : 'none',
+      transition: 'filter 120ms linear, text-shadow 120ms linear',
     };
   }
 

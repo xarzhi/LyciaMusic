@@ -47,6 +47,7 @@ const COLOR_SCHEME_OPTIONS: Array<{
   { value: 'pink', label: '柔粉', hint: '偏柔和、偏梦幻的粉色搭配' },
   { value: 'blue', label: '澄蓝', hint: '更冷静的蓝色高亮' },
   { value: 'green', label: '青绿', hint: '更清爽的绿色高亮' },
+  { value: 'white', label: '白色', hint: '使用当前这种偏白的清透高亮风格' },
 ];
 
 const { settings } = useSettings();

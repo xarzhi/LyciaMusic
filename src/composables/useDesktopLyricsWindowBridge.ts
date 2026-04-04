@@ -1,4 +1,5 @@
 import { emitTo, listen } from '@tauri-apps/api/event';
+import { PhysicalPosition, PhysicalSize } from '@tauri-apps/api/dpi';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { availableMonitors, getCurrentWindow } from '@tauri-apps/api/window';
 import { onMounted, onUnmounted, watch } from 'vue';
@@ -117,8 +118,8 @@ async function ensureDesktopLyricsWindow(alwaysOnTop: boolean) {
     const windowInstance = new WebviewWindow(DESKTOP_LYRICS_WINDOW_LABEL, {
       url: '/',
       title: 'Lycia Desktop Lyrics',
-      width: bounds?.width ?? DESKTOP_LYRICS_WINDOW_DEFAULT_WIDTH,
-      height: bounds?.height ?? DESKTOP_LYRICS_WINDOW_DEFAULT_HEIGHT,
+      width: DESKTOP_LYRICS_WINDOW_DEFAULT_WIDTH,
+      height: DESKTOP_LYRICS_WINDOW_DEFAULT_HEIGHT,
       minWidth: DESKTOP_LYRICS_WINDOW_MIN_WIDTH,
       minHeight: DESKTOP_LYRICS_WINDOW_MIN_HEIGHT,
       visible: false,
@@ -129,18 +130,28 @@ async function ensureDesktopLyricsWindow(alwaysOnTop: boolean) {
       alwaysOnTop,
       focusable: true,
       center: !bounds,
-      x: bounds?.x,
-      y: bounds?.y,
     });
 
     desktopLyricsWindowPromise = new Promise<WebviewWindow>((resolve, reject) => {
       let settled = false;
 
-      void windowInstance.once('tauri://created', () => {
+      void windowInstance.once('tauri://created', async () => {
         if (settled) return;
-        settled = true;
-        desktopLyricsWindowPromise = null;
-        resolve(windowInstance);
+
+        try {
+          if (bounds) {
+            await windowInstance.setSize(new PhysicalSize(bounds.width, bounds.height));
+            await windowInstance.setPosition(new PhysicalPosition(bounds.x, bounds.y));
+          }
+
+          settled = true;
+          desktopLyricsWindowPromise = null;
+          resolve(windowInstance);
+        } catch (error) {
+          settled = true;
+          desktopLyricsWindowPromise = null;
+          reject(error);
+        }
       });
 
       void windowInstance.once('tauri://error', (event) => {

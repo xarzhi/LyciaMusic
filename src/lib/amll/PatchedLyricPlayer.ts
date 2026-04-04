@@ -1,3 +1,9 @@
+/*
+ * Derived from AMLL (Apple Music-like Lyrics) integration work and adapted
+ * for Lycia Player on 2026-04-04.
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * Upstream project: https://github.com/amll-dev/applemusic-like-lyrics
+ */
 import { DomLyricPlayer } from '@applemusic-like-lyrics/core';
 
 export class PatchedLyricPlayer extends DomLyricPlayer {

@@ -203,7 +203,9 @@ npm run version:check
 
 ## License
 
-MIT
+AGPL-3.0
+
+歌词相关实现采用并改编了 AMLL（Apple Music-like Lyrics）项目代码，具体来源与补充说明见 [NOTICE](NOTICE)。
 
 ---
 

@@ -75,7 +75,9 @@ npm run tauri build
 
 ## 📜 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See the [LICENSE](LICENSE) file for the full text.
+
+The lyrics-related implementation incorporates AMLL (Apple Music-like Lyrics) code and adaptations. See the [NOTICE](NOTICE) file for attribution and redistribution notes.
 
 ---
 *Last Updated: 2025-12-31*

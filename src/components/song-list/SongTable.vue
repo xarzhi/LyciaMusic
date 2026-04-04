@@ -1,14 +1,27 @@
-<script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { Song, usePlayer, dragSession } from '../../composables/player';
-import { currentSong, isPlaying } from '../../composables/playerState';
-import { useSettings } from '../../composables/settings';
+﻿<script setup lang="ts">
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { storeToRefs } from 'pinia';
+import { dragSession } from '../../composables/dragState';
+import type { Song } from '../../types';
+import { useLibraryCollections } from '../../features/collections/useLibraryCollections';
+import { useSettings } from '../../features/settings/useSettings';
 import { useRoute, useRouter } from 'vue-router';
 import QualityBadge from '../common/QualityBadge.vue';
-import { INDEX_KEYS, getAlphabetIndexKey, type AlphabetIndexKey } from '../../utils/alphabetIndex';
+import { INDEX_KEYS } from '../../utils/alphabetIndex';
 import { useCoverCache } from '../../composables/useCoverCache';
+import { useHomeNavigation } from '../../composables/useHomeNavigation';
+import { useLibraryRuntimeActions } from '../../features/library/useLibraryRuntimeActions';
+import { usePlaybackController } from '../../features/playback/usePlaybackController';
+import { usePlayerLibraryView } from '../../features/library/usePlayerLibraryView';
+import { usePlayerViewState } from '../../composables/usePlayerViewState';
+import { useSongTableAlphabetIndex } from '../../composables/useSongTableAlphabetIndex';
+import { useSongTableLibraryState } from '../../features/library/useSongTableLibraryState';
+import { useLibraryStore } from '../../features/library/store';
 
 const { settings } = useSettings();
+const libraryStore = useLibraryStore();
+const { libraryScanProgress, lastLibraryScanError } = storeToRefs(libraryStore);
+const { currentSong, isPlaying, formatDuration } = usePlaybackController();
 
 const props = defineProps<{
   songs: Song[];
@@ -24,29 +37,31 @@ const emit = defineEmits<{
 }>();
 
 const {
-  isFavorite,
-  toggleFavorite,
-  formatDuration,
   currentViewMode,
-  viewArtist,
-  addLibraryFolder,
-  searchQuery,
-  librarySongs,
   localSortMode,
   folderSortMode,
   activeRootPath,
   currentFolderFilter,
+} = usePlayerViewState();
+const {
   folderTree,
+  searchQuery,
+  librarySongs,
+} = usePlayerLibraryView();
+const {
+  addLibraryFolder,
+  scanLibrary,
   refreshFolder,
   expandFolderPath,
-} = usePlayer();
+} = useLibraryRuntimeActions();
+const { isFavorite, toggleFavorite } = useLibraryCollections();
 const router = useRouter();
 const route = useRoute();
+const { openHomeArtist } = useHomeNavigation(router);
 const { coverCache, preloadCovers } = useCoverCache();
 
 const ROW_HEIGHT = 72;
 const OVERSCAN = 20;
-const INDEX_PROXIMITY_PX = 72;
 const rootRef = ref<HTMLElement | null>(null);
 const containerRef = ref<HTMLElement | null>(null);
 const scrollTop = ref(0);
@@ -59,14 +74,15 @@ const updateContainerHeight = () => {
 };
 
 const virtualData = computed(() => {
-  const total = props.songs.length;
+  const songs = Array.isArray(props.songs) ? props.songs : [];
+  const total = songs.length;
   const start = Math.floor(scrollTop.value / ROW_HEIGHT);
   const visibleCount = Math.ceil(containerHeight.value / ROW_HEIGHT);
   const renderStart = Math.max(0, start - OVERSCAN);
   const renderEnd = Math.min(total, start + visibleCount + OVERSCAN);
 
   return {
-    items: props.songs.slice(renderStart, renderEnd).map((song, index) => ({
+    items: songs.slice(renderStart, renderEnd).map((song, index) => ({
       ...song,
       virtualIndex: renderStart + index,
     })),
@@ -75,358 +91,50 @@ const virtualData = computed(() => {
   };
 });
 
+const virtualPaddingTop = computed(() => `${virtualData.value?.paddingTop ?? 0}px`);
+const virtualPaddingBottom = computed(() => `${virtualData.value?.paddingBottom ?? 0}px`);
+const virtualItems = computed(() => virtualData.value?.items ?? []);
+
 const onScroll = (event: Event) => {
   scrollTop.value = (event.target as HTMLElement).scrollTop;
 };
 
-const indexLabelGetter = computed<((song: Song) => string) | null>(() => {
-  if (currentViewMode.value === 'all' && ['default', 'title', 'name'].includes(localSortMode.value)) {
-    return localSortMode.value === 'name'
-      ? (song: Song) => song.name
-      : (song: Song) => song.title || song.name;
-  }
-
-  if (currentViewMode.value === 'folder' && ['title', 'name'].includes(folderSortMode.value)) {
-    return folderSortMode.value === 'name'
-      ? (song: Song) => song.name
-      : (song: Song) => song.title || song.name;
-  }
-
-  return null;
+const {
+  showAlphabetIndex,
+  activeIndexKey,
+  indexBarRef,
+  isIndexDragging,
+  dragIndexKey,
+  hoverIndexKey,
+  isIndexBarVisible,
+  canLocateCurrentSong,
+  handleIndexHotspotEnter,
+  handleIndexHotspotMove,
+  handleIndexHotspotLeave,
+  handleRootMouseMove,
+  handleRootMouseLeave,
+  handleIndexPointerDown,
+  showIndexBar,
+  scrollToCurrentSong,
+} = useSongTableAlphabetIndex({
+  songs: computed(() => props.songs),
+  scrollTop,
+  containerRef,
+  rootRef,
+  routePath: computed(() => route.path),
+  currentViewMode,
+  localSortMode,
+  folderSortMode,
+  activeRootPath,
+  currentFolderFilter,
+  folderTree,
+  refreshFolder,
+  expandFolderPath,
 });
-
-const showAlphabetIndex = computed(() => {
-  const isHomeRoute = route.path === '/';
-  return isHomeRoute && !!indexLabelGetter.value && props.songs.length > 0;
-});
-
-const firstSongIndexByKey = computed(() => {
-  const keyMap = new Map<AlphabetIndexKey, number>();
-
-  if (!indexLabelGetter.value) {
-    return keyMap;
-  }
-
-  props.songs.forEach((song, index) => {
-    const key = getAlphabetIndexKey(indexLabelGetter.value!(song));
-    if (!keyMap.has(key)) {
-      keyMap.set(key, index);
-    }
-  });
-
-  return keyMap;
-});
-
-const activeIndexKey = computed<AlphabetIndexKey | null>(() => {
-  if (!indexLabelGetter.value || props.songs.length === 0) {
-    return null;
-  }
-
-  const visibleIndex = Math.min(
-    props.songs.length - 1,
-    Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT)),
-  );
-
-  return getAlphabetIndexKey(indexLabelGetter.value(props.songs[visibleIndex]));
-});
-
-const indexBarRef = ref<HTMLElement | null>(null);
-const isIndexDragging = ref(false);
-const dragIndexKey = ref<AlphabetIndexKey | null>(null);
-const hoverIndexKey = ref<AlphabetIndexKey | null>(null);
-const isIndexBarVisible = ref(false);
-const INDEX_AUTO_HIDE_MS = 500;
-let hideIndexBarTimer: ReturnType<typeof setTimeout> | null = null;
-
-const currentSongIndex = computed(() => {
-  if (!currentSong?.value?.path) {
-    return -1;
-  }
-
-  return props.songs.findIndex(song => song.path === currentSong.value?.path);
-});
-
-const normalizePath = (path: string | null | undefined) =>
-  (path || '').replace(/\\/g, '/').replace(/\/+$/, '');
-
-const getParentFolderPath = (path: string) => path.replace(/[\\/][^\\/]+$/, '');
-
-const findOwningRootPath = (targetPath: string) => {
-  const normalizedTarget = normalizePath(targetPath);
-  const rootPaths = folderTree.value
-    .map(node => node.path)
-    .filter(rootPath => {
-      const normalizedRoot = normalizePath(rootPath);
-      return (
-        normalizedTarget === normalizedRoot ||
-        normalizedTarget.startsWith(`${normalizedRoot}/`)
-      );
-    })
-    .sort((left, right) => normalizePath(right).length - normalizePath(left).length);
-
-  return rootPaths[0] || null;
-};
-
-const canLocateCurrentSong = computed(() => {
-  if (!currentSong?.value?.path) {
-    return false;
-  }
-
-  if (currentSongIndex.value >= 0) {
-    return true;
-  }
-
-  if (currentViewMode.value !== 'folder') {
-    return false;
-  }
-
-  const currentSongFolderPath = getParentFolderPath(currentSong.value.path);
-  return !!findOwningRootPath(currentSongFolderPath);
-});
-
-const clearHideIndexBarTimer = () => {
-  if (hideIndexBarTimer) {
-    clearTimeout(hideIndexBarTimer);
-    hideIndexBarTimer = null;
-  }
-};
-
-const showIndexBar = () => {
-  if (!showAlphabetIndex.value) {
-    return;
-  }
-
-  clearHideIndexBarTimer();
-  isIndexBarVisible.value = true;
-};
-
-const scheduleHideIndexBar = () => {
-  clearHideIndexBarTimer();
-
-  if (!showAlphabetIndex.value || isIndexDragging.value) {
-    return;
-  }
-
-  hideIndexBarTimer = setTimeout(() => {
-    if (!isIndexDragging.value) {
-      isIndexBarVisible.value = false;
-    }
-  }, INDEX_AUTO_HIDE_MS);
-};
-
-const revealIndexBarTemporarily = () => {
-  showIndexBar();
-  scheduleHideIndexBar();
-};
-
-const scrollFolderTargetsIntoView = (folderPath: string, rootPath: string | null) => {
-  const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-folder-path]')).filter(
-    element =>
-      element.dataset.folderPath === folderPath ||
-      (!!rootPath && element.dataset.folderPath === rootPath),
-  );
-
-  targets.forEach(element => {
-    element.scrollIntoView({
-      block: 'nearest',
-      inline: 'nearest',
-      behavior: 'smooth',
-    });
-  });
-};
-
-const scrollToCurrentSong = async () => {
-  if (!currentSong?.value?.path) {
-    return;
-  }
-
-  showIndexBar();
-
-  if (currentSongIndex.value >= 0) {
-    if (currentViewMode.value === 'folder' && currentFolderFilter.value) {
-      scrollFolderTargetsIntoView(currentFolderFilter.value, activeRootPath.value);
-    }
-    jumpToSongIndex(currentSongIndex.value);
-    scheduleHideIndexBar();
-    return;
-  }
-
-  if (currentViewMode.value !== 'folder') {
-    scheduleHideIndexBar();
-    return;
-  }
-
-  const targetFolderPath = getParentFolderPath(currentSong.value.path);
-  const targetRootPath = findOwningRootPath(targetFolderPath);
-
-  if (!targetRootPath) {
-    scheduleHideIndexBar();
-    return;
-  }
-
-  activeRootPath.value = targetRootPath;
-  currentFolderFilter.value = targetFolderPath;
-  expandFolderPath(targetFolderPath);
-  await refreshFolder(targetFolderPath);
-  await nextTick();
-  requestAnimationFrame(() => {
-    scrollFolderTargetsIntoView(targetFolderPath, targetRootPath);
-  });
-
-  const refreshedSongIndex = props.songs.findIndex(song => song.path === currentSong.value?.path);
-  if (refreshedSongIndex >= 0) {
-    jumpToSongIndex(refreshedSongIndex);
-  }
-
-  scheduleHideIndexBar();
-};
-
-const handleIndexHotspotEnter = () => {
-  showIndexBar();
-};
-
-const handleIndexHotspotMove = () => {
-  showIndexBar();
-};
-
-const handleIndexHotspotLeave = () => {
-  scheduleHideIndexBar();
-};
-
-const handleRootMouseMove = (event: MouseEvent) => {
-  if (!showAlphabetIndex.value || !rootRef.value) {
-    return;
-  }
-
-  const rect = rootRef.value.getBoundingClientRect();
-  const distanceToRight = rect.right - event.clientX;
-
-  if (distanceToRight <= INDEX_PROXIMITY_PX) {
-    revealIndexBarTemporarily();
-  }
-};
-
-const handleRootMouseLeave = () => {
-  scheduleHideIndexBar();
-};
-
-const jumpToSongIndex = (songIndex: number) => {
-  if (!containerRef.value) {
-    return;
-  }
-
-  const targetTop = songIndex * ROW_HEIGHT;
-  containerRef.value.scrollTo({ top: targetTop, behavior: 'auto' });
-  scrollTop.value = targetTop;
-};
-
-const resolveNearestIndexKey = (targetKey: AlphabetIndexKey) => {
-  if (firstSongIndexByKey.value.has(targetKey)) {
-    return targetKey;
-  }
-
-  const targetIndex = INDEX_KEYS.indexOf(targetKey);
-  for (let offset = 1; offset < INDEX_KEYS.length; offset += 1) {
-    const forwardKey = INDEX_KEYS[targetIndex + offset];
-    if (forwardKey && firstSongIndexByKey.value.has(forwardKey)) {
-      return forwardKey;
-    }
-
-    const backwardKey = INDEX_KEYS[targetIndex - offset];
-    if (backwardKey && firstSongIndexByKey.value.has(backwardKey)) {
-      return backwardKey;
-    }
-  }
-
-  return null;
-};
-
-const navigateToIndexKey = (targetKey: AlphabetIndexKey) => {
-  const resolvedKey = resolveNearestIndexKey(targetKey);
-  if (!resolvedKey) {
-    return;
-  }
-
-  const songIndex = firstSongIndexByKey.value.get(resolvedKey);
-  if (songIndex === undefined) {
-    return;
-  }
-
-  jumpToSongIndex(songIndex);
-};
-
-const updateDragIndexFromPoint = (clientY: number) => {
-  if (!indexBarRef.value) {
-    return;
-  }
-
-  const rect = indexBarRef.value.getBoundingClientRect();
-  const relativeY = Math.min(Math.max(clientY - rect.top, 0), rect.height);
-  const slotHeight = rect.height / INDEX_KEYS.length;
-  const slotIndex = Math.min(
-    INDEX_KEYS.length - 1,
-    Math.max(0, Math.floor(relativeY / Math.max(slotHeight, 1))),
-  );
-
-  const targetKey = INDEX_KEYS[slotIndex];
-  dragIndexKey.value = targetKey;
-  navigateToIndexKey(targetKey);
-};
-
-const handleGlobalIndexPointerMove = (event: PointerEvent) => {
-  if (!isIndexDragging.value) {
-    return;
-  }
-
-  updateDragIndexFromPoint(event.clientY);
-};
-
-const stopIndexDrag = () => {
-  if (!isIndexDragging.value) {
-    return;
-  }
-
-  isIndexDragging.value = false;
-  dragIndexKey.value = null;
-  window.removeEventListener('pointermove', handleGlobalIndexPointerMove);
-  window.removeEventListener('pointerup', stopIndexDrag);
-  window.removeEventListener('pointercancel', stopIndexDrag);
-  scheduleHideIndexBar();
-};
-
-const handleIndexPointerDown = (event: PointerEvent, key: AlphabetIndexKey) => {
-  if (!showAlphabetIndex.value) {
-    return;
-  }
-
-  isIndexDragging.value = true;
-  showIndexBar();
-  dragIndexKey.value = key;
-  navigateToIndexKey(key);
-  window.addEventListener('pointermove', handleGlobalIndexPointerMove);
-  window.addEventListener('pointerup', stopIndexDrag);
-  window.addEventListener('pointercancel', stopIndexDrag);
-  (event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
-  event.preventDefault();
-};
 
 watch(
   () => virtualData.value.items,
   newItems => preloadCovers(newItems.map(song => song.path)),
-  { immediate: true },
-);
-
-watch(
-  showAlphabetIndex,
-  visible => {
-    clearHideIndexBarTimer();
-    if (visible) {
-      revealIndexBarTemporarily();
-    } else {
-      isIndexBarVisible.value = false;
-      hoverIndexKey.value = null;
-    }
-  },
   { immediate: true },
 );
 
@@ -440,25 +148,100 @@ const handleMouseDown = (event: MouseEvent, song: Song, index: number) => {
 const showDragIcon = computed(() =>
   ['folder', 'playlist', 'all', 'artist', 'album', 'genre', 'year'].includes(currentViewMode.value),
 );
-const hasSearchQuery = computed(() => searchQuery.value.trim().length > 0);
-const isLibraryEmpty = computed(() => librarySongs.value.length === 0);
-const showLibraryOnboarding = computed(
-  () => currentViewMode.value === 'all' && !hasSearchQuery.value && isLibraryEmpty.value,
-);
-const showFolderEmpty = computed(() => currentViewMode.value === 'folder' && !hasSearchQuery.value);
-const emptyStateMessage = computed(() => {
-  if (hasSearchQuery.value) return '未找到匹配的歌曲';
-  if (showFolderEmpty.value) return '该文件夹内暂无歌曲';
-  if (currentViewMode.value === 'playlist') return '歌单暂无歌曲';
-  return '列表为空';
+const {
+  showHeroScanCard,
+  hasSearchQuery,
+  showLibraryOnboarding,
+  showFolderEmpty,
+  showLibraryChecking,
+  showLibraryEmptyResult,
+  libraryScanPercent,
+  libraryScanPhaseLabel,
+  libraryScanFolderLabel,
+  heroScanStatus,
+  emptyStateMessage,
+  retryHeroLibraryScan,
+} = useSongTableLibraryState({
+  currentViewMode,
+  searchQuery,
+  librarySongs,
+  addLibraryFolder,
+  scanLibrary,
 });
 
+const displayHeroTitle = computed(() => {
+  if (heroScanStatus.value === 'error') {
+    return '\u8fd9\u6bb5\u97f3\u4e50\u4e4b\u65c5\u6682\u65f6\u88ab\u6253\u65ad\u4e86';
+  }
+  if (heroScanStatus.value === 'success') {
+    return librarySongs.value.length > 0
+      ? '\u4e07\u7c41\u4ff1\u5bc2\uff0c\u9759\u5f85\u4e50\u8d77\u3002'
+      : '\u8fd9\u6b21\u6ca1\u6709\u53d1\u73b0\u53ef\u5bfc\u5165\u7684\u6b4c\u66f2';
+  }
+  return '\u5373\u5c06\u5f00\u59cb\u7f8e\u5999\u7684\u97f3\u4e50\u4e4b\u65c5...';
+});
+
+const heroPercentValue = computed(() => {
+  if (heroScanStatus.value === 'success') {
+    return 100;
+  }
+
+  return Math.round(libraryScanPercent.value);
+});
+
+const heroPercentText = computed(() => `${heroPercentValue.value}%`);
+
+const displayHeroProgressNote = computed(() => {
+  const progress = libraryScanProgress.value;
+  if (progress && progress.total > 0) {
+    return `${progress.current} / ${progress.total}`;
+  }
+  if (heroScanStatus.value === 'success') {
+    return librarySongs.value.length > 0 ? `${librarySongs.value.length} \u9996\u5df2\u5165\u5e93` : '\u672a\u53d1\u73b0\u6b4c\u66f2';
+  }
+  if (heroScanStatus.value === 'error') {
+    return '\u5bfc\u5165\u5df2\u4e2d\u65ad';
+  }
+  return libraryScanPhaseLabel.value;
+});
+
+const displayHeroProgressDetail = computed(() => {
+  const progress = libraryScanProgress.value;
+  if (progress && progress.total > 0) {
+    const folderPath = progress.folder_path?.trim();
+    return folderPath || libraryScanPhaseLabel.value;
+  }
+  if (heroScanStatus.value === 'success') {
+    return '\u73b0\u5728\u53ef\u4ee5\u5f00\u59cb\u6d4f\u89c8\u3001\u641c\u7d22\u548c\u64ad\u653e';
+  }
+  if (heroScanStatus.value === 'error') {
+    return '\u91cd\u65b0\u626b\u63cf\u540e\u4f1a\u7ee7\u7eed\u5efa\u7acb\u97f3\u4e50\u5e93';
+  }
+  return libraryScanFolderLabel.value || '\u6b63\u5728\u51c6\u5907\u5bfc\u5165';
+});
+
+const onboardingMessage = computed(() =>
+  showLibraryOnboarding.value
+    ? '\u97f3\u4e50\u5e93\u7a7a\u7a7a\u5982\u4e5f\uff0c\u5feb\u53bb\u6dfb\u52a0\u4f60\u7684\u672c\u5730\u97f3\u4e50\u5427'
+    : emptyStateMessage.value,
+);
+const libraryCheckingTitle = '\u6b63\u5728\u68c0\u67e5\u4f60\u7684\u97f3\u4e50\u5e93...';
+const libraryCheckingDescription = '\u542f\u52a8\u540e\u4f1a\u5728\u540e\u53f0\u5feb\u901f\u6838\u5bf9\u76ee\u5f55\u53d8\u5316\uff0c\u4e0d\u4f1a\u6253\u65ad\u5f53\u524d\u6d4f\u89c8\u3002';
+const emptyLibraryResultTitle = computed(() =>
+  lastLibraryScanError.value
+    ? '\u6682\u65f6\u65e0\u6cd5\u8bfb\u53d6\u4f60\u7684\u97f3\u4e50\u5e93'
+    : '\u672a\u5728\u5f53\u524d\u97f3\u4e50\u5e93\u4e2d\u53d1\u73b0\u53ef\u5bfc\u5165\u97f3\u9891',
+);
+const emptyLibraryResultDescription = computed(() =>
+  lastLibraryScanError.value
+    ? '\u4f60\u53ef\u4ee5\u524d\u5f80\u8bbe\u7f6e\u4e2d\u7684\u97f3\u4e50\u5e93\u9875\u91cd\u65b0\u626b\u63cf\uff0c\u6216\u68c0\u67e5\u76ee\u5f55\u662f\u5426\u4ecd\u7136\u53ef\u8bbf\u95ee\u3002'
+    : '\u53ef\u4ee5\u5c1d\u8bd5\u91cd\u65b0\u9009\u62e9\u6587\u4ef6\u5939\uff0c\u6216\u786e\u8ba4\u76ee\u5f55\u4e2d\u5305\u542b\u53d7\u652f\u6301\u7684\u97f3\u9891\u6587\u4ef6\u3002',
+);
 const getClickableArtistNames = (song: Song) =>
   (Array.isArray(song.artist_names) && song.artist_names.length > 0 ? song.artist_names : [song.artist]).filter(Boolean);
 
 const handleArtistClick = (artistName: string) => {
-  viewArtist(artistName);
-  router.push('/');
+  void openHomeArtist(artistName);
 };
 
 onMounted(() => {
@@ -470,8 +253,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', updateContainerHeight);
-  stopIndexDrag();
-  clearHideIndexBarTimer();
 });
 
 defineExpose({ containerRef });
@@ -539,10 +320,10 @@ const getRowStyle = (songIndex: number, songPath: string) => {
       @scroll="onScroll"
     >
       <div class="w-full relative">
-        <div :style="{ height: virtualData.paddingTop + 'px' }"></div>
+        <div :style="{ height: virtualPaddingTop }"></div>
 
         <div
-          v-for="song in virtualData.items"
+          v-for="song in virtualItems"
           :key="song.path"
           :data-index="song.virtualIndex"
           @mousedown="handleMouseDown($event, song, song.virtualIndex)"
@@ -595,7 +376,7 @@ const getRowStyle = (songIndex: number, songPath: string) => {
 
           <div class="flex-[0_1_40%] min-w-0 flex flex-col justify-center gap-0.5">
             <span class="text-[15px] text-gray-900 dark:text-gray-100 font-semibold truncate leading-snug">{{ song.title || song.name.replace(/\.[^/.]+$/, '') }}</span>
-            <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-white/50 leading-snug">
+            <div class="flex items-center gap-1.5 text-xs text-gray-900 dark:text-gray-100 leading-snug">
               <QualityBadge
                 v-if="settings.showQualityBadges"
                 class="shrink-0"
@@ -618,11 +399,11 @@ const getRowStyle = (songIndex: number, songPath: string) => {
             </div>
           </div>
 
-          <div class="flex-1 min-w-0 truncate text-xs text-gray-500 dark:text-white/40">
+          <div class="flex-1 min-w-0 truncate text-xs text-gray-900 dark:text-gray-100">
             {{ song.album }}
           </div>
 
-          <div class="shrink-0 flex items-center gap-3 text-xs font-mono text-gray-500 dark:text-white/50" :class="{ 'opacity-20 pointer-events-none': dragSession.active }">
+          <div class="shrink-0 flex items-center gap-3 text-xs font-mono text-gray-900 dark:text-gray-100" :class="{ 'opacity-20 pointer-events-none': dragSession.active }">
             <button v-if="!isBatchMode" @click.stop="toggleFavorite(song)" class="focus:outline-none">
               <svg v-if="isFavorite(song)" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-[#EC4141]" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd" /></svg>
               <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
@@ -631,7 +412,7 @@ const getRowStyle = (songIndex: number, songPath: string) => {
           </div>
         </div>
 
-        <div :style="{ height: virtualData.paddingBottom + 'px' }"></div>
+        <div :style="{ height: virtualPaddingBottom }"></div>
       </div>
 
       <div v-if="songs.length === 0" class="py-20 flex flex-col justify-center items-center select-none text-gray-500 dark:text-white/60">
@@ -641,14 +422,31 @@ const getRowStyle = (songIndex: number, songPath: string) => {
             <circle cx="6" cy="18" r="3"></circle>
             <circle cx="18" cy="16" r="3"></circle>
           </svg>
-          <p class="mb-6 text-[15px]">{{ showLibraryOnboarding ? '音乐库空空如也，快去添加你的本地音乐吧' : emptyStateMessage }}</p>
-          <p v-if="showLibraryOnboarding" class="mb-6 -mt-4 text-[13px] opacity-70">
-            你可以在右上角设置的“常规”里管理音乐库与文件夹关联。
-          </p>
+          <p class="mb-6 text-[15px]">{{ onboardingMessage }}</p>
           <button v-if="showLibraryOnboarding" @click="addLibraryFolder" class="flex items-center gap-2 px-6 py-2.5 bg-[#EC4141] text-white hover:bg-[#d73a3a] rounded-full text-[14px] font-medium transition-colors shadow-sm">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            添加本地音乐
+            &#28155;&#21152;&#26412;&#22320;&#38899;&#20048;
           </button>
+        </template>
+        <template v-else-if="showLibraryChecking">
+          <div class="flex h-14 w-14 items-center justify-center rounded-full bg-white/70 shadow-[0_10px_30px_rgba(15,23,42,0.08)] dark:bg-white/10">
+            <div class="h-6 w-6 rounded-full border-2 border-[#ec4141]/25 border-t-[#ec4141] scan-spinner"></div>
+          </div>
+          <p class="mt-5 text-[15px] font-medium text-gray-700 dark:text-white/80">{{ libraryCheckingTitle }}</p>
+          <p class="mt-2 text-[13px] opacity-70">{{ libraryCheckingDescription }}</p>
+        </template>
+        <template v-else-if="showLibraryEmptyResult">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mb-4 text-gray-300 dark:text-white/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 17V7a2 2 0 012-2h12a2 2 0 012 2v10"></path>
+            <path d="M8 17h8"></path>
+            <path d="M9 13V8l8-1v6"></path>
+            <circle cx="7" cy="17" r="2"></circle>
+            <circle cx="17" cy="15" r="2"></circle>
+          </svg>
+          <p class="mb-2 text-[15px]">{{ emptyLibraryResultTitle }}</p>
+          <p class="text-[13px] opacity-70">
+            {{ emptyLibraryResultDescription }}
+          </p>
         </template>
         <template v-else-if="currentViewMode === 'playlist'">
           <p>{{ emptyStateMessage }}</p>
@@ -658,6 +456,40 @@ const getRowStyle = (songIndex: number, songPath: string) => {
         </template>
       </div>
     </div>
+
+    <Teleport to="body">
+      <transition name="library-hero">
+        <div
+          v-if="showHeroScanCard"
+          class="library-hero-overlay"
+        >
+          <div class="library-hero-backdrop"></div>
+
+          <div class="library-hero-card" :class="`library-hero-card-${heroScanStatus}`">
+            <p class="library-hero-phase">{{ libraryScanPhaseLabel }}</p>
+            <h3 class="library-hero-title">{{ displayHeroTitle }}</h3>
+
+            <div class="library-hero-progress-track">
+              <div
+                class="library-hero-progress-fill"
+                :class="{ 'scan-progress-indeterminate': libraryScanProgress && libraryScanProgress.total <= 0 && heroScanStatus === 'scanning' }"
+                :style="{ width: `${heroPercentValue}%` }"
+              ></div>
+            </div>
+
+            <div class="library-hero-progress-meta">
+              <span class="library-hero-progress-note" :title="displayHeroProgressDetail">{{ displayHeroProgressDetail }}</span>
+              <span class="library-hero-progress-value">{{ displayHeroProgressNote }} &middot; {{ heroPercentText }}</span>
+            </div>
+
+            <div v-if="heroScanStatus === 'error'" class="library-hero-actions">
+              <button type="button" class="hero-primary-btn" @click="retryHeroLibraryScan">&#37325;&#26032;&#25195;&#25551;</button>
+              <button type="button" class="hero-secondary-btn" @click="addLibraryFolder">&#37325;&#26032;&#36873;&#25321;&#25991;&#20214;&#22841;</button>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
 
     <div
       v-if="showAlphabetIndex"
@@ -697,7 +529,7 @@ const getRowStyle = (songIndex: number, songPath: string) => {
           class="index-locate-btn"
           :class="{ 'index-locate-btn-disabled': !canLocateCurrentSong }"
           :disabled="!canLocateCurrentSong"
-          title="定位当前播放歌曲"
+          title="&#23450;&#20301;&#24403;&#21069;&#25773;&#25918;&#27468;&#26354;"
           @click="scrollToCurrentSong"
         >
           <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -727,6 +559,183 @@ const getRowStyle = (songIndex: number, songPath: string) => {
 
 .spectrum-bar {
   animation: spectrum 1s ease-in-out infinite;
+}
+
+.scan-spinner {
+  animation: scan-spin 0.9s linear infinite;
+}
+
+.library-hero-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 170;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.library-hero-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(244, 246, 250, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.library-hero-card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 500px);
+  overflow: hidden;
+  padding: 1.55rem 1.6rem 1.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(248, 250, 252, 0.8));
+  box-shadow:
+    0 16px 40px rgba(15, 23, 42, 0.12),
+    0 2px 12px rgba(15, 23, 42, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(30px) saturate(1.04);
+}
+
+.library-hero-card-success {
+  background: linear-gradient(180deg, rgba(247, 252, 249, 0.8), rgba(242, 249, 245, 0.82));
+}
+
+.library-hero-card-error {
+  background: linear-gradient(180deg, rgba(255, 248, 248, 0.82), rgba(253, 243, 243, 0.84));
+}
+
+.library-hero-phase {
+  margin: 0 0 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(79, 92, 112, 0.78);
+}
+
+.library-hero-card-success .library-hero-phase {
+  color: rgba(6, 95, 70, 0.78);
+}
+
+.library-hero-card-error .library-hero-phase {
+  color: rgba(185, 28, 28, 0.78);
+}
+
+.library-hero-title {
+  margin: 0;
+  font-size: clamp(1.58rem, 2.7vw, 2.02rem);
+  line-height: 1.16;
+  letter-spacing: -0.025em;
+  color: rgb(15, 23, 42);
+}
+
+.library-hero-progress-track {
+  overflow: hidden;
+  height: 0.52rem;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.08);
+  margin-top: 1rem;
+}
+
+.library-hero-progress-fill {
+  position: relative;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0a66ff 0%, #3b82f6 100%);
+  transition: width 0.3s ease-out;
+}
+
+.library-hero-card-success .library-hero-progress-fill {
+  background: linear-gradient(90deg, #059669 0%, #10b981 100%);
+}
+
+.library-hero-card-error .library-hero-progress-fill {
+  background: linear-gradient(90deg, #dc2626 0%, #f87171 100%);
+}
+
+.library-hero-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  color: rgba(71, 85, 105, 0.78);
+}
+
+.library-hero-progress-note {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.library-hero-progress-value {
+  flex-shrink: 0;
+  color: rgba(15, 23, 42, 0.56);
+}
+
+.library-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+}
+
+.hero-primary-btn,
+.hero-secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 132px;
+  border-radius: 9999px;
+  padding: 0.82rem 1.3rem;
+  font-size: 0.94rem;
+  font-weight: 700;
+  transition:
+    transform 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.hero-primary-btn {
+  color: white;
+  background: linear-gradient(180deg, #1677ff, #0a66ff);
+  box-shadow: 0 10px 20px rgba(10, 102, 255, 0.18);
+}
+
+.hero-primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 24px rgba(10, 102, 255, 0.22);
+}
+
+.hero-secondary-btn {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+  color: rgb(31, 41, 55);
+}
+
+.hero-secondary-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+@media (max-width: 720px) {
+  .library-hero-overlay {
+    padding: 1rem;
+  }
+
+  .library-hero-card {
+    padding: 1.45rem 1.2rem 1.15rem;
+  }
+
+  .library-hero-progress-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 .index-nav-item {
@@ -793,6 +802,49 @@ const getRowStyle = (songIndex: number, songPath: string) => {
   cursor: not-allowed;
 }
 
+:global(.dark) .library-hero-backdrop {
+  background: rgba(2, 6, 23, 0.68);
+  backdrop-filter: blur(4px);
+}
+
+:global(.dark) .library-hero-card {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(12, 18, 28, 0.8), rgba(10, 16, 25, 0.84));
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+:global(.dark) .library-hero-card-success {
+  background: linear-gradient(180deg, rgba(7, 46, 39, 0.84), rgba(8, 58, 47, 0.86));
+}
+
+:global(.dark) .library-hero-card-error {
+  background: linear-gradient(180deg, rgba(67, 13, 13, 0.84), rgba(82, 18, 18, 0.86));
+}
+
+:global(.dark) .library-hero-title,
+:global(.dark) .library-hero-progress-value {
+  color: rgba(255, 255, 255, 0.96);
+}
+
+:global(.dark) .library-hero-phase {
+  color: rgba(191, 201, 216, 0.8);
+}
+
+:global(.dark) .library-hero-card-success .library-hero-phase {
+  color: rgba(110, 231, 183, 0.82);
+}
+
+:global(.dark) .library-hero-card-error .library-hero-phase {
+  color: rgba(252, 165, 165, 0.88);
+}
+
+:global(.dark) .library-hero-progress-meta,
+:global(.dark) .library-hero-progress-note {
+  color: rgba(226, 232, 240, 0.72);
+}
+
 :global(.dark) .index-nav-item {
   color: rgba(255, 255, 255, 0.72);
 }
@@ -840,6 +892,48 @@ const getRowStyle = (songIndex: number, songPath: string) => {
   transform: scale(0.92);
 }
 
+.library-hero-enter-active,
+.library-hero-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.library-hero-enter-from,
+.library-hero-leave-to {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
+.scan-progress-indeterminate {
+  min-width: 28%;
+  animation: scan-progress-indeterminate 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes scan-progress-indeterminate {
+  from {
+    transform: translateX(-14%);
+  }
+
+  to {
+    transform: translateX(14%);
+  }
+}
+
+@keyframes scan-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+:global(.dark) .hero-secondary-btn {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+:global(.dark) .hero-secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 @keyframes spectrum {
   0%, 100% { height: 4px; }
   25% { height: 14px; }
@@ -847,3 +941,5 @@ const getRowStyle = (songIndex: number, songPath: string) => {
   75% { height: 12px; }
 }
 </style>
+
+

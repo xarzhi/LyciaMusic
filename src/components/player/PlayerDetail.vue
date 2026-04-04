@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useLyrics } from '../../composables/lyrics';
-import { usePlayer } from '../../composables/player';
+import { usePlaybackController } from '../../features/playback/usePlaybackController';
 import { useSharedTransition } from '../../composables/useSharedTransition';
 import LyricsView from './LyricsView.vue';
 import PlayerDetailBackground from './PlayerDetailBackground.vue';
@@ -13,7 +13,8 @@ const {
   showPlayerDetail,
   showQueue,
   currentSong,
-} = usePlayer();
+  closePlayerDetail,
+} = usePlaybackController();
 
 const { parsedLyrics } = useLyrics();
 const { staggerPhase } = useSharedTransition();
@@ -88,7 +89,7 @@ const staggerStyle = (phase: number, translateDir: 'Y' | 'X' = 'Y', distance = 2
 };
 
 const handleClose = () => {
-  showPlayerDetail.value = false;
+  closePlayerDetail();
 };
 
 const metaInfo = computed(() => {
@@ -184,11 +185,11 @@ const metaInfo = computed(() => {
 
       <PlayerDetailLeft :isExpanded="showPlayerDetail" />
 
-      <div class="relative z-50 flex min-h-0 flex-1 pl-8 pr-0 pb-10">
-        <div class="pointer-events-none h-full w-[45%] min-w-[300px]"></div>
+      <div class="relative z-50 flex min-h-0 flex-1 pl-8 pr-0 pb-22">
+        <div class="pointer-events-none h-full w-[40%] min-w-[300px]"></div>
 
         <div
-          class="flex h-full min-h-0 flex-1 flex-col justify-center pt-2 pb-3 pl-2 pr-0"
+          class="flex h-full min-h-0 flex-1 flex-col justify-center pt-0 pb-0 pl-2 pr-8"
           :style="staggerStyle(2, 'X', 20)"
         >
           <transition name="fade-scale" mode="out-in">

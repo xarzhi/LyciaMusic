@@ -1,10 +1,12 @@
 import { ref, computed, reactive, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import type { LyricLine as CoreAmlLyricLine } from '@applemusic-like-lyrics/core';
+import { usePlaybackStore } from '../features/playback/store';
 import type {
   LyricLine as AmlLyricLine,
   LyricWord as AmlLyricWord,
 } from '@applemusic-like-lyrics/lyric/pkg/amll_lyric.js';
-import { currentSong, currentTime, AUDIO_DELAY } from './playerState';
+import { useSettingsStore } from '../features/settings/store';
 
 export interface LyricLine {
   time: number;
@@ -22,34 +24,167 @@ export interface LyricWord {
   romaji?: string;
 }
 
+export interface CurrentLyricDisplayLine {
+  kind: 'main' | 'romaji' | 'translation';
+  text: string;
+  words?: LyricWord[];
+}
+
+export interface CurrentLyricDisplayState {
+  text: string;
+  lines: string[];
+  displayLines: CurrentLyricDisplayLine[];
+}
+
 export type LyricsStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 
 const LYRICS_SETTINGS_KEY = 'lyrics_settings';
+const DESKTOP_LYRICS_SETTINGS_KEY = 'desktop_lyrics_settings';
 export const DEFAULT_PLAYER_FONT_SCALE = 1;
 export const MIN_PLAYER_FONT_SCALE = 0.5;
 export const MAX_PLAYER_FONT_SCALE = 1.5;
 export const DEFAULT_PLAYER_LINE_GAP = 1;
 export const MIN_PLAYER_LINE_GAP = 0.5;
 export const MAX_PLAYER_LINE_GAP = 1.5;
+export const DEFAULT_PLAYER_OFFSET_X = 0;
+export const MIN_PLAYER_OFFSET_X = -30;
+export const MAX_PLAYER_OFFSET_X = 30;
+export const DEFAULT_PLAYER_OFFSET_Y = 0;
+export const MIN_PLAYER_OFFSET_Y = -25;
+export const MAX_PLAYER_OFFSET_Y = 25;
+export type LyricsPlayerAlignment = 'left' | 'center' | 'right';
+export const DEFAULT_PLAYER_ALIGNMENT: LyricsPlayerAlignment = 'left';
+export const DEFAULT_DESKTOP_PLAYER_ALIGNMENT: LyricsPlayerAlignment = 'center';
+export type LyricsColorScheme = 'auto' | 'default' | 'pink' | 'blue' | 'green' | 'white';
+export type LyricsFontPreset = string;
+export interface LyricsFontOption {
+  value: LyricsFontPreset;
+  label: string;
+  fontFamily: string;
+  isSystem?: boolean;
+}
+export const DEFAULT_PLAYER_FONT_PRESET: LyricsFontPreset = 'system';
+export const LYRICS_FONT_OPTIONS = [
+  {
+    value: 'system',
+    label: '跟随系统默认',
+    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  },
+  {
+    value: 'yahei',
+    label: '微软雅黑',
+    fontFamily: '"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',
+  },
+  {
+    value: 'dengxian',
+    label: '等线',
+    fontFamily: '"DengXian", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',
+  },
+  {
+    value: 'songti',
+    label: '宋体',
+    fontFamily: '"SimSun", "Songti SC", "STSong", serif',
+  },
+  {
+    value: 'heiti',
+    label: '黑体',
+    fontFamily: '"SimHei", "Heiti SC", "Microsoft YaHei", sans-serif',
+  },
+  {
+    value: 'kaiti',
+    label: '楷体',
+    fontFamily: '"KaiTi", "Kaiti SC", "STKaiti", serif',
+  },
+  {
+    value: 'arial',
+    label: 'Arial',
+    fontFamily: 'Arial, "Helvetica Neue", Helvetica, sans-serif',
+  },
+  {
+    value: 'georgia',
+    label: 'Georgia',
+    fontFamily: 'Georgia, "Times New Roman", serif',
+  },
+  {
+    value: 'mono',
+    label: '等宽字体',
+    fontFamily: '"Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
+  },
+] as const satisfies ReadonlyArray<LyricsFontOption>;
 
 export interface LyricsSettings {
   showTranslation: boolean;
   showRomaji: boolean;
-  isAlwaysOnTop: boolean;
-  isLocked: boolean;
-  colorScheme: 'default' | 'pink' | 'blue' | 'green';
   playerFontScale: number;
   playerLineGap: number;
+  playerOffsetX: number;
+  playerOffsetY: number;
+  playerAlignment: LyricsPlayerAlignment;
+  playerFontPreset: LyricsFontPreset;
+}
+
+export interface DesktopLyricsSettings {
+  isAlwaysOnTop: boolean;
+  alwaysShowShadowBackground: boolean;
+  autoHideWhenFullscreen: boolean;
+  isLocked: boolean;
+  persistLock: boolean;
+  colorScheme: LyricsColorScheme;
+  playerFontScale: number;
+  playerLineGap: number;
+  playerOffsetX: number;
+  playerOffsetY: number;
+  playerAlignment: LyricsPlayerAlignment;
+  playerFontPreset: LyricsFontPreset;
 }
 
 const defaultLyricsSettings: LyricsSettings = {
   showTranslation: true,
-  showRomaji: true,
-  isAlwaysOnTop: false,
-  isLocked: false,
-  colorScheme: 'default' as 'default' | 'pink' | 'blue' | 'green',
+  showRomaji: false,
   playerFontScale: DEFAULT_PLAYER_FONT_SCALE,
   playerLineGap: DEFAULT_PLAYER_LINE_GAP,
+  playerOffsetX: DEFAULT_PLAYER_OFFSET_X,
+  playerOffsetY: DEFAULT_PLAYER_OFFSET_Y,
+  playerAlignment: DEFAULT_PLAYER_ALIGNMENT,
+  playerFontPreset: DEFAULT_PLAYER_FONT_PRESET,
+};
+
+const defaultDesktopLyricsSettings: DesktopLyricsSettings = {
+  isAlwaysOnTop: false,
+  alwaysShowShadowBackground: false,
+  autoHideWhenFullscreen: true,
+  isLocked: false,
+  persistLock: false,
+  colorScheme: 'auto',
+  playerFontScale: DEFAULT_PLAYER_FONT_SCALE,
+  playerLineGap: DEFAULT_PLAYER_LINE_GAP,
+  playerOffsetX: DEFAULT_PLAYER_OFFSET_X,
+  playerOffsetY: DEFAULT_PLAYER_OFFSET_Y,
+  playerAlignment: DEFAULT_DESKTOP_PLAYER_ALIGNMENT,
+  playerFontPreset: DEFAULT_PLAYER_FONT_PRESET,
+};
+
+const TIMESTAMP_BLOCK_PATTERN = /\[(\d{1,}:\d{2}(?:\.\d+)?)\]/g;
+const ADJACENT_TIMESTAMPS_BEFORE_TEXT_PATTERN = /(?:\[(?:\d{1,}:\d{2}(?:\.\d+)?)\])+(?=[^\[\]\r\n])/g;
+const ESLRC_GAP_PLACEHOLDER = '\u2063';
+const ENHANCED_TIMESTAMP_PATTERN = /<(\d{1,}:\d{2}(?:\.\d+)?)>/g;
+const ENHANCED_TIMESTAMP_TEXT_PATTERN = /<\d{1,}:\d{2}(?:\.\d+)?>/;
+const LRC_LINE_TIMESTAMP_PATTERN = /^\[(\d{1,}:\d{2}(?:\.\d+)?)\](.*)$/;
+
+type ParserSource = 'enhanced' | 'yrc' | 'qrc' | 'lys' | 'eslrc' | 'lrc';
+
+interface ParserCandidate {
+  source: ParserSource;
+  lines: AmlLyricLine[];
+}
+
+const PARSER_PRIORITIES: Record<ParserSource, number> = {
+  enhanced: 5,
+  yrc: 4,
+  qrc: 3,
+  lys: 2,
+  eslrc: 1,
+  lrc: 0,
 };
 
 function clampPlayerFontScale(value: number) {
@@ -62,9 +197,112 @@ function clampPlayerLineGap(value: number) {
   return Math.min(MAX_PLAYER_LINE_GAP, Math.max(MIN_PLAYER_LINE_GAP, value));
 }
 
-export const lyricsSettings = reactive<LyricsSettings>({ ...defaultLyricsSettings });
+function clampPlayerOffsetX(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_PLAYER_OFFSET_X;
+  return Math.min(MAX_PLAYER_OFFSET_X, Math.max(MIN_PLAYER_OFFSET_X, value));
+}
 
-const storedLyricsSettings = localStorage.getItem(LYRICS_SETTINGS_KEY);
+function clampPlayerOffsetY(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_PLAYER_OFFSET_Y;
+  return Math.min(MAX_PLAYER_OFFSET_Y, Math.max(MIN_PLAYER_OFFSET_Y, value));
+}
+
+function normalizePlayerAlignment(value: unknown): LyricsPlayerAlignment {
+  return value === 'center' || value === 'right' ? value : DEFAULT_PLAYER_ALIGNMENT;
+}
+
+function normalizeLyricsColorScheme(value: unknown): LyricsColorScheme {
+  return value === 'default' || value === 'pink' || value === 'blue' || value === 'green' || value === 'white'
+    ? value
+    : 'auto';
+}
+
+function normalizeCustomFontName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').slice(0, 160);
+}
+
+function escapeFontFamilyName(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function extractPrimaryFontFamily(fontFamily: string): string {
+  return fontFamily
+    .split(',')[0]
+    ?.trim()
+    .replace(/^["']|["']$/g, '')
+    ?? '';
+}
+
+const builtinPrimaryFontFamilies = new Set(
+  LYRICS_FONT_OPTIONS
+    .map((option) => extractPrimaryFontFamily(option.fontFamily).toLocaleLowerCase())
+    .filter(Boolean),
+);
+
+export function normalizeLyricsFontPreset(value: unknown): LyricsFontPreset {
+  if (typeof value !== 'string') return DEFAULT_PLAYER_FONT_PRESET;
+
+  const normalized = normalizeCustomFontName(value);
+  if (!normalized) return DEFAULT_PLAYER_FONT_PRESET;
+
+  return normalized;
+}
+
+export function getLyricsFontFamily(preset: LyricsFontPreset): string {
+  return LYRICS_FONT_OPTIONS.find((option) => option.value === preset)?.fontFamily
+    ?? `${escapeFontFamilyName(normalizeLyricsFontPreset(preset))}, system-ui, sans-serif`;
+}
+
+export const systemLyricsFontOptions = ref<LyricsFontOption[]>([]);
+export const showLyricsPlayerSettingsPanel = ref(false);
+let loadSystemLyricsFontsTask: Promise<void> | null = null;
+let systemLyricsFontsLoaded = false;
+
+function buildSystemLyricsFontOptions(fontFamilies: string[]): LyricsFontOption[] {
+  const uniqueFamilies = new Set<string>();
+
+  for (const family of fontFamilies) {
+    const normalized = normalizeCustomFontName(family);
+    if (!normalized) continue;
+    if (builtinPrimaryFontFamilies.has(normalized.toLocaleLowerCase())) continue;
+    uniqueFamilies.add(normalized);
+  }
+
+  return Array.from(uniqueFamilies)
+    .sort((left, right) => left.localeCompare(right, 'zh-CN'))
+    .map((family) => ({
+      value: family,
+      label: family,
+      fontFamily: `${escapeFontFamilyName(family)}, system-ui, sans-serif`,
+      isSystem: true,
+    }));
+}
+
+export async function loadSystemLyricsFonts(force = false) {
+  if (systemLyricsFontsLoaded && !force) return;
+  if (loadSystemLyricsFontsTask) return loadSystemLyricsFontsTask;
+
+  loadSystemLyricsFontsTask = (async () => {
+    try {
+      const fonts = await invoke<string[]>('get_system_fonts');
+      systemLyricsFontOptions.value = buildSystemLyricsFontOptions(fonts);
+    } catch (error) {
+      console.warn('Failed to load system fonts:', error);
+      systemLyricsFontOptions.value = [];
+    } finally {
+      systemLyricsFontsLoaded = true;
+      loadSystemLyricsFontsTask = null;
+    }
+  })();
+
+  return loadSystemLyricsFontsTask;
+}
+
+export const lyricsSettings = reactive<LyricsSettings>({ ...defaultLyricsSettings });
+export const desktopLyricsSettings = reactive<DesktopLyricsSettings>({ ...defaultDesktopLyricsSettings });
+
+const storage = typeof localStorage === 'undefined' ? null : localStorage;
+const storedLyricsSettings = storage?.getItem(LYRICS_SETTINGS_KEY);
 if (storedLyricsSettings) {
   try {
     const parsed = JSON.parse(storedLyricsSettings) as Partial<LyricsSettings>;
@@ -73,6 +311,10 @@ if (storedLyricsSettings) {
       ...parsed,
       playerFontScale: clampPlayerFontScale(parsed.playerFontScale ?? DEFAULT_PLAYER_FONT_SCALE),
       playerLineGap: clampPlayerLineGap(parsed.playerLineGap ?? DEFAULT_PLAYER_LINE_GAP),
+      playerOffsetX: clampPlayerOffsetX(parsed.playerOffsetX ?? DEFAULT_PLAYER_OFFSET_X),
+      playerOffsetY: clampPlayerOffsetY(parsed.playerOffsetY ?? DEFAULT_PLAYER_OFFSET_Y),
+      playerAlignment: normalizePlayerAlignment(parsed.playerAlignment),
+      playerFontPreset: normalizeLyricsFontPreset(parsed.playerFontPreset),
     });
   } catch (error) {
     console.error('Failed to parse lyrics settings:', error);
@@ -82,10 +324,62 @@ if (storedLyricsSettings) {
 watch(
   lyricsSettings,
   (nextSettings) => {
-    localStorage.setItem(LYRICS_SETTINGS_KEY, JSON.stringify({
+    storage?.setItem(LYRICS_SETTINGS_KEY, JSON.stringify({
       ...nextSettings,
       playerFontScale: clampPlayerFontScale(nextSettings.playerFontScale),
       playerLineGap: clampPlayerLineGap(nextSettings.playerLineGap),
+      playerOffsetX: clampPlayerOffsetX(nextSettings.playerOffsetX),
+      playerOffsetY: clampPlayerOffsetY(nextSettings.playerOffsetY),
+      playerAlignment: normalizePlayerAlignment(nextSettings.playerAlignment),
+      playerFontPreset: normalizeLyricsFontPreset(nextSettings.playerFontPreset),
+    }));
+  },
+  { deep: true }
+);
+
+const storedDesktopLyricsSettings = storage?.getItem(DESKTOP_LYRICS_SETTINGS_KEY);
+if (storedDesktopLyricsSettings || storedLyricsSettings) {
+  try {
+    const parsed = JSON.parse(storedDesktopLyricsSettings ?? storedLyricsSettings ?? '{}') as Partial<
+      DesktopLyricsSettings
+    >;
+    Object.assign(desktopLyricsSettings, {
+      ...defaultDesktopLyricsSettings,
+      ...parsed,
+      alwaysShowShadowBackground: typeof parsed.alwaysShowShadowBackground === 'boolean'
+        ? parsed.alwaysShowShadowBackground
+        : false,
+      autoHideWhenFullscreen: typeof parsed.autoHideWhenFullscreen === 'boolean'
+        ? parsed.autoHideWhenFullscreen
+        : true,
+      persistLock: typeof parsed.persistLock === 'boolean' ? parsed.persistLock : false,
+      isLocked: false,
+      colorScheme: normalizeLyricsColorScheme(parsed.colorScheme),
+      playerFontScale: clampPlayerFontScale(parsed.playerFontScale ?? DEFAULT_PLAYER_FONT_SCALE),
+      playerLineGap: clampPlayerLineGap(parsed.playerLineGap ?? DEFAULT_PLAYER_LINE_GAP),
+      playerOffsetX: clampPlayerOffsetX(parsed.playerOffsetX ?? DEFAULT_PLAYER_OFFSET_X),
+      playerOffsetY: clampPlayerOffsetY(parsed.playerOffsetY ?? DEFAULT_PLAYER_OFFSET_Y),
+      playerAlignment: normalizePlayerAlignment(parsed.playerAlignment ?? DEFAULT_DESKTOP_PLAYER_ALIGNMENT),
+      playerFontPreset: normalizeLyricsFontPreset(parsed.playerFontPreset),
+    });
+  } catch (error) {
+    console.error('Failed to parse desktop lyrics settings:', error);
+  }
+}
+
+watch(
+  desktopLyricsSettings,
+  (nextSettings) => {
+    storage?.setItem(DESKTOP_LYRICS_SETTINGS_KEY, JSON.stringify({
+      ...nextSettings,
+      isLocked: nextSettings.persistLock ? nextSettings.isLocked : false,
+      colorScheme: normalizeLyricsColorScheme(nextSettings.colorScheme),
+      playerFontScale: clampPlayerFontScale(nextSettings.playerFontScale),
+      playerLineGap: clampPlayerLineGap(nextSettings.playerLineGap),
+      playerOffsetX: clampPlayerOffsetX(nextSettings.playerOffsetX),
+      playerOffsetY: clampPlayerOffsetY(nextSettings.playerOffsetY),
+      playerAlignment: normalizePlayerAlignment(nextSettings.playerAlignment),
+      playerFontPreset: normalizeLyricsFontPreset(nextSettings.playerFontPreset),
     }));
   },
   { deep: true }
@@ -113,6 +407,19 @@ interface PreparedLine {
   translation: string;
   romaji: string;
   words: LyricWord[];
+  sourceIndex: number;
+}
+
+interface LineScriptProfile {
+  latinCount: number;
+  kanaCount: number;
+  hanCount: number;
+}
+
+interface ClassifiedGroupLines {
+  main: PreparedLine;
+  translationLine: PreparedLine | null;
+  romajiLine: PreparedLine | null;
 }
 
 function sanitizeLineText(text: string): string {
@@ -120,7 +427,187 @@ function sanitizeLineText(text: string): string {
 }
 
 function sanitizeWordText(text: string): string {
-  return text.replace(/\u200b/g, '');
+  return text.replace(/[\u200b\u2063]/g, '');
+}
+
+export function normalizeEslrcSource(source: string): string {
+  return source.replace(ADJACENT_TIMESTAMPS_BEFORE_TEXT_PATTERN, (match) => {
+    const timestamps = [...match.matchAll(TIMESTAMP_BLOCK_PATTERN)];
+    if (timestamps.length <= 1) return match;
+
+    return timestamps
+      .map((timestamp, index) => (index === timestamps.length - 1
+        ? timestamp[0]
+        : `${timestamp[0]}${ESLRC_GAP_PLACEHOLDER}`))
+      .join('');
+  });
+}
+
+export function parseTimestampToMs(raw: string): number | null {
+  const match = /^(\d+):(\d{2})(?:\.(\d{1,3}))?$/.exec(raw.trim());
+  if (!match) return null;
+
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  const milliseconds = Number((match[3] ?? '').padEnd(3, '0').slice(0, 3) || '0');
+
+  if (!Number.isFinite(minutes) || !Number.isFinite(seconds) || !Number.isFinite(milliseconds)) {
+    return null;
+  }
+  if (seconds >= 60) return null;
+
+  return (minutes * 60 * 1000) + (seconds * 1000) + milliseconds;
+}
+
+export function isEnhancedLrcLine(line: string): boolean {
+  const match = LRC_LINE_TIMESTAMP_PATTERN.exec(line);
+  if (!match) return false;
+
+  return ENHANCED_TIMESTAMP_TEXT_PATTERN.test(match[2]);
+}
+
+export function parseEnhancedLrcLine(line: string): AmlLyricLine | null {
+  const lineMatch = LRC_LINE_TIMESTAMP_PATTERN.exec(line);
+  if (!lineMatch) return null;
+
+  const lineStartTime = parseTimestampToMs(lineMatch[1]);
+  if (lineStartTime === null) return null;
+
+  const body = lineMatch[2];
+  const markers = [...body.matchAll(ENHANCED_TIMESTAMP_PATTERN)];
+  if (markers.length < 2) return null;
+
+  const leadingText = body.slice(0, markers[0].index ?? 0);
+  if (leadingText.trim().length > 0) return null;
+
+  const words: AmlLyricWord[] = [];
+  let explicitEndTime: number | null = null;
+
+  for (let index = 0; index < markers.length; index += 1) {
+    const currentMarker = markers[index];
+    const nextMarker = markers[index + 1];
+    const currentStart = parseTimestampToMs(currentMarker[1]);
+    if (currentStart === null) return null;
+
+    const currentMarkerEnd = (currentMarker.index ?? 0) + currentMarker[0].length;
+    const nextMarkerIndex = nextMarker?.index ?? body.length;
+    const text = body.slice(currentMarkerEnd, nextMarkerIndex);
+
+    if (!nextMarker) {
+      if (text.length > 0) return null;
+      explicitEndTime = currentStart;
+      continue;
+    }
+
+    const nextStart = parseTimestampToMs(nextMarker[1]);
+    if (nextStart === null || nextStart < currentStart) return null;
+    // Some enhanced LRC generators emit consecutive timestamps to mark
+    // zero-length pauses or adjust the next word boundary. Skip those
+    // empty segments instead of dropping the whole line.
+    if (text.length === 0) continue;
+
+    words.push({
+      startTime: currentStart,
+      endTime: nextStart,
+      word: text,
+      romanWord: '',
+    });
+  }
+
+  if (words.length === 0) return null;
+
+  const endTime = explicitEndTime ?? words[words.length - 1].endTime;
+  if (endTime < lineStartTime) return null;
+
+  return {
+    words,
+    translatedLyric: '',
+    romanLyric: '',
+    isBG: false,
+    isDuet: false,
+    startTime: lineStartTime,
+    endTime,
+  };
+}
+
+export function parseEnhancedLrc(source: string): AmlLyricLine[] {
+  const lines: AmlLyricLine[] = [];
+
+  for (const rawLine of source.split('\n')) {
+    if (!isEnhancedLrcLine(rawLine)) continue;
+
+    const parsedLine = parseEnhancedLrcLine(rawLine);
+    if (parsedLine) lines.push(parsedLine);
+  }
+
+  return lines;
+}
+
+function lineContainsEnhancedMarkup(line: AmlLyricLine): boolean {
+  if (ENHANCED_TIMESTAMP_TEXT_PATTERN.test(line.translatedLyric || '')) return true;
+  if (ENHANCED_TIMESTAMP_TEXT_PATTERN.test(line.romanLyric || '')) return true;
+
+  return (line.words || []).some((word) => ENHANCED_TIMESTAMP_TEXT_PATTERN.test(word.word || ''));
+}
+
+export function mergeEnhancedLinesIntoBaseLines(
+  enhancedLines: AmlLyricLine[],
+  baseLines: AmlLyricLine[],
+): AmlLyricLine[] {
+  if (enhancedLines.length === 0) return baseLines;
+  if (baseLines.length === 0) return enhancedLines;
+
+  const enhancedGroups = new Map<number, AmlLyricLine[]>();
+  for (const line of enhancedLines) {
+    const existingGroup = enhancedGroups.get(line.startTime);
+    if (existingGroup) {
+      existingGroup.push(line);
+    } else {
+      enhancedGroups.set(line.startTime, [line]);
+    }
+  }
+
+  const baseGroups = new Map<number, AmlLyricLine[]>();
+  for (const line of baseLines) {
+    const existingGroup = baseGroups.get(line.startTime);
+    if (existingGroup) {
+      existingGroup.push(line);
+    } else {
+      baseGroups.set(line.startTime, [line]);
+    }
+  }
+
+  const times = new Set<number>([
+    ...enhancedGroups.keys(),
+    ...baseGroups.keys(),
+  ]);
+
+  return [...times]
+    .sort((a, b) => a - b)
+    .flatMap((startTime) => {
+      const mergedGroup: AmlLyricLine[] = [];
+      const enhancedGroup = enhancedGroups.get(startTime) ?? [];
+      const baseGroup = baseGroups.get(startTime) ?? [];
+
+      if (enhancedGroup.length > 0) {
+        mergedGroup.push(...enhancedGroup);
+        mergedGroup.push(...baseGroup.filter((line) => !lineContainsEnhancedMarkup(line)));
+      } else {
+        mergedGroup.push(...baseGroup);
+      }
+
+      return mergedGroup;
+    });
+}
+
+function compareParserCandidates(left: ParserCandidate, right: ParserCandidate): number {
+  const scoreDiff = scoreParsedLines(right.lines) - scoreParsedLines(left.lines);
+  if (scoreDiff !== 0) return scoreDiff;
+
+  const lineCountDiff = right.lines.length - left.lines.length;
+  if (lineCountDiff !== 0) return lineCountDiff;
+
+  return PARSER_PRIORITIES[right.source] - PARSER_PRIORITIES[left.source];
 }
 
 function toSafeMs(value: number, fallback: number): number {
@@ -141,7 +628,7 @@ function normalizeWord(word: AmlLyricWord, fallbackStartMs: number, fallbackEndM
   };
 }
 
-function prepareLine(line: AmlLyricLine): PreparedLine | null {
+function prepareLine(line: AmlLyricLine, sourceIndex: number): PreparedLine | null {
   const fallbackStartMs = toSafeMs(line.startTime, 0);
   const fallbackEndMs = Math.max(fallbackStartMs + 80, toSafeMs(line.endTime, fallbackStartMs + 500));
 
@@ -170,13 +657,18 @@ function prepareLine(line: AmlLyricLine): PreparedLine | null {
     translation,
     romaji,
     words,
+    sourceIndex,
   };
 }
 
-function mergePreparedLines(lines: PreparedLine[]): LyricLine[] {
+export function mergePreparedLines(lines: PreparedLine[]): LyricLine[] {
   if (lines.length === 0) return [];
 
-  const sorted = [...lines].sort((a, b) => (a.startMs - b.startMs) || (a.endMs - b.endMs));
+  const sorted = [...lines].sort((a, b) => (
+    (a.startMs - b.startMs)
+    || (a.sourceIndex - b.sourceIndex)
+    || (a.endMs - b.endMs)
+  ));
   const groups: PreparedLine[][] = [];
 
   for (const line of sorted) {
@@ -194,16 +686,14 @@ function mergePreparedLines(lines: PreparedLine[]): LyricLine[] {
   }
 
   return groups.map((group) => {
-    const main = group.find((line) => line.text.length > 0) ?? group[0];
-    const extras = group.filter((line) => line !== main && line.text.length > 0);
-
-    const translation = main.translation || extras[0]?.text || '';
-    const romaji = main.romaji || extras[1]?.text || '';
+    const { main, translationLine, romajiLine } = classifyGroupLines(group);
+    const translation = translationLine?.text || '';
+    const romaji = romajiLine?.text || '';
 
     const endMs = Math.max(...group.map((line) => line.endMs), main.startMs + 80);
 
     const words = main.words.length > 0
-      ? main.words
+      ? mergeRomajiWords(main.words, romajiLine?.words ?? [])
       : [{
         text: main.text || translation || romaji || ' ',
         start: main.startMs / 1000,
@@ -215,11 +705,228 @@ function mergePreparedLines(lines: PreparedLine[]): LyricLine[] {
       time: main.startMs / 1000,
       endTime: endMs / 1000,
       text: main.text || words[0].text,
-      translation,
-      romaji,
+      translation: main.translation || translation,
+      romaji: main.romaji || romaji,
       words,
     };
   }).filter((line) => line.text.length > 0 || line.translation.length > 0 || line.romaji.length > 0);
+}
+
+function getLineScriptProfile(text: string): LineScriptProfile {
+  const profile: LineScriptProfile = {
+    latinCount: 0,
+    kanaCount: 0,
+    hanCount: 0,
+  };
+
+  for (const char of text) {
+    if (/\p{Script=Latin}/u.test(char)) {
+      profile.latinCount += 1;
+      continue;
+    }
+    if (/[\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9f]/u.test(char)) {
+      profile.kanaCount += 1;
+      continue;
+    }
+    if (/\p{Script=Han}/u.test(char)) {
+      profile.hanCount += 1;
+    }
+  }
+
+  return profile;
+}
+
+function approxSameWordTiming(left: LyricWord, right: LyricWord, toleranceMs = 80): boolean {
+  const leftStart = Math.round(left.start * 1000);
+  const rightStart = Math.round(right.start * 1000);
+  const leftEnd = Math.round(left.end * 1000);
+  const rightEnd = Math.round(right.end * 1000);
+
+  return Math.abs(leftStart - rightStart) <= toleranceMs && Math.abs(leftEnd - rightEnd) <= toleranceMs;
+}
+
+function mergeRomajiWords(mainWords: LyricWord[], romajiWords: LyricWord[]): LyricWord[] {
+  if (mainWords.length === 0 || romajiWords.length === 0) return mainWords;
+  if (mainWords.length !== romajiWords.length) return mainWords;
+
+  const allAligned = mainWords.every((word, index) => approxSameWordTiming(word, romajiWords[index]));
+  if (!allAligned) return mainWords;
+
+  return mainWords.map((word, index) => ({
+    ...word,
+    romaji: romajiWords[index].text || word.romaji || '',
+  }));
+}
+
+function hasExplicitSecondaryContent(line: PreparedLine): boolean {
+  return line.translation.length > 0 || line.romaji.length > 0;
+}
+
+function isRomajiCandidate(line: PreparedLine): boolean {
+  const profile = getLineScriptProfile(line.text);
+  return profile.latinCount > 0 && profile.kanaCount === 0 && profile.hanCount === 0;
+}
+
+function isJapaneseCandidate(line: PreparedLine): boolean {
+  const profile = getLineScriptProfile(line.text);
+  return profile.kanaCount > 0;
+}
+
+function isHanOnlyCandidate(line: PreparedLine): boolean {
+  const profile = getLineScriptProfile(line.text);
+  return profile.hanCount > 0 && profile.kanaCount === 0 && profile.latinCount === 0;
+}
+
+function classifyGroupLines(group: PreparedLine[]): ClassifiedGroupLines {
+  const textLines = group.filter((line) => line.text.length > 0);
+  const explicitMain = textLines.find((line) => hasExplicitSecondaryContent(line));
+  const japaneseCandidates = textLines.filter((line) => isJapaneseCandidate(line));
+  const hasJapaneseMain = japaneseCandidates.length > 0;
+  const romajiCandidates = hasJapaneseMain
+    ? textLines.filter((line) => !isJapaneseCandidate(line) && isRomajiCandidate(line))
+    : [];
+  const translationCandidates = hasJapaneseMain
+    ? textLines.filter((line) => !japaneseCandidates.includes(line) && !romajiCandidates.includes(line))
+    : [];
+
+  const main = explicitMain
+    ?? japaneseCandidates[0]
+    ?? textLines[0]
+    ?? group[0];
+
+  const translationLine = main.translation
+    ? null
+    : translationCandidates.find((line) => line !== main)
+      ?? (hasJapaneseMain
+        ? textLines.find((line) => line !== main && !romajiCandidates.includes(line) && isHanOnlyCandidate(line))
+        : textLines.find((line) => line !== main));
+
+  const romajiLine = main.romaji
+    ? null
+    : romajiCandidates.find((line) => line !== main)
+      ?? (translationLine
+        ? textLines.find((line) => line !== main && line !== translationLine)
+        : textLines.find((line) => line !== main));
+
+  return {
+    main,
+    translationLine: translationLine ?? null,
+    romajiLine: romajiLine ?? null,
+  };
+}
+
+function getOrderedSecondaryLyrics(line: Pick<LyricLine, 'translation' | 'romaji'>, showTranslation: boolean, showRomaji: boolean) {
+  const orderedLines: string[] = [];
+  if (showRomaji && line.romaji) orderedLines.push(line.romaji);
+  if (showTranslation && line.translation) orderedLines.push(line.translation);
+  return orderedLines;
+}
+
+function toMs(seconds: number): number {
+  return Math.max(0, Math.round(seconds * 1000));
+}
+
+export function convertLyricsToAmlLines(
+  lines: LyricLine[],
+  showTranslation: boolean,
+  showRomaji: boolean,
+): CoreAmlLyricLine[] {
+  return lines.map((line, lineIndex) => {
+    const startTime = toMs(line.time);
+    const parsedEndTime = toMs(line.endTime || line.time);
+    const nextStartTime = toMs(lines[lineIndex + 1]?.time ?? line.time + 3);
+    const endTime = Math.max(
+      startTime + 40,
+      parsedEndTime > startTime ? parsedEndTime : nextStartTime,
+    );
+
+    const sourceWords = line.words ?? [];
+    const convertedWords = sourceWords.map((word, wordIndex) => {
+      const wordStart = toMs(word.start);
+      const nextWordStart = sourceWords[wordIndex + 1]?.start;
+      const rawWordEnd = nextWordStart !== undefined
+        ? toMs(nextWordStart)
+        : toMs(word.end > word.start ? word.end : endTime / 1000);
+      const wordEnd = Math.max(wordStart + 20, Math.min(endTime, rawWordEnd));
+
+      return {
+        word: word.text,
+        startTime: wordStart,
+        endTime: wordEnd,
+        romanWord: showRomaji ? (word.romaji || '') : '',
+        obscene: false,
+      };
+    }).filter((word) => word.word.trim().length > 0);
+    const hasTimedRomaji = convertedWords.some((word) => (word.romanWord || '').trim().length > 0);
+
+    const words = convertedWords.length > 0
+      ? convertedWords
+      : [{
+          word: line.text || ' ',
+          startTime,
+          endTime,
+          romanWord: '',
+          obscene: false,
+        }];
+
+    return {
+      words,
+      translatedLyric: showTranslation ? line.translation : '',
+      romanLyric: showRomaji && !hasTimedRomaji ? line.romaji : '',
+      startTime,
+      endTime,
+      isBG: false,
+      isDuet: false,
+    };
+  });
+}
+
+export function getCurrentLyricDisplayLines(
+  line: LyricLine,
+  showTranslation: boolean,
+  showRomaji: boolean,
+): CurrentLyricDisplayLine[] {
+  const displayLines: CurrentLyricDisplayLine[] = [{
+    kind: 'main',
+    text: line.text,
+  }];
+
+  if (showRomaji && line.romaji) {
+    const romajiWords = (line.words ?? [])
+      .filter((word) => (word.romaji || '').length > 0)
+      .map((word) => ({
+        text: word.romaji || '',
+        start: word.start,
+        end: word.end,
+      }));
+
+    displayLines.push({
+      kind: 'romaji',
+      text: line.romaji,
+      words: romajiWords.length > 0 ? romajiWords : undefined,
+    });
+  }
+
+  if (showTranslation && line.translation) {
+    displayLines.push({
+      kind: 'translation',
+      text: line.translation,
+    });
+  }
+
+  return displayLines;
+}
+
+export function getDisplaySubtitles(
+  line: Pick<LyricLine, 'translation' | 'romaji'>,
+  showTranslation: boolean,
+  showRomaji: boolean,
+) {
+  const orderedLines = getOrderedSecondaryLyrics(line, showTranslation, showRomaji);
+  return {
+    upper: orderedLines[0] || '',
+    lower: orderedLines[1] || '',
+  };
 }
 
 function scoreParsedLines(lines: AmlLyricLine[]): number {
@@ -232,7 +939,7 @@ function scoreParsedLines(lines: AmlLyricLine[]): number {
   }, 0);
 }
 
-async function parseWithAml(raw: string): Promise<AmlLyricLine[]> {
+export async function parseWithAml(raw: string): Promise<AmlLyricLine[]> {
   const {
     decryptQrcHex,
     parseEslrc,
@@ -243,41 +950,57 @@ async function parseWithAml(raw: string): Promise<AmlLyricLine[]> {
     parseYrc,
   } = await getAmlModule();
   const source = raw.replace(/^\uFEFF/, '').replace(/\r/g, '');
-  const candidates: AmlLyricLine[][] = [];
+  const normalizedEslrcSource = normalizeEslrcSource(source);
+  const candidates: ParserCandidate[] = [];
 
-  const collect = (parser: () => AmlLyricLine[]) => {
+  const collect = (candidateSource: ParserSource, parser: () => AmlLyricLine[]) => {
     try {
       const lines = parser();
-      if (Array.isArray(lines) && lines.length > 0) candidates.push(lines);
+      if (Array.isArray(lines) && lines.length > 0) {
+        candidates.push({
+          source: candidateSource,
+          lines,
+        });
+      }
     } catch {
       // Try next parser.
     }
   };
 
   if (/<tt[\s>]/i.test(source)) {
-    collect(() => parseTTML(source).lines);
+    collect('lrc', () => parseTTML(source).lines);
   }
 
   const compactHex = source.replace(/\s+/g, '');
   if (/^[0-9a-fA-F]+$/.test(compactHex) && compactHex.length > 64 && compactHex.length % 2 === 0) {
-    collect(() => parseQrc(decryptQrcHex(compactHex)));
+    collect('qrc', () => parseQrc(decryptQrcHex(compactHex)));
   }
 
-  collect(() => parseYrc(source));
-  collect(() => parseQrc(source));
-  collect(() => parseLys(source));
-  collect(() => parseEslrc(source));
-  collect(() => parseLrc(source));
+  collect('yrc', () => parseYrc(source));
+  collect('qrc', () => parseQrc(source));
+  collect('lys', () => parseLys(source));
+  collect('eslrc', () => parseEslrc(normalizedEslrcSource));
+  collect('lrc', () => parseLrc(source));
+
+  const enhancedLines = parseEnhancedLrc(source);
+  if (enhancedLines.length > 0) {
+    const baselineCandidate = [...candidates]
+      .filter((candidate) => candidate.source !== 'enhanced')
+      .sort(compareParserCandidates)[0];
+
+    candidates.push({
+      source: 'enhanced',
+      lines: baselineCandidate
+        ? mergeEnhancedLinesIntoBaseLines(enhancedLines, baselineCandidate.lines)
+        : enhancedLines,
+    });
+  }
 
   if (candidates.length === 0) return [];
 
-  candidates.sort((a, b) => {
-    const scoreDiff = scoreParsedLines(b) - scoreParsedLines(a);
-    if (scoreDiff !== 0) return scoreDiff;
-    return b.length - a.length;
-  });
+  candidates.sort(compareParserCandidates);
 
-  return candidates[0];
+  return candidates[0].lines;
 }
 
 async function parseLyrics(raw: string): Promise<LyricLine[]> {
@@ -285,7 +1008,7 @@ async function parseLyrics(raw: string): Promise<LyricLine[]> {
   if (parsed.length === 0) return [];
 
   const prepared = parsed
-    .map((line) => prepareLine(line))
+    .map((line, index) => prepareLine(line, index))
     .filter((line): line is PreparedLine => line !== null);
 
   return mergePreparedLines(prepared);
@@ -293,7 +1016,8 @@ async function parseLyrics(raw: string): Promise<LyricLine[]> {
 
 async function loadLyrics() {
   const requestId = ++loadRequestId;
-  const song = currentSong.value;
+  const playbackStore = usePlaybackStore();
+  const song = playbackStore.currentSong;
 
   if (!song) {
     rawLyrics.value = '';
@@ -309,16 +1033,16 @@ async function loadLyrics() {
   try {
     const lrc = await invoke<string>('get_song_lyrics', { path: song.path });
 
-    if (requestId !== loadRequestId || currentSong.value?.path !== song.path) return;
+    if (requestId !== loadRequestId || playbackStore.currentSong?.path !== song.path) return;
 
     rawLyrics.value = lrc || '';
     const parsed = await parseLyrics(rawLyrics.value);
-    if (requestId !== loadRequestId || currentSong.value?.path !== song.path) return;
+    if (requestId !== loadRequestId || playbackStore.currentSong?.path !== song.path) return;
 
     parsedLyrics.value = parsed;
     lyricsStatus.value = parsedLyrics.value.length > 0 ? 'ready' : 'empty';
   } catch (e) {
-    if (requestId !== loadRequestId || currentSong.value?.path !== song.path) return;
+    if (requestId !== loadRequestId || playbackStore.currentSong?.path !== song.path) return;
 
     rawLyrics.value = '';
     parsedLyrics.value = [];
@@ -348,43 +1072,67 @@ function findLyricIndexByTime(lines: LyricLine[], targetTime: number): number {
 const currentLyricIndex = computed(() => {
   if (parsedLyrics.value.length === 0) return -1;
 
-  const targetTime = currentTime.value - AUDIO_DELAY.value;
+  const targetTime = usePlaybackStore().currentTime - useSettingsStore().audioDelay;
   return findLyricIndexByTime(parsedLyrics.value, targetTime);
 });
 
-const currentLyricLine = computed(() => {
+const currentLyricLine = computed<CurrentLyricDisplayState>(() => {
   if (lyricsStatus.value === 'loading') {
-    return { text: 'Loading lyrics...', lines: ['Loading lyrics...'] };
+    return {
+      text: 'Loading lyrics...',
+      lines: ['Loading lyrics...'],
+      displayLines: [{ kind: 'main', text: 'Loading lyrics...' }],
+    };
   }
 
   if (lyricsStatus.value === 'error') {
-    return { text: 'Lyrics unavailable', lines: ['Lyrics unavailable'] };
+    return {
+      text: 'Lyrics unavailable',
+      lines: ['Lyrics unavailable'],
+      displayLines: [{ kind: 'main', text: 'Lyrics unavailable' }],
+    };
   }
 
   if (parsedLyrics.value.length === 0) {
     const fallback = rawLyrics.value.trim() ? 'No synchronized lyrics' : 'Instrumental / No lyrics';
-    return { text: fallback, lines: [fallback] };
+    return {
+      text: fallback,
+      lines: [fallback],
+      displayLines: [{ kind: 'main', text: fallback }],
+    };
   }
 
   const idx = currentLyricIndex.value;
 
   if (idx !== -1) {
     const current = parsedLyrics.value[idx];
-    const linesToShow: string[] = [current.text];
-    if (lyricsSettings.showTranslation && current.translation) linesToShow.push(current.translation);
-    if (lyricsSettings.showRomaji && current.romaji) linesToShow.push(current.romaji);
+    const displayLines = getCurrentLyricDisplayLines(
+      current,
+      lyricsSettings.showTranslation,
+      lyricsSettings.showRomaji,
+    );
 
-    return { text: current.text, lines: linesToShow };
+    return {
+      text: current.text,
+      lines: displayLines.map((line) => line.text),
+      displayLines,
+    };
   }
 
   const first = parsedLyrics.value[0];
-  return { text: first.text, lines: [first.text] };
+  return {
+    text: first.text,
+    lines: [first.text],
+    displayLines: [{ kind: 'main', text: first.text }],
+  };
 });
 
 export function useLyrics() {
   return {
     showDesktopLyrics,
+    showLyricsPlayerSettingsPanel,
     lyricsSettings,
+    desktopLyricsSettings,
     lyricsStatus,
     currentLyricLine,
     currentLyricIndex,

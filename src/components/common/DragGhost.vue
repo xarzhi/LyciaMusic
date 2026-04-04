@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { dragSession } from '../../composables/player';
+import { dragSession } from '../../composables/dragState';
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';

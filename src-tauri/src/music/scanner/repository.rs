@@ -1,0 +1,359 @@
+use super::progress::ScanProgressReporter;
+use super::{
+    serialize_string_list, u64_opt_to_i64_saturated, u64_to_i64_saturated, DB_PROGRESS_BATCH,
+    UNKNOWN_ARTIST,
+};
+use crate::music::types::Song;
+use rusqlite::{params, params_from_iter};
+use std::collections::HashMap;
+
+fn ensure_artist_id(
+    conn: &rusqlite::Transaction<'_>,
+    artist_cache: &mut HashMap<String, i64>,
+    artist_name: &str,
+) -> Result<i64, String> {
+    let cache_key = artist_name.to_lowercase();
+    if let Some(artist_id) = artist_cache.get(&cache_key) {
+        return Ok(*artist_id);
+    }
+
+    conn.execute(
+        "INSERT INTO artists (name) VALUES (?1)
+         ON CONFLICT(name) DO NOTHING",
+        params![artist_name],
+    )
+    .map_err(|error| error.to_string())?;
+
+    let artist_id = conn
+        .query_row(
+            "SELECT id FROM artists WHERE name = ?1 COLLATE NOCASE",
+            params![artist_name],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+
+    artist_cache.insert(cache_key, artist_id);
+    Ok(artist_id)
+}
+
+fn load_song_ids_by_paths(
+    conn: &rusqlite::Transaction<'_>,
+    paths: &[String],
+) -> Result<HashMap<String, i64>, String> {
+    if paths.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = vec!["?"; paths.len()].join(", ");
+    let sql = format!("SELECT path, id FROM songs WHERE path IN ({placeholders})");
+    let mut stmt = conn.prepare(&sql).map_err(|error| error.to_string())?;
+    let rows = stmt
+        .query_map(params_from_iter(paths.iter()), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
+        .map_err(|error| error.to_string())?;
+
+    let mut song_ids = HashMap::with_capacity(paths.len());
+    for row in rows.flatten() {
+        song_ids.insert(row.0, row.1);
+    }
+
+    Ok(song_ids)
+}
+
+fn sync_song_artists_batch(
+    conn: &rusqlite::Transaction<'_>,
+    songs: &[Song],
+    song_ids: &HashMap<String, i64>,
+    artist_cache: &mut HashMap<String, i64>,
+) -> Result<(), String> {
+    if songs.is_empty() || song_ids.is_empty() {
+        return Ok(());
+    }
+
+    let mut delete_stmt = conn
+        .prepare("DELETE FROM song_artists WHERE song_id = ?1")
+        .map_err(|error| error.to_string())?;
+    let mut insert_stmt = conn
+        .prepare(
+            "INSERT INTO song_artists (song_id, artist_id, sort_order)
+             VALUES (?1, ?2, ?3)",
+        )
+        .map_err(|error| error.to_string())?;
+
+    for song in songs {
+        let Some(song_id) = song_ids.get(&song.path).copied() else {
+            continue;
+        };
+
+        delete_stmt
+            .execute(params![song_id])
+            .map_err(|error| error.to_string())?;
+
+        let normalized_names = if song.artist_names.is_empty() {
+            vec![UNKNOWN_ARTIST.to_string()]
+        } else {
+            song.artist_names.clone()
+        };
+
+        for (sort_order, artist_name) in normalized_names.iter().enumerate() {
+            let artist_id = ensure_artist_id(conn, artist_cache, artist_name)?;
+            insert_stmt
+                .execute(params![song_id, artist_id, sort_order as i64])
+                .map_err(|error| error.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+fn apply_insert_batch(conn: &mut rusqlite::Connection, songs: &[Song]) -> Result<(), String> {
+    if songs.is_empty() {
+        return Ok(());
+    }
+
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+    let mut artist_cache = HashMap::new();
+    {
+        let mut insert_stmt = tx
+            .prepare(
+                "INSERT INTO songs (
+                path,
+                title,
+                artist,
+                artist_names,
+                effective_artist_names,
+                album,
+                album_artist,
+                album_key,
+                is_various_artists_album,
+                collapse_artist_credits,
+                duration,
+                cover_path,
+                bitrate,
+                sample_rate,
+                bit_depth,
+                format,
+                container,
+                codec,
+                file_size,
+                added_at,
+                file_modified_at
+             )
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+             ON CONFLICT(path) DO UPDATE SET
+                title = excluded.title,
+                artist = excluded.artist,
+                artist_names = excluded.artist_names,
+                effective_artist_names = excluded.effective_artist_names,
+                album = excluded.album,
+                album_artist = excluded.album_artist,
+                album_key = excluded.album_key,
+                is_various_artists_album = excluded.is_various_artists_album,
+                collapse_artist_credits = excluded.collapse_artist_credits,
+                duration = excluded.duration,
+                cover_path = COALESCE(songs.cover_path, excluded.cover_path),
+                bitrate = excluded.bitrate,
+                sample_rate = excluded.sample_rate,
+                bit_depth = excluded.bit_depth,
+                format = excluded.format,
+                container = excluded.container,
+                codec = excluded.codec,
+                file_size = excluded.file_size,
+                added_at = COALESCE(songs.added_at, excluded.added_at),
+                file_modified_at = excluded.file_modified_at",
+            )
+            .map_err(|error| error.to_string())?;
+
+        for song in songs {
+            let file_size_i64 = u64_to_i64_saturated(song.file_size);
+            let added_at_i64 = u64_opt_to_i64_saturated(song.added_at);
+            let mtime_i64 = u64_opt_to_i64_saturated(song.file_modified_at);
+            let artist_names_json = serialize_string_list(&song.artist_names)?;
+            let effective_artist_names_json = serialize_string_list(&song.effective_artist_names)?;
+            insert_stmt
+                .execute(params![
+                    &song.path,
+                    &song.title,
+                    &song.artist,
+                    artist_names_json,
+                    effective_artist_names_json,
+                    &song.album,
+                    &song.album_artist,
+                    &song.album_key,
+                    if song.is_various_artists_album { 1 } else { 0 },
+                    if song.collapse_artist_credits { 1 } else { 0 },
+                    song.duration as i64,
+                    &song.cover,
+                    song.bitrate as i64,
+                    song.sample_rate as i64,
+                    song.bit_depth.map(|value| value as i64),
+                    &song.format,
+                    &song.container,
+                    &song.codec,
+                    file_size_i64,
+                    added_at_i64,
+                    mtime_i64
+                ])
+                .map_err(|error| format!("insert failed for '{}': {}", song.path, error))?;
+        }
+
+        let song_paths: Vec<String> = songs.iter().map(|song| song.path.clone()).collect();
+        let song_ids = load_song_ids_by_paths(&tx, &song_paths)?;
+        sync_song_artists_batch(&tx, songs, &song_ids, &mut artist_cache)?;
+    }
+
+    tx.commit().map_err(|error| error.to_string())
+}
+
+fn apply_update_batch(conn: &mut rusqlite::Connection, songs: &[Song]) -> Result<(), String> {
+    if songs.is_empty() {
+        return Ok(());
+    }
+
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+    let mut artist_cache = HashMap::new();
+    {
+        let mut update_stmt = tx
+            .prepare(
+                "UPDATE songs
+             SET title = ?1,
+                 artist = ?2,
+                 artist_names = ?3,
+                 effective_artist_names = ?4,
+                 album = ?5,
+                 album_artist = ?6,
+                 album_key = ?7,
+                 is_various_artists_album = ?8,
+                 collapse_artist_credits = ?9,
+                 duration = ?10,
+                 bitrate = ?11,
+                 sample_rate = ?12,
+                 bit_depth = ?13,
+                 format = ?14,
+                 container = ?15,
+                 codec = ?16,
+                 file_size = ?17,
+                 file_modified_at = ?18
+             WHERE path = ?19",
+            )
+            .map_err(|error| error.to_string())?;
+
+        for song in songs {
+            let file_size_i64 = u64_to_i64_saturated(song.file_size);
+            let mtime_i64 = u64_opt_to_i64_saturated(song.file_modified_at);
+            let artist_names_json = serialize_string_list(&song.artist_names)?;
+            let effective_artist_names_json = serialize_string_list(&song.effective_artist_names)?;
+            update_stmt
+                .execute(params![
+                    &song.title,
+                    &song.artist,
+                    artist_names_json,
+                    effective_artist_names_json,
+                    &song.album,
+                    &song.album_artist,
+                    &song.album_key,
+                    if song.is_various_artists_album { 1 } else { 0 },
+                    if song.collapse_artist_credits { 1 } else { 0 },
+                    song.duration as i64,
+                    song.bitrate as i64,
+                    song.sample_rate as i64,
+                    song.bit_depth.map(|value| value as i64),
+                    &song.format,
+                    &song.container,
+                    &song.codec,
+                    file_size_i64,
+                    mtime_i64,
+                    &song.path
+                ])
+                .map_err(|error| format!("update failed for '{}': {}", song.path, error))?;
+        }
+
+        let song_paths: Vec<String> = songs.iter().map(|song| song.path.clone()).collect();
+        let song_ids = load_song_ids_by_paths(&tx, &song_paths)?;
+        sync_song_artists_batch(&tx, songs, &song_ids, &mut artist_cache)?;
+    }
+
+    tx.commit().map_err(|error| error.to_string())
+}
+
+fn apply_delete_batch(conn: &mut rusqlite::Connection, paths: &[String]) -> Result<(), String> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+    {
+        let mut delete_stmt = tx
+            .prepare("DELETE FROM songs WHERE path = ?1")
+            .map_err(|error| error.to_string())?;
+
+        for path in paths {
+            delete_stmt
+                .execute(params![path])
+                .map_err(|error| format!("delete failed for '{}': {}", path, error))?;
+        }
+    }
+
+    tx.commit().map_err(|error| error.to_string())
+}
+
+fn cleanup_unused_artists(conn: &mut rusqlite::Connection) {
+    conn.execute(
+        "DELETE FROM artists
+         WHERE id NOT IN (SELECT DISTINCT artist_id FROM song_artists)",
+        [],
+    )
+    .ok();
+}
+
+pub(super) fn apply_scan_changes(
+    conn: &mut rusqlite::Connection,
+    to_add: &[Song],
+    to_update: &[Song],
+    to_delete: &[String],
+    reporter: Option<&ScanProgressReporter>,
+) -> Result<(), String> {
+    if to_add.is_empty() && to_update.is_empty() && to_delete.is_empty() {
+        if let Some(reporter) = reporter {
+            reporter.emit_writing(0, 0);
+        }
+        return Ok(());
+    }
+
+    let total_operations = to_add.len() + to_update.len() + to_delete.len();
+    let mut written_operations = 0usize;
+    if let Some(reporter) = reporter {
+        reporter.emit_writing(0, total_operations);
+    }
+
+    for chunk in to_add.chunks(DB_PROGRESS_BATCH) {
+        apply_insert_batch(conn, chunk)?;
+        written_operations += chunk.len();
+        if let Some(reporter) = reporter {
+            reporter.emit_writing(written_operations, total_operations);
+            reporter.emit_batch(chunk.to_vec(), Vec::new());
+        }
+    }
+
+    for chunk in to_update.chunks(DB_PROGRESS_BATCH) {
+        apply_update_batch(conn, chunk)?;
+        written_operations += chunk.len();
+        if let Some(reporter) = reporter {
+            reporter.emit_writing(written_operations, total_operations);
+            reporter.emit_batch(chunk.to_vec(), Vec::new());
+        }
+    }
+
+    for chunk in to_delete.chunks(DB_PROGRESS_BATCH) {
+        apply_delete_batch(conn, chunk)?;
+        written_operations += chunk.len();
+        if let Some(reporter) = reporter {
+            reporter.emit_writing(written_operations, total_operations);
+            reporter.emit_batch(Vec::new(), chunk.to_vec());
+        }
+    }
+
+    cleanup_unused_artists(conn);
+    Ok(())
+}

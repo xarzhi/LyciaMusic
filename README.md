@@ -205,11 +205,13 @@ npm run version:check
 
 ## 感谢
 
--软件中的播放页歌词部分采用了AMLL的开源项目代码，在此表示感谢开发者的开源
+- 软件中的播放页歌词部分采用了AMLL的开源项目代码，在此表示感谢开发者的开源
 
 ## License
 
 AGPL-3.0
+
+歌词相关实现采用并改编了 AMLL（Apple Music-like Lyrics）项目代码，具体来源与补充说明见 [NOTICE](NOTICE)。
 
 ---
 

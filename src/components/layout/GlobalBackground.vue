@@ -1,34 +1,57 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { usePlayer } from '../../composables/player';
+import { useThemeSettings } from '../../composables/useThemeSettings';
 import { useWindowMaterial } from '../../composables/windowMaterial';
 
-const { settings, currentCover, dominantColors, showPlayerDetail } = usePlayer();
+const { currentCover, dominantColors, showPlayerDetail } = usePlayer();
+const { theme, isDarkTheme } = useThemeSettings();
 const { activeWindowMaterial } = useWindowMaterial();
 
 const hasWindowMaterial = computed(() => activeWindowMaterial.value !== 'none');
 const isMicaWindowMaterial = computed(() => activeWindowMaterial.value === 'mica');
 const reduceDynamicEffects = computed(() => showPlayerDetail.value);
-const isDarkTheme = computed(() => settings.value.theme.mode === 'dark');
+const flowFallbackPalette = ['hsl(220, 28%, 34%)', 'hsl(196, 58%, 56%)', 'hsl(340, 52%, 58%)', 'hsl(42, 72%, 60%)'];
+const FLOW_SCENE_TRANSITION_MS = 1180;
+
+interface FlowLayerSnapshot {
+  id: number;
+  signature: string;
+  state: 'entering' | 'current' | 'previous';
+  shellClass: string;
+  colors: string[];
+  baseStyle: {
+    opacity: number;
+    background: string;
+  };
+  blobOpacity: number;
+  noiseOpacity: number;
+  overlayClass: string;
+  overlayStyle: {
+    opacity: number;
+  };
+  motionStyle: Record<string, string>;
+  reduceDynamicEffects: boolean;
+}
 
 const activeBackgroundInfo = computed(() => {
-  const theme = settings.value.theme;
+  const currentTheme = theme.value;
 
-  if (theme.mode === 'custom' && theme.customBackground.imagePath) {
+  if (currentTheme.mode === 'custom' && currentTheme.customBackground.imagePath) {
     return {
-      src: theme.customBackground.imagePath,
-      blur: theme.customBackground.blur,
-      opacity: theme.customBackground.opacity,
-      maskColor: theme.customBackground.maskColor,
-      maskAlpha: theme.customBackground.maskAlpha,
-      scale: theme.customBackground.scale,
+      src: currentTheme.customBackground.imagePath,
+      blur: currentTheme.customBackground.blur,
+      opacity: currentTheme.customBackground.opacity,
+      maskColor: currentTheme.customBackground.maskColor,
+      maskAlpha: currentTheme.customBackground.maskAlpha,
+      scale: currentTheme.customBackground.scale,
       isDynamic: false,
       type: 'custom' as const,
     };
   }
 
-  if (theme.dynamicBgType === 'flow') {
+  if (currentTheme.dynamicBgType === 'flow') {
     return {
       src: currentCover.value,
       blur: 60,
@@ -38,12 +61,12 @@ const activeBackgroundInfo = computed(() => {
     };
   }
 
-  if (theme.dynamicBgType === 'blur') {
+  if (currentTheme.dynamicBgType === 'blur') {
     return {
       src: currentCover.value,
-      blur: 50,
-      opacity: 0.7,
-      scale: 1.5,
+      blur: 40,
+      opacity: 0.75,
+      scale: 1.25,
       isDynamic: false,
       type: 'blur' as const,
     };
@@ -71,19 +94,224 @@ const dynamicShellClass = computed(() => {
   return 'bg-white dark:bg-[#1a1a1a]';
 });
 
-const dynamicBaseOpacity = computed(() => (isMicaWindowMaterial.value ? 0.14 : 0.4));
-const dynamicBlobOpacity = computed(() => (isMicaWindowMaterial.value ? 0.2 : 0.6));
-const dynamicNoiseOpacity = computed(() => (isMicaWindowMaterial.value ? 0.01 : 0.025));
+const flowColorBoostFactor = computed(() => theme.value.flowColorBoost / 100);
+const flowDepthFactor = computed(() => theme.value.flowDepth / 100);
+const flowSpeedFactor = computed(() => theme.value.flowSpeed / 100);
+const flowTextureFactor = computed(() => theme.value.flowTexture / 100);
+
+const resolvedFlowColors = computed(() => {
+  const colors = dominantColors.value.filter(color => color && color !== 'transparent');
+  return colors.length >= 3 ? colors : flowFallbackPalette;
+});
+
+const dynamicBaseOpacity = computed(() => {
+  const baseOpacity = 0.36 + flowColorBoostFactor.value * 0.15 - flowDepthFactor.value * 0.05;
+  return isMicaWindowMaterial.value ? Math.max(0.14, baseOpacity * 0.36) : Math.max(0.34, baseOpacity);
+});
+
+const dynamicBlobOpacity = computed(() => {
+  const blobOpacity = 0.45 + flowColorBoostFactor.value * 0.18;
+  return isMicaWindowMaterial.value ? Math.max(0.18, blobOpacity * 0.34) : Math.min(0.86, blobOpacity);
+});
+
+const dynamicNoiseOpacity = computed(() => {
+  const noiseOpacity = 0.004 + flowTextureFactor.value * 0.022;
+  return isMicaWindowMaterial.value ? noiseOpacity * 0.55 : noiseOpacity;
+});
+
+const flowMotionStyle = computed(() => {
+  const speedFactor = flowSpeedFactor.value;
+  const duration1 = 18 - speedFactor * 8;
+  const duration2 = 22 - speedFactor * 9;
+  const duration3 = 26 - speedFactor * 10;
+
+  return {
+    '--mesh-duration-1': `${duration1.toFixed(2)}s`,
+    '--mesh-duration-2': `${duration2.toFixed(2)}s`,
+    '--mesh-duration-3': `${duration3.toFixed(2)}s`,
+  };
+});
+
+const dynamicBaseStyle = computed(() => {
+  const [base, accent, edge, glow] = resolvedFlowColors.value;
+  const depthFactor = flowDepthFactor.value;
+
+  return {
+    opacity: dynamicBaseOpacity.value,
+    background: [
+      `radial-gradient(circle at 18% 18%, ${accent} 0%, transparent ${38 + depthFactor * 8}%)`,
+      `radial-gradient(circle at 82% 78%, ${glow || edge || base} 0%, transparent ${42 + depthFactor * 10}%)`,
+      `linear-gradient(135deg, ${base} 0%, ${edge || accent || base} 100%)`,
+    ].join(', '),
+  };
+});
 
 const dynamicOverlayClass = computed(() => {
-  if (isMicaWindowMaterial.value) return 'bg-white/[0.02] dark:bg-black/[0.06]';
-  if (hasWindowMaterial.value) return 'bg-white/0 dark:bg-black/20';
-  return 'bg-white/5 dark:bg-black/40';
+  if (isMicaWindowMaterial.value) return 'bg-white/[0.02] dark:bg-black/[0.08]';
+  if (hasWindowMaterial.value) return 'bg-white/[0.02] dark:bg-black/[0.16]';
+  return 'bg-white/[0.03] dark:bg-black/[0.22]';
+});
+
+const dynamicOverlayStyle = computed(() => {
+  const overlayOpacity = 0.91 + flowDepthFactor.value * 0.26 - flowColorBoostFactor.value * 0.08;
+  return { opacity: Math.min(1.1, Math.max(0.80, overlayOpacity)) };
+});
+
+// signature 只追踪「需要触发整层切换」的极少数条件
+// 颜色变化通过 CSS transition-colors 在当前层内平滑渐变
+const flowSceneSignature = computed(() => {
+  if (activeBackgroundInfo.value?.type !== 'flow') return null;
+  return JSON.stringify({
+    shellClass: dynamicShellClass.value,
+    reduceDynamicEffects: reduceDynamicEffects.value,
+  });
+});
+
+const flowScene = computed(() => {
+  if (activeBackgroundInfo.value?.type !== 'flow') {
+    return null;
+  }
+
+  const colors = [...resolvedFlowColors.value];
+  const baseStyle = { ...dynamicBaseStyle.value };
+  const overlayStyle = { ...dynamicOverlayStyle.value };
+  const motionStyle = { ...flowMotionStyle.value };
+
+  return {
+    signature: flowSceneSignature.value!,
+    shellClass: dynamicShellClass.value,
+    colors,
+    baseStyle,
+    blobOpacity: dynamicBlobOpacity.value,
+    noiseOpacity: dynamicNoiseOpacity.value,
+    overlayClass: dynamicOverlayClass.value,
+    overlayStyle,
+    motionStyle,
+    reduceDynamicEffects: reduceDynamicEffects.value,
+  };
+});
+
+const flowLayers = ref<FlowLayerSnapshot[]>([]);
+
+let flowLayerId = 0;
+let flowTransitionTimer: ReturnType<typeof setTimeout> | null = null;
+let flowEnterAnimationFrame: number | null = null;
+
+function clearFlowTransitionTimer() {
+  if (flowTransitionTimer) {
+    clearTimeout(flowTransitionTimer);
+    flowTransitionTimer = null;
+  }
+}
+
+function clearFlowEnterAnimationFrame() {
+  if (flowEnterAnimationFrame !== null) {
+    cancelAnimationFrame(flowEnterAnimationFrame);
+    flowEnterAnimationFrame = null;
+  }
+}
+
+function buildFlowLayerSnapshot(scene: NonNullable<typeof flowScene.value>): FlowLayerSnapshot {
+  return {
+    id: ++flowLayerId,
+    signature: scene.signature,
+    state: 'entering',
+    shellClass: scene.shellClass,
+    colors: scene.colors,
+    baseStyle: scene.baseStyle,
+    blobOpacity: scene.blobOpacity,
+    noiseOpacity: scene.noiseOpacity,
+    overlayClass: scene.overlayClass,
+    overlayStyle: scene.overlayStyle,
+    motionStyle: scene.motionStyle,
+    reduceDynamicEffects: scene.reduceDynamicEffects,
+  };
+}
+
+// 只有 signature 变了（颜色/shell 切换）才触发溶解过场
+watch(flowSceneSignature, (newSig) => {
+  if (!newSig) {
+    clearFlowTransitionTimer();
+    clearFlowEnterAnimationFrame();
+    flowLayers.value = [];
+    return;
+  }
+
+  const nextScene = flowScene.value!;
+  const currentLayer = flowLayers.value.find(layer => layer.state === 'current');
+  if (!currentLayer) {
+    const initialLayer = buildFlowLayerSnapshot(nextScene);
+    flowLayers.value = [initialLayer];
+    void nextTick(() => {
+      clearFlowEnterAnimationFrame();
+      flowEnterAnimationFrame = requestAnimationFrame(() => {
+        flowLayers.value = flowLayers.value.map(layer => (
+          layer.id === initialLayer.id
+            ? { ...layer, state: 'current' }
+            : layer
+        ));
+        flowEnterAnimationFrame = null;
+      });
+    });
+    return;
+  }
+
+  const nextLayer = buildFlowLayerSnapshot(nextScene);
+  flowLayers.value = [
+    { ...currentLayer, state: 'previous' },
+    nextLayer,
+  ];
+
+  void nextTick(() => {
+    clearFlowEnterAnimationFrame();
+    flowEnterAnimationFrame = requestAnimationFrame(() => {
+      flowLayers.value = flowLayers.value.map(layer => (
+        layer.id === nextLayer.id
+          ? { ...layer, state: 'current' }
+          : layer
+      ));
+      flowEnterAnimationFrame = null;
+    });
+  });
+
+  clearFlowTransitionTimer();
+  flowTransitionTimer = setTimeout(() => {
+    flowLayers.value = flowLayers.value.filter(layer => layer.state === 'current');
+    flowTransitionTimer = null;
+  }, FLOW_SCENE_TRANSITION_MS);
+}, { immediate: true });
+
+// 所有视觉参数变化时直接 patch 当前层（利用模板上已有的 CSS transition 平滑渐变）
+watch(
+  [resolvedFlowColors, dynamicBaseStyle, dynamicBlobOpacity, dynamicNoiseOpacity, dynamicOverlayClass, dynamicOverlayStyle, flowMotionStyle],
+  () => {
+    const nextScene = flowScene.value;
+    if (!nextScene) return;
+    flowLayers.value = flowLayers.value.map(layer =>
+      layer.state === 'current'
+        ? {
+            ...layer,
+            colors: nextScene.colors,
+            baseStyle: nextScene.baseStyle,
+            blobOpacity: nextScene.blobOpacity,
+            noiseOpacity: nextScene.noiseOpacity,
+            overlayClass: nextScene.overlayClass,
+            overlayStyle: nextScene.overlayStyle,
+            motionStyle: nextScene.motionStyle,
+          }
+        : layer,
+    );
+  },
+);
+
+onBeforeUnmount(() => {
+  clearFlowTransitionTimer();
+  clearFlowEnterAnimationFrame();
 });
 
 const staticMaskClass = computed(() => {
   if (isMicaWindowMaterial.value) return 'bg-white/40 dark:bg-black/35';
-  return 'bg-black/20';
+  return 'bg-white/50 dark:bg-black/50';
 });
 
 const staticImageOpacity = computed(() => (isMicaWindowMaterial.value ? 0.35 : 1));
@@ -109,7 +337,7 @@ const materialScrimStyle = computed(() => {
   <div
     class="fixed inset-0 z-0 overflow-hidden pointer-events-none transition-colors duration-500"
     :class="[
-      settings.theme.mode === 'custom'
+      theme.mode === 'custom'
         ? 'bg-black'
         : hasWindowMaterial
           ? 'bg-transparent'
@@ -124,41 +352,59 @@ const materialScrimStyle = computed(() => {
 
     <transition name="fade">
       <div
-        v-if="activeBackgroundInfo?.isDynamic"
+        v-if="activeBackgroundInfo?.isDynamic && flowLayers.length > 0"
         class="absolute inset-0 overflow-hidden"
-        :class="dynamicShellClass"
       >
         <div
-          class="absolute inset-0 transition-colors duration-[1500ms]"
-          :style="{ backgroundColor: dominantColors[0], opacity: dynamicBaseOpacity }"
-        ></div>
-
-        <div
-          v-if="!reduceDynamicEffects"
-          class="absolute inset-0 filter blur-[120px]"
-          :style="{ opacity: dynamicBlobOpacity }"
+          v-for="layer in flowLayers"
+          :key="layer.id"
+          class="flow-layer absolute inset-0 overflow-hidden"
+          :class="[
+            layer.shellClass,
+            layer.state === 'previous'
+              ? 'flow-layer-previous'
+              : layer.state === 'entering'
+                ? 'flow-layer-entering'
+                : 'flow-layer-current',
+          ]"
+          :style="layer.motionStyle"
         >
           <div
-            class="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-1 transition-colors duration-[1500ms]"
-            :style="{ backgroundColor: dominantColors[1] }"
+            class="absolute inset-0 transition-colors duration-[1500ms]"
+            :style="layer.baseStyle"
           ></div>
+
           <div
-            class="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-2 transition-colors duration-[1500ms]"
-            :style="{ backgroundColor: dominantColors[2] || dominantColors[0] }"
+            v-if="!layer.reduceDynamicEffects"
+            class="absolute inset-0 filter blur-[120px]"
+            :style="{ opacity: layer.blobOpacity }"
+          >
+            <div
+              class="absolute top-[-10%] left-[-10%] h-[60%] w-[60%] rounded-full mix-blend-multiply transition-colors duration-[1500ms] dark:mix-blend-screen animate-mesh-1"
+              :style="{ backgroundColor: layer.colors[1] }"
+            ></div>
+            <div
+              class="absolute bottom-[-10%] right-[-10%] h-[60%] w-[60%] rounded-full mix-blend-multiply transition-colors duration-[1500ms] dark:mix-blend-screen animate-mesh-2"
+              :style="{ backgroundColor: layer.colors[2] || layer.colors[0] }"
+            ></div>
+            <div
+              class="absolute top-[20%] right-[-10%] h-[70%] w-[70%] rounded-full mix-blend-multiply transition-colors duration-[1500ms] dark:mix-blend-screen animate-mesh-3"
+              :style="{ backgroundColor: layer.colors[3] || layer.colors[1] }"
+            ></div>
+          </div>
+
+          <div
+            v-if="!layer.reduceDynamicEffects"
+            class="absolute inset-0 z-10 bg-noise pointer-events-none"
+            :style="{ opacity: layer.noiseOpacity }"
           ></div>
+
           <div
-            class="absolute top-[20%] right-[-10%] w-[70%] h-[70%] rounded-full mix-blend-multiply dark:mix-blend-screen animate-mesh-3 transition-colors duration-[1500ms]"
-            :style="{ backgroundColor: dominantColors[3] || dominantColors[1] }"
+            class="absolute inset-0 z-20"
+            :class="layer.overlayClass"
+            :style="layer.overlayStyle"
           ></div>
         </div>
-
-        <div
-          v-if="!reduceDynamicEffects"
-          class="absolute inset-0 pointer-events-none z-10 bg-noise"
-          :style="{ opacity: dynamicNoiseOpacity }"
-        ></div>
-
-        <div class="absolute inset-0 z-20" :class="dynamicOverlayClass"></div>
       </div>
     </transition>
 
@@ -166,15 +412,14 @@ const materialScrimStyle = computed(() => {
       <div
         v-if="activeBackgroundInfo?.type === 'blur' && bgImageSrc"
         :key="bgImageSrc"
-        class="absolute inset-0 bg-black"
-        :style="{ filter: `brightness(${activeBackgroundInfo.opacity})` }"
+        class="absolute inset-0"
       >
-        <div class="absolute inset-0 z-10" :class="staticMaskClass"></div>
+        <div class="absolute inset-0 z-10 transition-colors duration-500" :class="staticMaskClass"></div>
         <img
           :src="bgImageSrc"
           class="w-full h-full object-cover transition-all duration-1000 z-0"
           :style="{
-            filter: `blur(${isMicaWindowMaterial ? Math.min(activeBackgroundInfo.blur, 26) : activeBackgroundInfo.blur}px)`,
+            filter: `blur(${isMicaWindowMaterial ? Math.min(activeBackgroundInfo.blur, 26) : activeBackgroundInfo.blur}px) brightness(${activeBackgroundInfo.opacity})`,
             transform: `scale(${activeBackgroundInfo.scale})`,
             opacity: staticImageOpacity,
           }"
@@ -233,6 +478,32 @@ const materialScrimStyle = computed(() => {
   opacity: 0;
 }
 
+.flow-layer {
+  will-change: opacity, transform, filter;
+  transition:
+    opacity 920ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 920ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 920ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.flow-layer-current {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+}
+
+.flow-layer-entering {
+  opacity: 0;
+  transform: scale(1.028);
+  filter: blur(10px);
+}
+
+.flow-layer-previous {
+  opacity: 0;
+  transform: scale(1.048);
+  filter: blur(16px);
+}
+
 .bg-noise {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3%3Ffilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/feTurbulence%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
 }
@@ -261,7 +532,7 @@ const materialScrimStyle = computed(() => {
   100% { transform: translate(10%, 30%) scale(0.9) rotate(360deg); }
 }
 
-.animate-mesh-1 { animation: mesh-1 6s linear infinite; }
-.animate-mesh-2 { animation: mesh-2 8s linear infinite; }
-.animate-mesh-3 { animation: mesh-3 10s linear infinite; }
+.animate-mesh-1 { animation: mesh-1 var(--mesh-duration-1, 14s) ease-in-out infinite; }
+.animate-mesh-2 { animation: mesh-2 var(--mesh-duration-2, 18s) ease-in-out infinite; }
+.animate-mesh-3 { animation: mesh-3 var(--mesh-duration-3, 22s) ease-in-out infinite; }
 </style>

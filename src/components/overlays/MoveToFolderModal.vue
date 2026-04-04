@@ -2,8 +2,9 @@
 import { computed, ref, watch } from 'vue';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 
-import { usePlayer } from '../../composables/player';
-import type { FolderNode } from '../../composables/playerState';
+import { usePlayerLibraryView } from '../../features/library/usePlayerLibraryView';
+import { usePlayerViewState } from '../../composables/usePlayerViewState';
+import type { FolderNode } from '../../types';
 
 const props = defineProps<{
   visible: boolean;
@@ -19,7 +20,8 @@ type MoveFolderOption = {
   firstSongPath: string;
 };
 
-const { folderList, folderTree, activeRootPath, currentViewMode } = usePlayer();
+const { folderList, libraryHierarchy } = usePlayerLibraryView();
+const { activeRootPath, currentViewMode } = usePlayerViewState();
 const folderCoverCache = ref<Map<string, string>>(new Map());
 
 const flattenFolderTree = (node: FolderNode, result: MoveFolderOption[]) => {
@@ -35,7 +37,7 @@ const flattenFolderTree = (node: FolderNode, result: MoveFolderOption[]) => {
 
 const availableFolders = computed<MoveFolderOption[]>(() => {
   if (currentViewMode.value === 'folder' && activeRootPath.value) {
-    const rootNode = folderTree.value.find(node => node.path === activeRootPath.value);
+    const rootNode = libraryHierarchy.value.find(node => node.path === activeRootPath.value);
     if (rootNode) {
       const result: MoveFolderOption[] = [];
       flattenFolderTree(rootNode, result);

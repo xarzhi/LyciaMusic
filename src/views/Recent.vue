@@ -60,9 +60,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
-import { usePlayer, Song } from '../composables/player';
+import { computed, ref, watch } from 'vue';
+import type { Song } from '../types';
+import { useLibraryCollections } from '../features/collections/useLibraryCollections';
+import { usePlaybackController } from '../features/playback/usePlaybackController';
+import { usePlayerLibraryView } from '../features/library/usePlayerLibraryView';
 import { useToast } from '../composables/toast';
 
 // 组件导入
@@ -74,24 +76,15 @@ import SongContextMenu from '../components/overlays/SongContextMenu.vue';
 import ModernModal from '../components/common/ModernModal.vue';
 import { useSongDrag } from '../composables/useSongDrag';
 
-const route = useRoute();
-
-const { 
-  displaySongList, 
-  playSong, 
+const { displaySongList } = usePlayerLibraryView();
+const { playSong, addSongsToQueue } = usePlaybackController();
+const {
   addSongsToPlaylist,
   removeFromHistory,
   clearHistory,
-  switchToRecent,
-  currentViewMode
-} = usePlayer();
+} = useLibraryCollections();
 
-const localSongList = ref<Song[]>([]);
-watch(displaySongList, (newVal) => {
-  if (currentViewMode.value === 'recent') {
-    localSongList.value = newVal;
-  }
-}, { immediate: true });
+const localSongList = computed(() => displaySongList.value);
 
 // ========== 状态管理 ==========
 const isBatchMode = ref(false);
@@ -119,19 +112,20 @@ watch(isBatchMode, (val) => { if (!val) selectedPaths.value.clear(); });
 // 播放全部
 const handlePlayAll = () => {
   if (localSongList.value.length > 0) {
-    playSong(localSongList.value[0]);
+    void playSong(localSongList.value[0]);
   }
 };
 
 const handleAddAllToQueue = () => {
-  const { addSongsToQueue } = usePlayer();
   addSongsToQueue(localSongList.value);
 };
 
 // 批量播放
 const handleBatchPlay = () => {
   const selected = localSongList.value.filter(s => selectedPaths.value.has(s.path));
-  if (selected.length > 0) playSong(selected[0]);
+  if (selected.length > 0) {
+    void playSong(selected[0]);
+  }
 };
 
 // 批量删除（从最近播放移除）
@@ -186,9 +180,4 @@ const handleContextMenu = (e: MouseEvent, song: Song) => {
 };
 
 // ========== 路由监听 ==========
-watch(() => route.path, (path) => {
-  if (path === '/recent') {
-    switchToRecent();
-  }
-}, { immediate: true });
 </script>

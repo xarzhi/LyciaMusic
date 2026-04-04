@@ -67,7 +67,7 @@ const validCount = computed(() => props.items.filter(i => i.status !== 'skipped'
       ></div>
 
       <div 
-        class="relative bg-white/95 dark:bg-[#2b2b2b] backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden transform transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)"
+        class="relative bg-white/30 dark:bg-black/20 backdrop-blur-md rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden transform transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)"
         :class="[
           isClosing ? 'scale-95 opacity-0 translate-y-4' : 'scale-100 opacity-100 translate-y-0',
           'border border-white/20 ring-1 ring-black/5'
@@ -76,13 +76,13 @@ const validCount = computed(() => props.items.filter(i => i.status !== 'skipped'
         <!-- Header -->
         <div class="px-6 py-4 border-b border-gray-200 dark:border-white/10 flex justify-between items-center bg-gray-50/50 dark:bg-white/5">
           <h3 class="text-lg font-bold text-gray-900 dark:text-white">预览修改</h3>
-          <span class="text-sm text-gray-500 dark:text-gray-400">即将修改 {{ validCount }} 个文件</span>
+          <span class="text-sm text-gray-600 dark:text-white/60">即将修改 {{ validCount }} 个文件</span>
         </div>
 
         <!-- Table -->
         <div class="flex-1 overflow-y-auto p-0 custom-scrollbar">
             <table class="w-full text-left text-sm">
-                <thead class="bg-gray-50 dark:bg-white/5 sticky top-0 z-10 text-gray-500 dark:text-gray-400 font-medium">
+                <thead class="bg-gray-50 dark:bg-white/5 sticky top-0 z-10 text-gray-600 dark:text-white/60 font-medium">
                     <tr>
                         <th class="px-6 py-3 w-16 text-center">状态</th>
                         <th class="px-6 py-3 w-[40%]">原文件名</th>

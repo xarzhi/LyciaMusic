@@ -1,0 +1,994 @@
+<script setup lang="ts">
+import { Check, ChevronDown, Type } from 'lucide-vue-next';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+
+import {
+  DEFAULT_DESKTOP_PLAYER_ALIGNMENT,
+  DEFAULT_PLAYER_FONT_PRESET,
+  DEFAULT_PLAYER_FONT_SCALE,
+  DEFAULT_PLAYER_LINE_GAP,
+  DEFAULT_PLAYER_OFFSET_X,
+  DEFAULT_PLAYER_OFFSET_Y,
+  LYRICS_FONT_OPTIONS,
+  MAX_PLAYER_FONT_SCALE,
+  MAX_PLAYER_LINE_GAP,
+  MAX_PLAYER_OFFSET_X,
+  MAX_PLAYER_OFFSET_Y,
+  MIN_PLAYER_FONT_SCALE,
+  MIN_PLAYER_LINE_GAP,
+  MIN_PLAYER_OFFSET_X,
+  MIN_PLAYER_OFFSET_Y,
+  getLyricsFontFamily,
+  loadSystemLyricsFonts,
+  normalizeLyricsFontPreset,
+  systemLyricsFontOptions,
+  type LyricsColorScheme,
+  type LyricsFontPreset,
+  type LyricsPlayerAlignment,
+  useLyrics,
+} from '../../composables/lyrics';
+import { useSettings } from '../../features/settings/useSettings';
+
+const FONT_SCALE_STEP = 0.05;
+const LINE_GAP_STEP = 0.05;
+const OFFSET_STEP = 1;
+
+const ALIGNMENT_OPTIONS: Array<{ value: LyricsPlayerAlignment; label: string }> = [
+  { value: 'left', label: '靠左' },
+  { value: 'center', label: '居中' },
+  { value: 'right', label: '靠右' },
+];
+
+const COLOR_SCHEME_OPTIONS: Array<{
+  value: LyricsColorScheme;
+  label: string;
+  hint: string;
+}> = [
+  { value: 'auto', label: '封面取色', hint: '跟随当前歌曲封面颜色' },
+  { value: 'default', label: '经典红', hint: '使用 Lycia 的默认红色方案' },
+  { value: 'pink', label: '柔粉', hint: '偏柔和、偏梦幻的粉色搭配' },
+  { value: 'blue', label: '澄蓝', hint: '更冷静的蓝色高亮' },
+  { value: 'green', label: '青绿', hint: '更清爽的绿色高亮' },
+  { value: 'white', label: '白色', hint: '使用当前这种偏白的清透高亮风格' },
+];
+
+const { settings } = useSettings();
+const { lyricsSettings, desktopLyricsSettings } = useLyrics();
+const fontPresetFieldRef = ref<HTMLElement | null>(null);
+const fontPresetMenuRef = ref<HTMLElement | null>(null);
+const isFontPresetMenuOpen = ref(false);
+
+const availableFontOptions = computed(() => [
+  ...LYRICS_FONT_OPTIONS,
+  ...systemLyricsFontOptions.value,
+]);
+
+const selectedFontLabel = computed(() => {
+  return availableFontOptions.value.find((option) => option.value === desktopLyricsSettings.playerFontPreset)?.label
+    ?? normalizeLyricsFontPreset(desktopLyricsSettings.playerFontPreset);
+});
+const selectedFontFamily = computed(() => {
+  return availableFontOptions.value.find((option) => option.value === desktopLyricsSettings.playerFontPreset)?.fontFamily
+    ?? getLyricsFontFamily(desktopLyricsSettings.playerFontPreset);
+});
+
+const fontScaleLabel = computed(() => `${Math.round(desktopLyricsSettings.playerFontScale * 100)}%`);
+const lineGapLabel = computed(() => `${Math.round(desktopLyricsSettings.playerLineGap * 100)}%`);
+const offsetXLabel = computed(() => formatOffsetValue(desktopLyricsSettings.playerOffsetX));
+const offsetYLabel = computed(() => formatOffsetValue(desktopLyricsSettings.playerOffsetY));
+
+const lyricsSyncOffsetMs = computed({
+  get: () => Math.round(settings.value.lyricsSyncOffset * 1000),
+  set: (value: number | string) => {
+    const next = typeof value === 'string' ? Number(value) : value;
+    settings.value.lyricsSyncOffset = clampLyricsSyncOffset(next) / 1000;
+  },
+});
+
+const lyricsSyncOffsetLabel = computed(() => {
+  const offset = lyricsSyncOffsetMs.value;
+  if (offset === 0) return '0 ms';
+  return `${offset > 0 ? '+' : ''}${offset} ms`;
+});
+
+function clampFontScale(value: number) {
+  return Math.min(MAX_PLAYER_FONT_SCALE, Math.max(MIN_PLAYER_FONT_SCALE, value));
+}
+
+function clampLineGap(value: number) {
+  return Math.min(MAX_PLAYER_LINE_GAP, Math.max(MIN_PLAYER_LINE_GAP, value));
+}
+
+function clampOffsetX(value: number) {
+  return Math.min(MAX_PLAYER_OFFSET_X, Math.max(MIN_PLAYER_OFFSET_X, value));
+}
+
+function clampOffsetY(value: number) {
+  return Math.min(MAX_PLAYER_OFFSET_Y, Math.max(MIN_PLAYER_OFFSET_Y, value));
+}
+
+function clampLyricsSyncOffset(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1000, Math.max(-1000, Math.round(value / 10) * 10));
+}
+
+function formatOffsetValue(value: number) {
+  return `${value > 0 ? '+' : ''}${Math.round(value)}%`;
+}
+
+function setDesktopFontScale(value: number) {
+  desktopLyricsSettings.playerFontScale = Number(clampFontScale(value).toFixed(2));
+}
+
+function setDesktopLineGap(value: number) {
+  desktopLyricsSettings.playerLineGap = Number(clampLineGap(value).toFixed(2));
+}
+
+function setDesktopOffsetX(value: number) {
+  desktopLyricsSettings.playerOffsetX = Number(clampOffsetX(value).toFixed(0));
+}
+
+function setDesktopOffsetY(value: number) {
+  desktopLyricsSettings.playerOffsetY = Number(clampOffsetY(value).toFixed(0));
+}
+
+function setDesktopAlignment(value: LyricsPlayerAlignment) {
+  desktopLyricsSettings.playerAlignment = value;
+}
+
+function setDesktopFontPreset(value: LyricsFontPreset) {
+  desktopLyricsSettings.playerFontPreset = normalizeLyricsFontPreset(value);
+}
+
+function setDesktopColorScheme(value: LyricsColorScheme) {
+  desktopLyricsSettings.colorScheme = value;
+}
+
+function resetLyricsSyncOffset() {
+  lyricsSyncOffsetMs.value = 0;
+}
+
+async function toggleFontPresetMenu() {
+  isFontPresetMenuOpen.value = !isFontPresetMenuOpen.value;
+
+  if (!isFontPresetMenuOpen.value) return;
+
+  await nextTick();
+
+  const activeItem = fontPresetMenuRef.value?.querySelector('.desktop-font-option--active') as HTMLElement | null;
+  activeItem?.scrollIntoView({ block: 'nearest' });
+}
+
+function closeFontPresetMenu() {
+  isFontPresetMenuOpen.value = false;
+}
+
+function selectDesktopFontPreset(value: LyricsFontPreset) {
+  setDesktopFontPreset(value);
+  closeFontPresetMenu();
+}
+
+function handlePointerDownOutside(event: MouseEvent) {
+  const target = event.target as Node | null;
+  if (!target) return;
+  if (fontPresetFieldRef.value?.contains(target)) return;
+  if (fontPresetMenuRef.value?.contains(target)) return;
+  closeFontPresetMenu();
+}
+
+function handleWindowEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    closeFontPresetMenu();
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('mousedown', handlePointerDownOutside);
+  window.addEventListener('keydown', handleWindowEscape);
+  void loadSystemLyricsFonts();
+});
+
+onUnmounted(() => {
+  window.removeEventListener('mousedown', handlePointerDownOutside);
+  window.removeEventListener('keydown', handleWindowEscape);
+});
+</script>
+
+<template>
+  <div class="w-full space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <section class="space-y-3">
+      <h2 class="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
+        <span class="h-4 w-1 rounded-full bg-[#EC4141]"></span>
+        显示与行为
+      </h2>
+      <div class="flex flex-col rounded-xl overflow-hidden">
+        <button
+          type="button"
+          class="desktop-setting-row"
+          @click="desktopLyricsSettings.isAlwaysOnTop = !desktopLyricsSettings.isAlwaysOnTop"
+        >
+          <div>
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">窗口置顶</div>
+            <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">让桌面歌词始终显示在其他窗口上方</div>
+          </div>
+          <span class="desktop-switch" :class="desktopLyricsSettings.isAlwaysOnTop ? 'desktop-switch--on' : ''">
+            <span class="desktop-switch-thumb" :class="desktopLyricsSettings.isAlwaysOnTop ? 'translate-x-5' : ''" />
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="desktop-setting-row"
+          @click="desktopLyricsSettings.alwaysShowShadowBackground = !desktopLyricsSettings.alwaysShowShadowBackground"
+        >
+          <div>
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">始终显示阴影背景</div>
+            <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">开启后，桌面歌词会持续显示底板阴影，不再只在显示或拖动时临时出现</div>
+          </div>
+          <span
+            class="desktop-switch"
+            :class="desktopLyricsSettings.alwaysShowShadowBackground ? 'desktop-switch--on' : ''"
+          >
+            <span
+              class="desktop-switch-thumb"
+              :class="desktopLyricsSettings.alwaysShowShadowBackground ? 'translate-x-5' : ''"
+            />
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="desktop-setting-row"
+          @click="desktopLyricsSettings.autoHideWhenFullscreen = !desktopLyricsSettings.autoHideWhenFullscreen"
+        >
+          <div>
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">全屏时自动隐藏</div>
+            <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">检测到前台全屏应用时，自动隐藏桌面歌词</div>
+          </div>
+          <span class="desktop-switch" :class="desktopLyricsSettings.autoHideWhenFullscreen ? 'desktop-switch--on' : ''">
+            <span class="desktop-switch-thumb" :class="desktopLyricsSettings.autoHideWhenFullscreen ? 'translate-x-5' : ''" />
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="desktop-setting-row"
+          @click="desktopLyricsSettings.isLocked = !desktopLyricsSettings.isLocked"
+        >
+          <div>
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">锁定位置并启用鼠标穿透</div>
+            <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">锁定后无法拖动桌面歌词，鼠标操作会穿透到下层窗口</div>
+          </div>
+          <span class="desktop-switch" :class="desktopLyricsSettings.isLocked ? 'desktop-switch--on' : ''">
+            <span class="desktop-switch-thumb" :class="desktopLyricsSettings.isLocked ? 'translate-x-5' : ''" />
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="desktop-setting-row"
+          @click="desktopLyricsSettings.persistLock = !desktopLyricsSettings.persistLock"
+        >
+          <div>
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">记住锁定状态</div>
+            <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">下次启动软件时，继续沿用当前锁定状态</div>
+          </div>
+          <span class="desktop-switch" :class="desktopLyricsSettings.persistLock ? 'desktop-switch--on' : ''">
+            <span class="desktop-switch-thumb" :class="desktopLyricsSettings.persistLock ? 'translate-x-5' : ''" />
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="desktop-setting-row"
+          @click="lyricsSettings.showTranslation = !lyricsSettings.showTranslation"
+        >
+          <div>
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">显示翻译</div>
+            <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">当歌词含翻译时，在桌面歌词中同时显示</div>
+          </div>
+          <span class="desktop-switch" :class="lyricsSettings.showTranslation ? 'desktop-switch--on' : ''">
+            <span class="desktop-switch-thumb" :class="lyricsSettings.showTranslation ? 'translate-x-5' : ''" />
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="desktop-setting-row"
+          @click="lyricsSettings.showRomaji = !lyricsSettings.showRomaji"
+        >
+          <div>
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">显示罗马音</div>
+            <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">当歌词含罗马音时，在桌面歌词中同时显示</div>
+          </div>
+          <span class="desktop-switch" :class="lyricsSettings.showRomaji ? 'desktop-switch--on' : ''">
+            <span class="desktop-switch-thumb" :class="lyricsSettings.showRomaji ? 'translate-x-5' : ''" />
+          </span>
+        </button>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
+        <span class="h-4 w-1 rounded-full bg-[#EC4141]"></span>
+        歌词同步
+      </h2>
+      <div class="rounded-2xl border border-white/30 bg-white/55 p-5 shadow-sm dark:border-white/8 dark:bg-black/20">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">同步偏移</div>
+            <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">
+              正值会让歌词更晚显示，负值会让歌词更早显示，可用于校正不同输出设备带来的延迟差异。
+            </div>
+          </div>
+          <div class="rounded-full bg-[#EC4141]/10 px-3 py-1 text-xs font-medium text-[#EC4141] tabular-nums">
+            {{ lyricsSyncOffsetLabel }}
+          </div>
+        </div>
+
+        <div class="mt-5 flex flex-col gap-4 md:flex-row md:items-center">
+          <input
+            v-model="lyricsSyncOffsetMs"
+            type="range"
+            min="-1000"
+            max="1000"
+            step="10"
+            class="desktop-slider flex-1"
+          />
+          <div class="flex items-center gap-3">
+            <input
+              v-model="lyricsSyncOffsetMs"
+              type="number"
+              min="-1000"
+              max="1000"
+              step="10"
+              class="w-28 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-[#EC4141] dark:border-white/10 dark:bg-white/5 dark:text-gray-100"
+            />
+            <button
+              type="button"
+              class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 transition hover:border-[#EC4141] hover:text-[#EC4141] dark:border-white/10 dark:bg-white/5 dark:text-gray-200"
+              @click="resetLyricsSyncOffset"
+            >
+              重置
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
+        <span class="h-4 w-1 rounded-full bg-[#EC4141]"></span>
+        排版与字体
+      </h2>
+      <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div class="desktop-card">
+          <div class="desktop-card-header">
+            <div>
+              <div class="text-sm font-medium text-gray-800 dark:text-gray-200">字号</div>
+              <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">调节桌面歌词的整体字体缩放</div>
+            </div>
+            <button
+              v-if="desktopLyricsSettings.playerFontScale !== DEFAULT_PLAYER_FONT_SCALE"
+              type="button"
+              class="desktop-reset-button"
+              @click="setDesktopFontScale(DEFAULT_PLAYER_FONT_SCALE)"
+            >
+              重置
+            </button>
+          </div>
+          <div class="desktop-card-value">{{ fontScaleLabel }}</div>
+          <div class="desktop-slider-row">
+            <button type="button" class="desktop-mini-button" @click="setDesktopFontScale(desktopLyricsSettings.playerFontScale - FONT_SCALE_STEP)">-</button>
+            <input
+              :value="desktopLyricsSettings.playerFontScale"
+              type="range"
+              :min="MIN_PLAYER_FONT_SCALE"
+              :max="MAX_PLAYER_FONT_SCALE"
+              :step="FONT_SCALE_STEP"
+              class="desktop-slider flex-1"
+              @input="setDesktopFontScale(Number(($event.target as HTMLInputElement).value))"
+            />
+            <button type="button" class="desktop-mini-button" @click="setDesktopFontScale(desktopLyricsSettings.playerFontScale + FONT_SCALE_STEP)">+</button>
+          </div>
+        </div>
+
+        <div class="desktop-card">
+          <div class="desktop-card-header">
+            <div>
+              <div class="text-sm font-medium text-gray-800 dark:text-gray-200">行距</div>
+              <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">控制主歌词与副歌词之间的呼吸感</div>
+            </div>
+            <button
+              v-if="desktopLyricsSettings.playerLineGap !== DEFAULT_PLAYER_LINE_GAP"
+              type="button"
+              class="desktop-reset-button"
+              @click="setDesktopLineGap(DEFAULT_PLAYER_LINE_GAP)"
+            >
+              重置
+            </button>
+          </div>
+          <div class="desktop-card-value">{{ lineGapLabel }}</div>
+          <div class="desktop-slider-row">
+            <button type="button" class="desktop-mini-button" @click="setDesktopLineGap(desktopLyricsSettings.playerLineGap - LINE_GAP_STEP)">-</button>
+            <input
+              :value="desktopLyricsSettings.playerLineGap"
+              type="range"
+              :min="MIN_PLAYER_LINE_GAP"
+              :max="MAX_PLAYER_LINE_GAP"
+              :step="LINE_GAP_STEP"
+              class="desktop-slider flex-1"
+              @input="setDesktopLineGap(Number(($event.target as HTMLInputElement).value))"
+            />
+            <button type="button" class="desktop-mini-button" @click="setDesktopLineGap(desktopLyricsSettings.playerLineGap + LINE_GAP_STEP)">+</button>
+          </div>
+        </div>
+
+        <div class="desktop-card">
+          <div class="desktop-card-header">
+            <div>
+              <div class="text-sm font-medium text-gray-800 dark:text-gray-200">横向偏移</div>
+              <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">微调歌词块在桌面歌词窗口中的水平位置</div>
+            </div>
+            <button
+              v-if="desktopLyricsSettings.playerOffsetX !== DEFAULT_PLAYER_OFFSET_X"
+              type="button"
+              class="desktop-reset-button"
+              @click="setDesktopOffsetX(DEFAULT_PLAYER_OFFSET_X)"
+            >
+              重置
+            </button>
+          </div>
+          <div class="desktop-card-value">{{ offsetXLabel }}</div>
+          <div class="desktop-slider-row">
+            <button type="button" class="desktop-mini-button" @click="setDesktopOffsetX(desktopLyricsSettings.playerOffsetX - OFFSET_STEP)">-</button>
+            <input
+              :value="desktopLyricsSettings.playerOffsetX"
+              type="range"
+              :min="MIN_PLAYER_OFFSET_X"
+              :max="MAX_PLAYER_OFFSET_X"
+              :step="OFFSET_STEP"
+              class="desktop-slider flex-1"
+              @input="setDesktopOffsetX(Number(($event.target as HTMLInputElement).value))"
+            />
+            <button type="button" class="desktop-mini-button" @click="setDesktopOffsetX(desktopLyricsSettings.playerOffsetX + OFFSET_STEP)">+</button>
+          </div>
+        </div>
+
+        <div class="desktop-card">
+          <div class="desktop-card-header">
+            <div>
+              <div class="text-sm font-medium text-gray-800 dark:text-gray-200">纵向偏移</div>
+              <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">微调歌词块在桌面歌词窗口中的垂直位置</div>
+            </div>
+            <button
+              v-if="desktopLyricsSettings.playerOffsetY !== DEFAULT_PLAYER_OFFSET_Y"
+              type="button"
+              class="desktop-reset-button"
+              @click="setDesktopOffsetY(DEFAULT_PLAYER_OFFSET_Y)"
+            >
+              重置
+            </button>
+          </div>
+          <div class="desktop-card-value">{{ offsetYLabel }}</div>
+          <div class="desktop-slider-row">
+            <button type="button" class="desktop-mini-button" @click="setDesktopOffsetY(desktopLyricsSettings.playerOffsetY - OFFSET_STEP)">-</button>
+            <input
+              :value="desktopLyricsSettings.playerOffsetY"
+              type="range"
+              :min="MIN_PLAYER_OFFSET_Y"
+              :max="MAX_PLAYER_OFFSET_Y"
+              :step="OFFSET_STEP"
+              class="desktop-slider flex-1"
+              @input="setDesktopOffsetY(Number(($event.target as HTMLInputElement).value))"
+            />
+            <button type="button" class="desktop-mini-button" @click="setDesktopOffsetY(desktopLyricsSettings.playerOffsetY + OFFSET_STEP)">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="desktop-card">
+        <div class="desktop-card-header">
+          <div>
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">对齐方式</div>
+            <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">决定歌词文本在桌面歌词中的排列方向</div>
+          </div>
+          <button
+            v-if="desktopLyricsSettings.playerAlignment !== DEFAULT_DESKTOP_PLAYER_ALIGNMENT"
+            type="button"
+            class="desktop-reset-button"
+            @click="setDesktopAlignment(DEFAULT_DESKTOP_PLAYER_ALIGNMENT)"
+          >
+            重置
+          </button>
+        </div>
+        <div class="mt-4 flex flex-wrap gap-3">
+          <button
+            v-for="option in ALIGNMENT_OPTIONS"
+            :key="option.value"
+            type="button"
+            class="desktop-chip"
+            :class="desktopLyricsSettings.playerAlignment === option.value ? 'desktop-chip--active' : ''"
+            @click="setDesktopAlignment(option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+      </div>
+
+      <div class="desktop-card">
+        <div class="desktop-card-header">
+          <div>
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">字体</div>
+            <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">桌面歌词会使用这里选中的字体方案</div>
+          </div>
+          <button
+            v-if="desktopLyricsSettings.playerFontPreset !== DEFAULT_PLAYER_FONT_PRESET"
+            type="button"
+            class="desktop-reset-button"
+            @click="setDesktopFontPreset(DEFAULT_PLAYER_FONT_PRESET)"
+          >
+            重置
+          </button>
+        </div>
+        <div class="mt-4 flex flex-col gap-3 md:flex-row md:items-start">
+          <div ref="fontPresetFieldRef" class="desktop-font-picker min-w-0 flex-1">
+            <button
+              type="button"
+              class="desktop-font-trigger"
+              :class="isFontPresetMenuOpen ? 'desktop-font-trigger--open' : ''"
+              @click="toggleFontPresetMenu"
+            >
+              <div class="desktop-font-trigger-icon">
+                <Type :size="16" />
+              </div>
+              <div class="min-w-0 flex-1 text-left">
+                <div class="truncate text-[15px] font-semibold text-gray-800 dark:text-gray-100" :style="{ fontFamily: selectedFontFamily }">
+                  {{ selectedFontLabel }}
+                </div>
+                <div class="mt-1 truncate text-xs text-gray-500 dark:text-white/45">
+                  点击选择桌面歌词字体
+                </div>
+              </div>
+              <ChevronDown
+                :size="18"
+                class="shrink-0 text-gray-400 transition-transform duration-200 dark:text-white/45"
+                :class="isFontPresetMenuOpen ? 'rotate-180 text-[#EC4141]' : ''"
+              />
+            </button>
+
+            <transition name="desktop-font-menu">
+              <div
+                v-if="isFontPresetMenuOpen"
+                ref="fontPresetMenuRef"
+                class="desktop-font-menu"
+              >
+                <div class="desktop-font-menu-header">
+                  <span>字体方案</span>
+                  <span>{{ availableFontOptions.length }} 项</span>
+                </div>
+                <div class="desktop-font-menu-list custom-scrollbar">
+                  <button
+                    v-for="option in availableFontOptions"
+                    :key="option.value"
+                    type="button"
+                    class="desktop-font-option"
+                    :class="desktopLyricsSettings.playerFontPreset === option.value ? 'desktop-font-option--active' : ''"
+                    @click="selectDesktopFontPreset(option.value)"
+                  >
+                    <div class="min-w-0 flex-1">
+                      <div class="truncate text-sm font-semibold" :style="{ fontFamily: option.fontFamily }">
+                        {{ option.label }}
+                      </div>
+                    </div>
+                    <Check
+                      v-if="desktopLyricsSettings.playerFontPreset === option.value"
+                      :size="16"
+                      class="shrink-0 text-[#EC4141]"
+                    />
+                  </button>
+                </div>
+              </div>
+            </transition>
+          </div>
+          <div class="rounded-full bg-black/5 px-3 py-1.5 text-xs text-gray-600 dark:bg-white/8 dark:text-white/70">
+            {{ selectedFontLabel }}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
+        <span class="h-4 w-1 rounded-full bg-[#EC4141]"></span>
+        配色方案
+      </h2>
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <button
+          v-for="option in COLOR_SCHEME_OPTIONS"
+          :key="option.value"
+          type="button"
+          class="rounded-2xl border px-4 py-3 text-left transition-all"
+          :class="desktopLyricsSettings.colorScheme === option.value
+            ? 'border-[#EC4141] bg-[#EC4141]/8 shadow-sm'
+            : 'border-white/30 hover:border-[#EC4141]/40 hover:bg-white/40 dark:border-white/8 dark:hover:bg-white/10'"
+          @click="setDesktopColorScheme(option.value)"
+        >
+          <div class="text-sm font-semibold text-gray-800 dark:text-gray-100">{{ option.label }}</div>
+          <div class="mt-1 text-xs text-gray-600 dark:text-white/60">{{ option.hint }}</div>
+        </button>
+      </div>
+    </section>
+  </div>
+</template>
+
+<style scoped>
+.desktop-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  text-align: left;
+  transition: background-color 160ms ease;
+}
+
+.desktop-setting-row:last-child {
+  border-bottom: 0;
+}
+
+.desktop-setting-row:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+:global(.dark) .desktop-setting-row {
+  border-bottom-color: rgba(255, 255, 255, 0.05);
+}
+
+:global(.dark) .desktop-setting-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.desktop-switch {
+  display: inline-flex;
+  align-items: center;
+  width: 44px;
+  height: 24px;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgb(209 213 219);
+  transition: background-color 160ms ease;
+  flex-shrink: 0;
+}
+
+.desktop-switch--on {
+  background: #ec4141;
+}
+
+:global(.dark) .desktop-switch {
+  background: rgb(55 65 81);
+}
+
+:global(.dark) .desktop-switch--on {
+  background: #ec4141;
+}
+
+.desktop-switch-thumb {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+  transition: transform 160ms ease;
+}
+
+.desktop-card {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.55);
+  padding: 18px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+:global(.dark) .desktop-card {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+:global(.dark) .desktop-font-trigger {
+  border-color: rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.04));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 28px rgba(0, 0, 0, 0.18);
+}
+
+:global(.dark) .desktop-font-trigger:hover,
+:global(.dark) .desktop-font-trigger--open {
+  border-color: rgba(236, 65, 65, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 36px rgba(0, 0, 0, 0.24);
+}
+
+:global(.dark) .desktop-font-trigger--open {
+  background:
+    linear-gradient(180deg, rgba(236, 65, 65, 0.16), rgba(255, 255, 255, 0.05));
+}
+
+:global(.dark) .desktop-font-trigger-icon {
+  background: rgba(236, 65, 65, 0.14);
+  color: #ff9a9a;
+}
+
+:global(.dark) .desktop-font-menu {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(17, 17, 19, 0.88);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.34),
+    0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
+:global(.dark) .desktop-font-menu-header {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.58);
+}
+
+:global(.dark) .desktop-font-option {
+  color: rgba(255, 255, 255, 0.84);
+}
+
+:global(.dark) .desktop-font-option:hover {
+  border-color: rgba(236, 65, 65, 0.22);
+  background: rgba(236, 65, 65, 0.1);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+:global(.dark) .desktop-font-option--active {
+  border-color: rgba(236, 65, 65, 0.28);
+  background:
+    linear-gradient(180deg, rgba(236, 65, 65, 0.18), rgba(236, 65, 65, 0.08));
+  color: #ff9a9a;
+}
+
+.desktop-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.desktop-card-value {
+  margin-top: 14px;
+  color: #ec4141;
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.desktop-font-picker {
+  position: relative;
+}
+
+.desktop-font-trigger {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.68));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 10px 26px rgba(15, 23, 42, 0.05);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.desktop-font-trigger:hover,
+.desktop-font-trigger--open {
+  border-color: rgba(236, 65, 65, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 14px 30px rgba(236, 65, 65, 0.08);
+}
+
+.desktop-font-trigger--open {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 244, 244, 0.78));
+}
+
+.desktop-font-trigger-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(236, 65, 65, 0.1);
+  color: #ec4141;
+  flex-shrink: 0;
+}
+
+.desktop-font-menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.16),
+    0 10px 24px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+}
+
+.desktop-font-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  color: rgba(71, 85, 105, 0.92);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.desktop-font-menu-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.desktop-font-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  text-align: left;
+  color: rgb(55 65 81);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.desktop-font-option:hover {
+  border-color: rgba(236, 65, 65, 0.16);
+  background: rgba(236, 65, 65, 0.06);
+  color: rgb(17 24 39);
+}
+
+.desktop-font-option--active {
+  border-color: rgba(236, 65, 65, 0.2);
+  background:
+    linear-gradient(180deg, rgba(236, 65, 65, 0.12), rgba(236, 65, 65, 0.06));
+  color: #ec4141;
+}
+
+.desktop-font-menu-enter-active,
+.desktop-font-menu-leave-active {
+  transition: opacity 180ms ease, transform 200ms ease;
+  transform-origin: top center;
+}
+
+.desktop-font-menu-enter-from,
+.desktop-font-menu-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.98);
+}
+
+.desktop-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.desktop-mini-button,
+.desktop-reset-button,
+.desktop-chip {
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.desktop-mini-button {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(236, 65, 65, 0.14);
+  background: rgba(236, 65, 65, 0.06);
+  color: #ec4141;
+  font-size: 16px;
+}
+
+.desktop-mini-button:hover,
+.desktop-reset-button:hover,
+.desktop-chip:hover {
+  border-color: rgba(236, 65, 65, 0.38);
+  background: rgba(236, 65, 65, 0.1);
+}
+
+.desktop-reset-button {
+  border: 1px solid rgba(236, 65, 65, 0.14);
+  border-radius: 999px;
+  background: rgba(236, 65, 65, 0.06);
+  padding: 6px 10px;
+  color: #ec4141;
+  font-size: 12px;
+}
+
+.desktop-chip {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 8px 14px;
+  color: rgb(55 65 81);
+  font-size: 13px;
+}
+
+.desktop-chip--active {
+  border-color: rgba(236, 65, 65, 0.28);
+  background: rgba(236, 65, 65, 0.12);
+  color: #ec4141;
+  font-weight: 600;
+}
+
+:global(.dark) .desktop-chip {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+:global(.dark) .desktop-chip--active {
+  border-color: rgba(236, 65, 65, 0.35);
+  background: rgba(236, 65, 65, 0.14);
+  color: #ff8b8b;
+}
+
+.desktop-slider {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(236, 65, 65, 0.88), rgba(251, 146, 60, 0.88));
+  appearance: none;
+  cursor: pointer;
+}
+
+.desktop-slider::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #ec4141;
+  box-shadow: 0 2px 8px rgba(236, 65, 65, 0.3);
+  appearance: none;
+}
+
+.desktop-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #ec4141;
+  box-shadow: 0 2px 8px rgba(236, 65, 65, 0.3);
+}
+</style>

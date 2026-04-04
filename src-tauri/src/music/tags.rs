@@ -1,11 +1,12 @@
 use id3::TagLike;
+use lofty::config::ParseOptions;
 use lofty::file::{FileType, TaggedFile, TaggedFileExt};
 use lofty::picture::{MimeType, Picture, PictureType};
 use lofty::probe::Probe;
 use lofty::properties::FileProperties;
 use lofty::tag::{Accessor, ItemKey, ItemValue, Tag, TagItem, TagType};
-use std::fs;
-use std::io::Cursor;
+use std::fs::File;
+use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -17,10 +18,27 @@ pub struct TagTextMetadata {
 }
 
 pub fn read_tagged_file_from_path(path: &Path) -> lofty::error::Result<TaggedFile> {
-    match Probe::open(path)?.guess_file_type()?.read() {
+    read_tagged_file_from_path_with_cover_mode(path, true)
+}
+
+pub fn read_tagged_file_from_path_for_scan(path: &Path) -> lofty::error::Result<TaggedFile> {
+    read_tagged_file_from_path_with_cover_mode(path, false)
+}
+
+fn read_tagged_file_from_path_with_cover_mode(
+    path: &Path,
+    read_cover_art: bool,
+) -> lofty::error::Result<TaggedFile> {
+    let options = ParseOptions::new().read_cover_art(read_cover_art);
+
+    match Probe::open(path)?
+        .guess_file_type()?
+        .options(options)
+        .read()
+    {
         Ok(tagged_file) => Ok(tagged_file),
         Err(original_err) if is_wav_path(path) => {
-            read_salvaged_wav_tags(path).map_err(|_| original_err)
+            read_salvaged_wav_tags(path, read_cover_art).map_err(|_| original_err)
         }
         Err(original_err) => Err(original_err),
     }
@@ -185,19 +203,18 @@ fn is_wav_path(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn read_salvaged_wav_tags(path: &Path) -> Result<TaggedFile, ()> {
-    let bytes = fs::read(path).map_err(|_| ())?;
+fn read_salvaged_wav_tags(path: &Path, read_cover_art: bool) -> Result<TaggedFile, ()> {
+    let file = File::open(path).map_err(|_| ())?;
+    let mut reader = BufReader::new(file);
     let mut tags = Vec::new();
 
-    if let Some(id3_size) = leading_id3v2_size(&bytes) {
-        push_id3_tag(&mut tags, &bytes[..id3_size]);
+    let wav_start = match read_leading_id3_tag(&mut reader, &mut tags, read_cover_art)? {
+        Some(id3_size) => id3_size,
+        None => 0,
+    };
 
-        if let Some(wav_bytes) = bytes.get(id3_size..) {
-            tags.extend(parse_wav_chunks(wav_bytes));
-        }
-    } else {
-        tags.extend(parse_wav_chunks(&bytes));
-    }
+    reader.seek(SeekFrom::Start(wav_start)).map_err(|_| ())?;
+    tags.extend(parse_wav_chunks(&mut reader, read_cover_art)?);
 
     if tags.is_empty() {
         return Err(());
@@ -208,6 +225,37 @@ fn read_salvaged_wav_tags(path: &Path) -> Result<TaggedFile, ()> {
         FileProperties::default(),
         tags,
     ))
+}
+
+fn read_leading_id3_tag<R>(
+    reader: &mut R,
+    tags: &mut Vec<Tag>,
+    read_cover_art: bool,
+) -> Result<Option<u64>, ()>
+where
+    R: Read + Seek,
+{
+    let mut header = [0u8; 10];
+    match reader.read_exact(&mut header) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
+            reader.seek(SeekFrom::Start(0)).map_err(|_| ())?;
+            return Ok(None);
+        }
+        Err(_) => return Err(()),
+    }
+
+    let Some(id3_size) = leading_id3v2_size(&header).map(|size| size as u64) else {
+        reader.seek(SeekFrom::Start(0)).map_err(|_| ())?;
+        return Ok(None);
+    };
+
+    reader.seek(SeekFrom::Start(0)).map_err(|_| ())?;
+    if let Some(id3_bytes) = read_chunk(reader, id3_size as usize) {
+        push_id3_tag(tags, &id3_bytes, read_cover_art);
+    }
+
+    Ok(Some(id3_size))
 }
 
 fn leading_id3v2_size(bytes: &[u8]) -> Option<usize> {
@@ -223,50 +271,91 @@ fn leading_id3v2_size(bytes: &[u8]) -> Option<usize> {
     Some(10 + size)
 }
 
-fn parse_wav_chunks(bytes: &[u8]) -> Vec<Tag> {
-    if !has_wav_header(bytes) {
-        return Vec::new();
+fn parse_wav_chunks<R>(reader: &mut R, read_cover_art: bool) -> Result<Vec<Tag>, ()>
+where
+    R: Read + Seek,
+{
+    if !has_wav_header(reader)? {
+        return Ok(Vec::new());
     }
 
     let mut tags = Vec::new();
-    let mut offset = 12usize;
-
-    while offset + 8 <= bytes.len() {
-        let chunk_id = &bytes[offset..offset + 4];
-        let chunk_size = match bytes[offset + 4..offset + 8].try_into() {
-            Ok(size_bytes) => u32::from_le_bytes(size_bytes) as usize,
-            Err(_) => break,
-        };
-        let data_start = offset + 8;
-        let data_end = data_start.saturating_add(chunk_size);
-
-        if data_end > bytes.len() {
-            break;
+    loop {
+        let mut chunk_header = [0u8; 8];
+        match reader.read_exact(&mut chunk_header) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(_) => return Err(()),
         }
 
+        let chunk_id = &chunk_header[..4];
+        let chunk_size =
+            u32::from_le_bytes(chunk_header[4..8].try_into().map_err(|_| ())?) as usize;
+
         match chunk_id {
-            b"id3 " | b"ID3 " => push_id3_tag(&mut tags, &bytes[data_start..data_end]),
+            b"id3 " | b"ID3 " => {
+                let Some(chunk_bytes) = read_chunk(reader, chunk_size) else {
+                    break;
+                };
+                push_id3_tag(&mut tags, &chunk_bytes, read_cover_art);
+            }
             b"LIST" => {
-                if let Some(tag) = parse_riff_info_list(&bytes[data_start..data_end]) {
+                let Some(chunk_bytes) = read_chunk(reader, chunk_size) else {
+                    break;
+                };
+                if let Some(tag) = parse_riff_info_list(&chunk_bytes) {
                     tags.push(tag);
                 }
             }
-            _ => {}
+            _ => {
+                if skip_chunk(reader, chunk_size as u64).is_err() {
+                    break;
+                }
+            }
         }
 
-        offset = offset.saturating_add(8 + chunk_size + (chunk_size % 2));
+        if chunk_size % 2 == 1 && skip_chunk(reader, 1).is_err() {
+            break;
+        }
     }
 
-    tags
+    Ok(tags)
 }
 
-fn has_wav_header(bytes: &[u8]) -> bool {
-    bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WAVE"
+fn read_chunk<R>(reader: &mut R, size: usize) -> Option<Vec<u8>>
+where
+    R: Read,
+{
+    let mut bytes = vec![0u8; size];
+    reader.read_exact(&mut bytes).ok()?;
+    Some(bytes)
 }
 
-fn push_id3_tag(tags: &mut Vec<Tag>, bytes: &[u8]) {
+fn skip_chunk<R>(reader: &mut R, size: u64) -> Result<(), ()>
+where
+    R: Seek,
+{
+    reader
+        .seek(SeekFrom::Current(size as i64))
+        .map(|_| ())
+        .map_err(|_| ())
+}
+
+fn has_wav_header<R>(reader: &mut R) -> Result<bool, ()>
+where
+    R: Read,
+{
+    let mut header = [0u8; 12];
+    match reader.read_exact(&mut header) {
+        Ok(()) => Ok(&header[..4] == b"RIFF" && &header[8..12] == b"WAVE"),
+        Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
+        Err(_) => Err(()),
+    }
+}
+
+fn push_id3_tag(tags: &mut Vec<Tag>, bytes: &[u8], read_cover_art: bool) {
     if let Ok(tag) = id3::Tag::read_from2(Cursor::new(bytes)) {
-        tags.push(lofty_tag_from_id3(tag));
+        tags.push(lofty_tag_from_id3(tag, read_cover_art));
     }
 }
 
@@ -337,7 +426,7 @@ fn decode_riff_info_text(raw: &[u8]) -> Option<String> {
     clean_text(&decoded)
 }
 
-fn lofty_tag_from_id3(id3_tag: id3::Tag) -> Tag {
+fn lofty_tag_from_id3(id3_tag: id3::Tag, read_cover_art: bool) -> Tag {
     let mut lofty_tag = Tag::new(TagType::Id3v2);
 
     insert_optional_text(&mut lofty_tag, ItemKey::TrackTitle, id3_tag.title());
@@ -368,13 +457,15 @@ fn lofty_tag_from_id3(id3_tag: id3::Tag) -> Tag {
         let _ = lofty_tag.insert(TagItem::new(ItemKey::Lyrics, ItemValue::Text(text)));
     }
 
-    for picture in id3_tag.pictures() {
-        lofty_tag.push_picture(Picture::new_unchecked(
-            PictureType::from_u8(u8::from(picture.picture_type)),
-            Some(MimeType::from_str(&picture.mime_type)),
-            clean_text(&picture.description),
-            picture.data.clone(),
-        ));
+    if read_cover_art {
+        for picture in id3_tag.pictures() {
+            lofty_tag.push_picture(Picture::new_unchecked(
+                PictureType::from_u8(u8::from(picture.picture_type)),
+                Some(MimeType::from_str(&picture.mime_type)),
+                clean_text(&picture.description),
+                picture.data.clone(),
+            ));
+        }
     }
 
     lofty_tag
@@ -511,8 +602,11 @@ fn seems_like_lyrics_text(text: &str) -> bool {
 mod tests {
     use super::{
         extract_embedded_lyrics, extract_text_metadata, find_embedded_picture,
-        read_tagged_file_from_path,
+        read_tagged_file_from_path, read_tagged_file_from_path_for_scan,
     };
+    use id3::frame::{Picture as Id3Picture, PictureType as Id3PictureType};
+    use id3::TagLike;
+    use id3::Version;
     use lofty::file::{FileType, TaggedFile, TaggedFileExt};
     use lofty::picture::{MimeType, Picture, PictureType};
     use lofty::probe::Probe;
@@ -525,26 +619,43 @@ mod tests {
         TaggedFile::new(FileType::Wav, FileProperties::default(), tags)
     }
 
-    fn create_id3_prefixed_wav_bytes() -> Vec<u8> {
+    fn minimal_wav_bytes() -> Vec<u8> {
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&38u32.to_le_bytes());
+        wav.extend_from_slice(b"WAVE");
+        wav.extend_from_slice(b"fmt ");
+        wav.extend_from_slice(&16u32.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes());
+        wav.extend_from_slice(&44_100u32.to_le_bytes());
+        wav.extend_from_slice(&88_200u32.to_le_bytes());
+        wav.extend_from_slice(&2u16.to_le_bytes());
+        wav.extend_from_slice(&16u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&2u32.to_le_bytes());
+        wav.extend_from_slice(&[0, 0]);
+        wav
+    }
+
+    fn create_id3_prefixed_wav_bytes(with_picture: bool) -> Vec<u8> {
+        let mut id3_tag = id3::Tag::new();
+        id3_tag.set_title("Fallback WAV");
+
+        if with_picture {
+            id3_tag.add_frame(Id3Picture {
+                mime_type: "image/png".to_string(),
+                picture_type: Id3PictureType::CoverFront,
+                description: "front".to_string(),
+                data: vec![137, 80, 78, 71],
+            });
+        }
+
         let mut bytes = Vec::new();
-
-        bytes.extend_from_slice(b"ID3");
-        bytes.extend_from_slice(&[3, 0, 0, 0, 0, 0, 0]);
-        bytes.extend_from_slice(b"RIFF");
-        bytes.extend_from_slice(&38u32.to_le_bytes());
-        bytes.extend_from_slice(b"WAVE");
-        bytes.extend_from_slice(b"fmt ");
-        bytes.extend_from_slice(&16u32.to_le_bytes());
-        bytes.extend_from_slice(&1u16.to_le_bytes());
-        bytes.extend_from_slice(&1u16.to_le_bytes());
-        bytes.extend_from_slice(&44_100u32.to_le_bytes());
-        bytes.extend_from_slice(&88_200u32.to_le_bytes());
-        bytes.extend_from_slice(&2u16.to_le_bytes());
-        bytes.extend_from_slice(&16u16.to_le_bytes());
-        bytes.extend_from_slice(b"data");
-        bytes.extend_from_slice(&2u32.to_le_bytes());
-        bytes.extend_from_slice(&[0, 0]);
-
+        id3_tag
+            .write_to(&mut bytes, Version::Id3v24)
+            .expect("id3 tag should serialize");
+        bytes.extend_from_slice(&minimal_wav_bytes());
         bytes
     }
 
@@ -633,7 +744,8 @@ mod tests {
         );
         let temp_path = std::env::temp_dir().join(temp_name);
 
-        fs::write(&temp_path, create_id3_prefixed_wav_bytes()).expect("temp wav should be written");
+        fs::write(&temp_path, create_id3_prefixed_wav_bytes(false))
+            .expect("temp wav should be written");
 
         let extension_only = Probe::open(&temp_path).expect("probe should open").read();
         assert!(extension_only.is_err());
@@ -641,6 +753,31 @@ mod tests {
         let tagged_file =
             read_tagged_file_from_path(&temp_path).expect("fallback parser should read the wav");
         assert_eq!(tagged_file.file_type(), FileType::Wav);
+
+        let _ = fs::remove_file(temp_path);
+    }
+
+    #[test]
+    fn scan_reader_skips_cover_art_for_wav_fallback() {
+        let temp_name = format!(
+            "lycia_id3_prefixed_cover_{}.wav",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        let temp_path = std::env::temp_dir().join(temp_name);
+
+        fs::write(&temp_path, create_id3_prefixed_wav_bytes(true))
+            .expect("temp wav should be written");
+
+        let full_tagged_file =
+            read_tagged_file_from_path(&temp_path).expect("full parser should retain pictures");
+        let scan_tagged_file = read_tagged_file_from_path_for_scan(&temp_path)
+            .expect("scan parser should still read text tags");
+
+        assert!(find_embedded_picture(&full_tagged_file).is_some());
+        assert!(find_embedded_picture(&scan_tagged_file).is_none());
 
         let _ = fs::remove_file(temp_path);
     }

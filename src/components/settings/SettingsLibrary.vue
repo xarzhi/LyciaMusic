@@ -20,7 +20,7 @@
         </div>
       </div>
 
-      <button class="add-folder-btn" @click="handleAddLibraryFolder">
+      <button class="add-folder-btn" :disabled="isScanning" @click="handleAddLibraryFolder">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="5" x2="12" y2="19"/>
           <line x1="5" y1="12" x2="19" y2="12"/>
@@ -56,6 +56,30 @@
         </svg>
         {{ isScanning ? '扫描中...' : '重新扫描' }}
       </button>
+      <div v-if="isScanning && libraryScanProgress" class="scan-status-card">
+        <div class="scan-status-header">
+          <div class="scan-status-title">{{ scanStatusLabel }}</div>
+          <div class="scan-status-count" v-if="libraryScanProgress.total > 0">
+            {{ libraryScanProgress.current }}/{{ libraryScanProgress.total }}
+          </div>
+        </div>
+        <div class="scan-status-bar">
+          <div
+            class="scan-status-bar-fill"
+            :class="{ indeterminate: libraryScanProgress.total <= 0 }"
+            :style="{ width: `${libraryScanProgress.total > 0 ? Math.min(100, Math.max(8, (libraryScanProgress.current / libraryScanProgress.total) * 100)) : 24}%` }"
+          ></div>
+        </div>
+        <div v-if="libraryScanProgress.folder_path" class="scan-status-path" :title="libraryScanProgress.folder_path">
+          {{ libraryScanProgress.folder_path }}
+        </div>
+      </div>
+
+      <div v-else-if="lastLibraryScanError" class="scan-error-card">
+        <div class="scan-error-title">上次扫描失败</div>
+        <div class="scan-error-text">{{ lastLibraryScanError }}</div>
+        <button class="scan-error-action" @click="handleRescan">重新扫描</button>
+      </div>
     </div>
 
     <ConfirmModal
@@ -69,14 +93,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+import { storeToRefs } from 'pinia';
 import { open } from '@tauri-apps/plugin-dialog';
 import { usePlayer } from '../../composables/player';
-import { libraryFolders } from '../../composables/playerState';
+import { useLibraryStore } from '../../features/library/store';
 import ConfirmModal from '../overlays/ConfirmModal.vue';
 
 const { addLibraryFolderLinked, removeLibraryFolderLinked, scanLibrary } = usePlayer();
-const isScanning = ref(false);
+const libraryStore = useLibraryStore();
+const { libraryFolders, libraryScanProgress, lastLibraryScanError } = storeToRefs(libraryStore);
+const isScanning = computed(() =>
+  !!libraryScanProgress.value && !libraryScanProgress.value.done && !libraryScanProgress.value.failed
+);
+const scanStatusLabel = computed(() => {
+  switch (libraryScanProgress.value?.phase) {
+    case 'collecting':
+      return '正在扫描文件';
+    case 'parsing':
+      return '正在解析歌曲信息';
+    case 'writing':
+      return '正在写入音乐库';
+    case 'complete':
+      return '扫描完成';
+    case 'error':
+      return '扫描失败';
+    default:
+      return '等待扫描';
+  }
+});
 const showConfirm = ref(false);
 const folderToRemove = ref('');
 const confirmContent = ref('');
@@ -84,7 +129,15 @@ const confirmContent = ref('');
 const handleAddLibraryFolder = async () => {
   const selected = await open({ directory: true, multiple: false, title: '选择音乐文件夹' });
   if (selected && typeof selected === 'string') {
-    await addLibraryFolderLinked(selected, { showToast: true });
+    const isFirstImport = libraryFolders.value.length === 0;
+    await addLibraryFolderLinked(selected, {
+      showToast: !isFirstImport,
+      scanOptions: {
+        trigger: isFirstImport ? 'first-import' : 'folder-add',
+        visibility: isFirstImport ? 'hero' : 'silent',
+        sourcePath: selected,
+      },
+    });
   }
 };
 
@@ -104,10 +157,7 @@ const confirmRemove = async () => {
 
 const handleRescan = async () => {
   if (isScanning.value) return;
-
-  isScanning.value = true;
-  await scanLibrary();
-  isScanning.value = false;
+  await scanLibrary({ trigger: 'manual-rescan', visibility: 'inline' });
 };
 </script>
 
@@ -185,6 +235,12 @@ const handleRescan = async () => {
   background: rgba(128, 128, 128, 0.18);
   border-color: rgba(128, 128, 128, 0.4);
   transform: translateY(-1px);
+}
+
+.add-folder-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .add-folder-btn:active {
@@ -287,6 +343,89 @@ const handleRescan = async () => {
   cursor: not-allowed;
 }
 
+.scan-status-card,
+.scan-error-card {
+  margin-top: 14px;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.scan-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scan-status-title,
+.scan-error-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.scan-status-count {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.scan-status-bar {
+  margin-top: 10px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.scan-status-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #ec4141, #ff7b63, #f7b267);
+  transition: width 0.25s ease;
+}
+
+.scan-status-bar-fill.indeterminate {
+  min-width: 24%;
+  animation: scan-status-indeterminate 1.1s ease-in-out infinite alternate;
+}
+
+.scan-status-path,
+.scan-error-text {
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  opacity: 0.82;
+  word-break: break-all;
+}
+
+.scan-error-card {
+  border-color: rgba(236, 65, 65, 0.22);
+  background: rgba(236, 65, 65, 0.08);
+}
+
+.scan-error-action {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 9999px;
+  padding: 9px 14px;
+  background: #ec4141;
+  color: white;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.scan-error-action:hover {
+  background: #d73a3a;
+  transform: translateY(-1px);
+}
+
 .spinning {
   animation: spin 1s linear infinite;
 }
@@ -298,6 +437,16 @@ const handleRescan = async () => {
 
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes scan-status-indeterminate {
+  from {
+    transform: translateX(-16%);
+  }
+
+  to {
+    transform: translateX(16%);
   }
 }
 </style>

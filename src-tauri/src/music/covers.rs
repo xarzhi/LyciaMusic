@@ -2,12 +2,21 @@
 
 use super::tags::{find_embedded_picture, read_tagged_file_from_path};
 use super::types::ImageConcurrencyLimit;
-use image::ImageFormat;
+use image::{DynamicImage, ImageFormat};
+use lofty::picture::MimeType;
 use sha2::{Digest, Sha256};
 use std::fs;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tauri::{AppHandle, Manager, State};
+
+const COVER_CACHE_MAX_SIZE_BYTES: u64 = 4 * 1024 * 1024 * 1024; // 4 GB
+const THUMBNAIL_EDGE_PX: u32 = 300;
+const FULL_COVER_CACHE_VERSION: &str = "v2";
+const FULL_COVER_FALLBACK_EXT: &str = "png";
+const FULL_COVER_CACHE_EXTENSIONS: [&str; 5] = ["jpg", "png", "webp", "gif", "bmp"];
+const CACHE_ALIAS_EXT: &str = "ref";
 
 pub fn get_cover_cache_dir(app: &AppHandle) -> PathBuf {
     let dir = app.path().app_data_dir().unwrap().join("covers");
@@ -20,7 +29,7 @@ pub fn get_cover_cache_dir(app: &AppHandle) -> PathBuf {
 #[tauri::command]
 pub fn run_cache_cleanup(app: &AppHandle) {
     let cache_dir = get_cover_cache_dir(app);
-    let max_size = 500 * 1024 * 1024; // 500 MB
+    let max_size = COVER_CACHE_MAX_SIZE_BYTES;
 
     std::thread::spawn(move || {
         if let Ok(read_dir) = fs::read_dir(&cache_dir) {
@@ -56,7 +65,7 @@ pub fn run_cache_cleanup(app: &AppHandle) {
     });
 }
 
-fn generate_hash(path: &Path) -> String {
+fn generate_source_hash(path: &Path) -> String {
     let mut hasher = Sha256::new();
 
     if let Ok(metadata) = fs::metadata(path) {
@@ -86,24 +95,206 @@ fn generate_hash(path: &Path) -> String {
     hex::encode(hasher.finalize())
 }
 
-pub fn get_or_create_thumbnail(path: &Path, app: &AppHandle) -> Option<String> {
-    let hash = generate_hash(path);
-    let cache_dir = get_cover_cache_dir(app);
-    let cache_path = cache_dir.join(format!("{}_thumb_300.jpg", hash));
+fn generate_content_hash(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hex::encode(hasher.finalize())
+}
+
+fn is_cached_cover_valid(path: &Path) -> bool {
+    image::open(path).is_ok()
+}
+
+fn create_temp_cache_path(cache_path: &Path) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let file_name = cache_path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+    cache_path.with_file_name(format!("{file_name}.{nonce}.tmp"))
+}
+
+fn persist_bytes_atomically(bytes: &[u8], cache_path: &Path) -> Option<String> {
+    let temp_path = create_temp_cache_path(cache_path);
+    let file = fs::File::create(&temp_path).ok()?;
+    let mut writer = BufWriter::new(file);
+
+    if writer.write_all(bytes).is_err() || writer.flush().is_err() {
+        let _ = fs::remove_file(&temp_path);
+        return None;
+    }
+    drop(writer);
 
     if cache_path.exists() {
-        return Some(cache_path.to_string_lossy().into_owned());
+        if is_cached_cover_valid(cache_path) {
+            let _ = fs::remove_file(&temp_path);
+            return Some(cache_path.to_string_lossy().into_owned());
+        }
+        let _ = fs::remove_file(cache_path);
+    }
+
+    if fs::rename(&temp_path, cache_path).is_err() {
+        let _ = fs::remove_file(&temp_path);
+        if is_cached_cover_valid(cache_path) {
+            return Some(cache_path.to_string_lossy().into_owned());
+        }
+        return None;
+    }
+
+    Some(cache_path.to_string_lossy().into_owned())
+}
+
+fn persist_image_atomically(
+    img: &DynamicImage,
+    format: ImageFormat,
+    cache_path: &Path,
+) -> Option<String> {
+    let temp_path = create_temp_cache_path(cache_path);
+    let file = fs::File::create(&temp_path).ok()?;
+    let mut writer = BufWriter::new(file);
+
+    if img.write_to(&mut writer, format).is_err() || writer.flush().is_err() {
+        let _ = fs::remove_file(&temp_path);
+        return None;
+    }
+    drop(writer);
+
+    if cache_path.exists() {
+        if is_cached_cover_valid(cache_path) {
+            let _ = fs::remove_file(&temp_path);
+            return Some(cache_path.to_string_lossy().into_owned());
+        }
+        let _ = fs::remove_file(cache_path);
+    }
+
+    if fs::rename(&temp_path, cache_path).is_err() {
+        let _ = fs::remove_file(&temp_path);
+        if is_cached_cover_valid(cache_path) {
+            return Some(cache_path.to_string_lossy().into_owned());
+        }
+        return None;
+    }
+
+    Some(cache_path.to_string_lossy().into_owned())
+}
+
+fn full_cover_cache_stem(hash: &str) -> String {
+    format!("{hash}_full_{FULL_COVER_CACHE_VERSION}")
+}
+
+fn thumbnail_cache_stem(hash: &str) -> String {
+    format!("{hash}_thumb_{THUMBNAIL_EDGE_PX}")
+}
+
+fn thumbnail_alias_path(cache_dir: &Path, source_hash: &str) -> PathBuf {
+    cache_dir.join(format!(
+        "{source_hash}_thumb_{THUMBNAIL_EDGE_PX}.{CACHE_ALIAS_EXT}"
+    ))
+}
+
+fn full_cover_alias_path(cache_dir: &Path, source_hash: &str) -> PathBuf {
+    cache_dir.join(format!(
+        "{source_hash}_full_{FULL_COVER_CACHE_VERSION}.{CACHE_ALIAS_EXT}"
+    ))
+}
+
+fn full_cover_extension_from_mime(mime: Option<&MimeType>) -> Option<&'static str> {
+    match mime {
+        Some(MimeType::Jpeg) => Some("jpg"),
+        Some(MimeType::Png) => Some("png"),
+        Some(MimeType::Gif) => Some("gif"),
+        Some(MimeType::Bmp) => Some("bmp"),
+        Some(MimeType::Unknown(value)) if value.eq_ignore_ascii_case("image/webp") => Some("webp"),
+        _ => None,
+    }
+}
+
+fn resolve_alias_target(cache_dir: &Path, alias_path: &Path) -> Option<String> {
+    let file_name = fs::read_to_string(alias_path).ok()?;
+    let trimmed = file_name.trim();
+    if trimmed.is_empty() {
+        let _ = fs::remove_file(alias_path);
+        return None;
+    }
+
+    let target_path = cache_dir.join(trimmed);
+    if is_cached_cover_valid(&target_path) {
+        return Some(target_path.to_string_lossy().into_owned());
+    }
+
+    let _ = fs::remove_file(alias_path);
+    if target_path.exists() {
+        let _ = fs::remove_file(target_path);
+    }
+    None
+}
+
+fn persist_alias_target(alias_path: &Path, target_path: &Path) -> Option<()> {
+    let file_name = target_path.file_name()?.to_string_lossy().into_owned();
+    persist_bytes_atomically(file_name.as_bytes(), alias_path)?;
+    Some(())
+}
+
+fn cleanup_invalid_full_cover_variants(cache_dir: &Path, stem: &str) {
+    for ext in FULL_COVER_CACHE_EXTENSIONS {
+        let candidate = cache_dir.join(format!("{stem}.{ext}"));
+        if candidate.exists() && !is_cached_cover_valid(&candidate) {
+            let _ = fs::remove_file(candidate);
+        }
+    }
+}
+
+fn find_cached_full_cover(cache_dir: &Path, stem: &str) -> Option<String> {
+    for ext in FULL_COVER_CACHE_EXTENSIONS {
+        let candidate = cache_dir.join(format!("{stem}.{ext}"));
+        if !candidate.exists() {
+            continue;
+        }
+
+        if is_cached_cover_valid(&candidate) {
+            return Some(candidate.to_string_lossy().into_owned());
+        }
+
+        let _ = fs::remove_file(candidate);
+    }
+
+    None
+}
+
+pub fn get_or_create_thumbnail(path: &Path, app: &AppHandle) -> Option<String> {
+    let source_hash = generate_source_hash(path);
+    let cache_dir = get_cover_cache_dir(app);
+    let alias_path = thumbnail_alias_path(&cache_dir, &source_hash);
+
+    if let Some(existing) = resolve_alias_target(&cache_dir, &alias_path) {
+        return Some(existing);
     }
 
     if let Ok(tagged_file) = read_tagged_file_from_path(path) {
         if let Some(pic) = find_embedded_picture(&tagged_file) {
+            let shared_hash = generate_content_hash(pic.data());
+            let cache_path = cache_dir.join(format!("{}.jpg", thumbnail_cache_stem(&shared_hash)));
+
+            if is_cached_cover_valid(&cache_path) {
+                let _ = persist_alias_target(&alias_path, &cache_path);
+                return Some(cache_path.to_string_lossy().into_owned());
+            }
+            if cache_path.exists() {
+                let _ = fs::remove_file(&cache_path);
+            }
+
             if let Ok(img) = image::load_from_memory(pic.data()) {
-                let resized = img.resize(300, 300, image::imageops::FilterType::Triangle);
-                if let Ok(mut file) = fs::File::create(&cache_path) {
-                    if resized.write_to(&mut file, ImageFormat::Jpeg).is_ok() {
-                        return Some(cache_path.to_string_lossy().into_owned());
-                    }
-                }
+                let resized = img.resize(
+                    THUMBNAIL_EDGE_PX,
+                    THUMBNAIL_EDGE_PX,
+                    image::imageops::FilterType::Triangle,
+                );
+                let persisted = persist_image_atomically(&resized, ImageFormat::Jpeg, &cache_path)?;
+                let _ = persist_alias_target(&alias_path, &cache_path);
+                return Some(persisted);
             }
         }
     }
@@ -111,22 +302,39 @@ pub fn get_or_create_thumbnail(path: &Path, app: &AppHandle) -> Option<String> {
 }
 
 pub fn get_or_create_full_cover(path: &Path, app: &AppHandle) -> Option<String> {
-    let hash = generate_hash(path);
+    let source_hash = generate_source_hash(path);
     let cache_dir = get_cover_cache_dir(app);
-    let cache_path = cache_dir.join(format!("{}_full.jpg", hash));
+    let alias_path = full_cover_alias_path(&cache_dir, &source_hash);
 
-    if cache_path.exists() {
-        return Some(cache_path.to_string_lossy().into_owned());
+    if let Some(existing) = resolve_alias_target(&cache_dir, &alias_path) {
+        return Some(existing);
     }
 
     if let Ok(tagged_file) = read_tagged_file_from_path(path) {
         if let Some(pic) = find_embedded_picture(&tagged_file) {
+            let shared_hash = generate_content_hash(pic.data());
+            let cache_stem = full_cover_cache_stem(&shared_hash);
+
+            if let Some(existing) = find_cached_full_cover(&cache_dir, &cache_stem) {
+                let existing_path = Path::new(&existing);
+                let _ = persist_alias_target(&alias_path, existing_path);
+                return Some(existing);
+            }
+
+            cleanup_invalid_full_cover_variants(&cache_dir, &cache_stem);
+
+            if let Some(ext) = full_cover_extension_from_mime(pic.mime_type()) {
+                let cache_path = cache_dir.join(format!("{cache_stem}.{ext}"));
+                let persisted = persist_bytes_atomically(pic.data(), &cache_path)?;
+                let _ = persist_alias_target(&alias_path, &cache_path);
+                return Some(persisted);
+            }
+
             if let Ok(img) = image::load_from_memory(pic.data()) {
-                if let Ok(mut file) = fs::File::create(&cache_path) {
-                    if img.write_to(&mut file, ImageFormat::Jpeg).is_ok() {
-                        return Some(cache_path.to_string_lossy().into_owned());
-                    }
-                }
+                let cache_path = cache_dir.join(format!("{cache_stem}.{FULL_COVER_FALLBACK_EXT}"));
+                let persisted = persist_image_atomically(&img, ImageFormat::Png, &cache_path)?;
+                let _ = persist_alias_target(&alias_path, &cache_path);
+                return Some(persisted);
             }
         }
     }

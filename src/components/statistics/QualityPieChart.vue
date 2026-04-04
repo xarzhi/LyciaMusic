@@ -124,7 +124,7 @@ const animatedLosslessPercent = useAnimatedNumber(losslessPercentRaw.value, 2000
             <span class="block text-4xl md:text-5xl font-black text-gray-900 dark:text-white tracking-tighter tabular-nums">
               {{ animatedLosslessPercent.toFixed(1) }}<span class="text-xl md:text-2xl text-pink-500">%</span>
             </span>
-            <span class="text-xs md:text-sm font-bold text-gray-400 uppercase tracking-widest mt-1">{{ TEXT.losslessRate }}</span>
+            <span class="text-xs md:text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest mt-1">{{ TEXT.losslessRate }}</span>
           </div>
         </div>
       </div>
@@ -146,7 +146,7 @@ const animatedLosslessPercent = useAnimatedNumber(losslessPercentRaw.value, 2000
           <div class="flex items-center gap-3">
             <div class="w-3 h-3 rounded-full shadow-lg" :class="segment.bgClass" :style="{ boxShadow: `0 0 10px ${segment.shadowColor}` }"></div>
             <span class="font-bold text-gray-700 dark:text-gray-200">{{ segment.name }}</span>
-            <span class="text-[10px] text-gray-400 border border-gray-200 dark:border-white/10 px-1 rounded">{{ segment.label }}</span>
+            <span class="text-[10px] text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-white/10 px-1 rounded">{{ segment.label }}</span>
           </div>
           <span class="font-mono font-medium text-gray-900 dark:text-white tabular-nums">{{ segment.value.toLocaleString() }}</span>
         </div>
@@ -156,7 +156,7 @@ const animatedLosslessPercent = useAnimatedNumber(losslessPercentRaw.value, 2000
         </div>
 
         <div class="flex justify-end mt-1">
-          <span class="text-xs text-gray-400 font-medium">{{ segment.displayPercentage }}%</span>
+          <span class="text-xs text-gray-700 dark:text-gray-300 font-medium">{{ segment.displayPercentage }}%</span>
         </div>
       </div>
     </div>

@@ -17,7 +17,7 @@ defineProps<{
               ? 'bg-green-500 text-white'
               : currentStep === step.id
               ? 'bg-[#EC4141] text-white ring-4 ring-red-200 dark:ring-red-500/30'
-              : 'bg-gray-200 dark:bg-white/10 text-gray-400 dark:text-gray-500'
+              : 'bg-gray-200 dark:bg-white/10 text-gray-500 dark:text-white/50'
           ]"
         >
           <span v-if="currentStep > step.id">✓</span>
@@ -28,7 +28,7 @@ defineProps<{
           :class="[
             currentStep >= step.id
               ? 'text-gray-800 dark:text-gray-200'
-              : 'text-gray-400 dark:text-gray-500'
+              : 'text-gray-500 dark:text-white/50'
           ]"
         >
           {{ step.name }}

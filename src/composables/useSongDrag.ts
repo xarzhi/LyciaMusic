@@ -1,6 +1,11 @@
 import { ref, onMounted, onUnmounted, Ref } from 'vue';
-import { usePlayer, Song, dragSession } from './player';
+import { storeToRefs } from 'pinia';
+
+import { dragSession } from './dragState';
+import { usePlayer } from './player';
+import type { Song } from '../types';
 import { useToast } from './toast';
+import { useCollectionsStore } from '../features/collections/store';
 
 export function useSongDrag(
     displaySongList: Ref<Song[]>,
@@ -12,7 +17,8 @@ export function useSongDrag(
         songList, currentViewMode, addSongsToPlaylist,
         currentFolderFilter, updateFolderOrder // 🟢 导入文件夹排序函数
     } = usePlayer();
-    const { filterCondition, playlists, setPlaylistSortMode } = usePlayer();
+    const { playlists } = storeToRefs(useCollectionsStore());
+    const { filterCondition, setPlaylistSortMode } = usePlayer();
     const { updateLocalOrder } = usePlayer();
 
     const reorderPathOrder = (

@@ -1,62 +1,65 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import SettingsAbout from "../components/settings/SettingsAbout.vue";
+import SettingsDesktopLyrics from "../components/settings/SettingsDesktopLyrics.vue";
 import SettingsGeneral from "../components/settings/SettingsGeneral.vue";
+import SettingsLibrary from "../components/settings/SettingsLibrary.vue";
+import SettingsShortcuts from "../components/settings/SettingsShortcuts.vue";
+import SettingsSidebar from "../components/settings/SettingsSidebar.vue";
 import SettingsTheme from "../components/settings/SettingsTheme.vue";
 import SettingsToolbox from "../components/settings/SettingsToolbox.vue";
-import SettingsAbout from "../components/settings/SettingsAbout.vue";
-import SettingsLibrary from "../components/settings/SettingsLibrary.vue"; // Added import
 
-// 定义 Tabs
-const activeTab = ref<'general' | 'theme' | 'toolbox' | 'library' | 'shortcuts' | 'about'>('general'); // Updated type
+const activeTab = ref<'general' | 'theme' | 'sidebar' | 'desktopLyrics' | 'toolbox' | 'library' | 'shortcuts' | 'about'>('general');
 
 const tabs = [
   { id: 'general', name: '常规' },
   { id: 'theme', name: '外观' },
+  { id: 'sidebar', name: '侧边栏管理' },
+  { id: 'desktopLyrics', name: '桌面歌词' },
   { id: 'toolbox', name: '工具箱' },
-  { id: 'library', name: '音乐库' }, // Added tab
+  { id: 'library', name: '音乐库' },
   { id: 'shortcuts', name: '快捷键' },
-  { id: 'about', name: '关于' }
+  { id: 'about', name: '关于' },
 ];
 </script>
 
 <template>
-  <div class="flex-1 h-full flex flex-col overflow-hidden transition-colors duration-500">
-    
-    <header class="h-20 flex items-end px-8 pb-4 shrink-0 sticky top-0 z-10">
-      <h1 class="text-3xl font-bold text-gray-800 dark:text-gray-200 mr-12 mb-1 drop-shadow-sm">设置</h1>
-      
-      <div class="flex gap-8 mb-1.5">
-        <button 
-          v-for="tab in tabs" 
+  <div class="flex h-full flex-1 overflow-hidden transition-colors duration-500">
+    <aside class="z-10 flex w-[220px] shrink-0 flex-col border-r border-white/20 p-4 dark:border-white/5 md:w-[240px]">
+      <nav class="custom-scrollbar flex-1 space-y-1.5 overflow-y-auto">
+        <button
+          v-for="tab in tabs"
           :key="tab.id"
-          @click="activeTab = tab.id as any"
-          class="pb-2 text-base font-medium transition-all relative"
-          :class="activeTab === tab.id ? 'text-[#EC4141] font-bold' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'"
+          class="relative flex w-full cursor-pointer items-center rounded-md px-4 py-2.5 text-left text-sm transition-all duration-300 active:scale-[0.97]"
+          :class="activeTab === tab.id ? 'translate-x-1 bg-black/10 font-semibold text-black shadow-sm dark:bg-white/10 dark:text-white' : 'font-medium text-gray-800 hover:translate-x-1 hover:bg-black/5 hover:text-black dark:text-gray-200 dark:hover:bg-white/5 dark:hover:text-white'"
+          @click="activeTab = tab.id as typeof activeTab.value"
         >
-          {{ tab.name }}
-          <div 
-            v-if="activeTab === tab.id" 
-            class="absolute bottom-[-2px] left-0 right-0 h-[3px] bg-[#EC4141] rounded-full shadow-sm"
+          <div
+            v-if="activeTab === tab.id"
+            class="absolute left-0 top-1/2 h-[18px] w-1 -translate-y-1/2 rounded-r-md bg-[#EC4141]"
           ></div>
+          {{ tab.name }}
         </button>
-      </div>
-    </header>
+      </nav>
+    </aside>
 
-    <section class="flex-1 min-h-0 w-full overflow-y-auto p-8 custom-scrollbar relative">
-      <SettingsGeneral v-if="activeTab === 'general'" />
-      <SettingsTheme v-else-if="activeTab === 'theme'" />
-      <SettingsToolbox v-else-if="activeTab === 'toolbox'" />
-      <SettingsLibrary v-else-if="activeTab === 'library'" />
-      <SettingsAbout v-else-if="activeTab === 'about'" />
-      
-      <div v-else class="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
-        <div class="text-4xl opacity-50">🚧</div>
-        <div>{{ activeTab === 'shortcuts' ? '快捷键设置' : '关于信息' }} 模块正在施工中...</div>
-      </div>
+    <main class="custom-scrollbar relative h-full min-w-0 flex-1 overflow-y-auto px-10 py-10 xl:px-16">
+      <div class="mx-auto w-full max-w-5xl pb-16">
+        <SettingsGeneral v-if="activeTab === 'general'" />
+        <SettingsTheme v-else-if="activeTab === 'theme'" />
+        <SettingsSidebar v-else-if="activeTab === 'sidebar'" />
+        <SettingsDesktopLyrics v-else-if="activeTab === 'desktopLyrics'" />
+        <SettingsToolbox v-else-if="activeTab === 'toolbox'" />
+        <SettingsLibrary v-else-if="activeTab === 'library'" />
+        <SettingsShortcuts v-else-if="activeTab === 'shortcuts'" />
+        <SettingsAbout v-else-if="activeTab === 'about'" />
 
-      <!-- 底部留白，确保能完全滚出阴影区 -->
-      <div class="h-12"></div>
-    </section>
+        <div v-else class="flex h-[50vh] flex-col items-center justify-center space-y-4 text-gray-400">
+          <div class="text-4xl opacity-50">施工中</div>
+          <div>当前设置模块正在整理中。</div>
+        </div>
+      </div>
+    </main>
   </div>
 </template>
 

@@ -1,0 +1,335 @@
+<script setup lang="ts">
+import { ref } from 'vue';
+
+import DesktopLyricsToolbar from './DesktopLyricsToolbar.vue';
+import { useDesktopLyricsDisplay } from '../../composables/useDesktopLyricsDisplay';
+import { useDesktopLyricsWindowController } from '../../composables/useDesktopLyricsWindowController';
+
+const showDragShadow = ref(false);
+
+const {
+  playbackTime,
+  isPlaying,
+  settings,
+  lyricsAlignmentClass,
+  fallbackStateText,
+  lyricsPlayerStyle,
+  widgetStyle,
+  activeLyricLine,
+  blockTransitionKey,
+  visibleSecondaryLines,
+  blockStyle,
+  handlePayload,
+  handlePlaybackPayload,
+  emitAction,
+  getWordStyle,
+} = useDesktopLyricsDisplay(showDragShadow);
+
+const {
+  isSystemHidden,
+  isToolbarVisible,
+  widgetShellStyle,
+  handlePointerEnter,
+  handlePointerMove,
+  handlePointerLeave,
+  startWindowDrag,
+} = useDesktopLyricsWindowController({
+  showDragShadow,
+  settings,
+  playbackTime,
+  isPlaying,
+  handlePayload,
+  handlePlaybackPayload,
+});
+</script>
+
+<template>
+  <div class="desktop-lyrics-window h-screen w-screen overflow-visible bg-transparent">
+    <div class="flex h-full w-full items-center justify-center overflow-visible p-0">
+      <div
+        class="desktop-widget-shell relative h-full w-full transition-all duration-300"
+        :style="widgetShellStyle"
+        @mouseenter="handlePointerEnter"
+        @mousemove="handlePointerMove"
+        @mouseleave="handlePointerLeave"
+      >
+        <DesktopLyricsToolbar
+          class="desktop-widget-toolbar"
+          :class="{ 'desktop-widget-toolbar--visible': isToolbarVisible }"
+          :is-playing="isPlaying"
+          @action="emitAction"
+        />
+
+        <div
+          class="desktop-widget relative flex h-full w-full select-none flex-col overflow-hidden"
+          :class="[
+            lyricsAlignmentClass,
+            {
+              'desktop-widget--dragging': showDragShadow,
+              'desktop-widget--surface-visible': showDragShadow || settings.alwaysShowShadowBackground,
+            },
+          ]"
+          :style="widgetStyle"
+          @mousedown="startWindowDrag"
+        >
+          <div class="desktop-lyrics-body" :style="lyricsPlayerStyle">
+            <div class="desktop-lyrics-host h-full min-h-0 w-full min-w-0" :class="lyricsAlignmentClass">
+              <div class="desktop-lyrics-mask-shell h-full min-h-0 w-full min-w-0">
+                <div class="desktop-lyrics-position-frame h-full min-h-0 w-full min-w-0">
+                  <transition name="desktop-block" mode="out-in">
+                    <div
+                      v-if="activeLyricLine"
+                      :key="blockTransitionKey"
+                      class="desktop-lyric-block"
+                      :style="blockStyle"
+                    >
+                      <div class="desktop-lyric-main">
+                        <template v-if="activeLyricLine.words?.length">
+                          <span
+                            v-for="(word, index) in activeLyricLine.words"
+                            :key="`${word.start}-${word.end}-${index}`"
+                            class="desktop-lyric-word"
+                            :style="getWordStyle(word.start, word.end)"
+                          >
+                            {{ word.text }}
+                          </span>
+                        </template>
+                        <template v-else>
+                          {{ activeLyricLine.text }}
+                        </template>
+                      </div>
+
+                      <div
+                        v-for="secondaryLine in visibleSecondaryLines"
+                        :key="`${blockTransitionKey}:${secondaryLine.kind}`"
+                        class="desktop-lyric-sub"
+                        :class="`desktop-lyric-sub--${secondaryLine.kind}`"
+                      >
+                        {{ secondaryLine.text }}
+                      </div>
+                    </div>
+
+                    <div
+                      v-else
+                      :key="'empty-' + blockTransitionKey"
+                      class="desktop-empty-state flex h-full items-center justify-center text-center"
+                    >
+                      {{ fallbackStateText }}
+                    </div>
+                  </transition>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="isSystemHidden" class="desktop-system-hide-indicator">
+            Fullscreen app detected
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.desktop-lyrics-window {
+  background: transparent;
+}
+
+.desktop-widget-shell {
+  overflow: visible;
+  will-change: opacity, transform;
+}
+
+.desktop-widget-toolbar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 20;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -10px) scale(0.96);
+  transition: opacity 180ms ease, transform 220ms ease;
+}
+
+.desktop-widget-toolbar--visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.desktop-widget {
+  position: absolute;
+  inset: 0;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  overflow: visible;
+  transition:
+    background 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease,
+    outline-color 220ms ease;
+}
+
+.desktop-widget--surface-visible {
+  border-color: color-mix(in srgb, var(--desktop-accent-b) 22%, transparent);
+  background:
+    radial-gradient(circle at top center, color-mix(in srgb, var(--desktop-accent-a) 24%, transparent), transparent 42%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--desktop-accent-c) 16%, transparent), transparent 38%),
+    linear-gradient(180deg, rgba(20, 20, 24, 0.68), rgba(12, 12, 16, 0.54));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--desktop-accent-d) 18%, transparent),
+    0 22px 56px rgba(0, 0, 0, 0.18),
+    0 6px 18px rgba(0, 0, 0, 0.08),
+    0 0 0 1px color-mix(in srgb, var(--desktop-accent-a) 8%, transparent);
+}
+
+.desktop-widget::before {
+  content: none;
+}
+
+.desktop-widget--dragging {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.desktop-lyrics-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 24px;
+  box-sizing: border-box;
+}
+
+.desktop-lyrics-host {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.desktop-lyrics-mask-shell {
+  position: relative;
+  overflow: visible;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.desktop-lyrics-position-frame {
+  transform: translate3d(var(--lyrics-offset-x, 0%), var(--lyrics-offset-y, 0%), 0);
+  transition: transform 180ms ease;
+  will-change: transform;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 16px 0;
+  box-sizing: border-box;
+}
+
+.desktop-lyric-block {
+  width: min(100%, 1180px);
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(0.22rem * var(--desktop-line-gap, 1));
+  text-align: var(--lyrics-text-align, center);
+  font-family: var(--lyrics-font-family, system-ui, sans-serif);
+  transform-origin: var(--lyrics-line-transform-origin, 50%) center;
+}
+
+.desktop-lyric-main {
+  width: 100%;
+  font-size: calc(max(26px, min(4.8vw, 6vh)) * var(--desktop-font-scale, 1));
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: 0.01em;
+  color: var(--desktop-text-primary);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-shadow:
+    0 1px 10px rgba(0, 0, 0, 0.18),
+    0 0 24px color-mix(in srgb, var(--desktop-accent-a) 14%, transparent);
+}
+
+.desktop-lyric-word {
+  display: inline-block;
+  white-space: pre-wrap;
+}
+
+.desktop-lyric-sub {
+  width: 100%;
+  font-size: calc(max(14px, min(2.25vw, 2.75vh)) * var(--desktop-font-scale, 1));
+  line-height: 1.36;
+  letter-spacing: 0.03em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.desktop-lyric-sub--romaji {
+  color: color-mix(in srgb, var(--desktop-accent-d) 42%, var(--desktop-text-secondary));
+  text-shadow: 0 0 16px color-mix(in srgb, var(--desktop-accent-d) 14%, transparent);
+}
+
+.desktop-lyric-sub--translation {
+  color: color-mix(in srgb, var(--desktop-accent-c) 28%, var(--desktop-text-tertiary));
+  text-shadow: 0 0 12px color-mix(in srgb, var(--desktop-accent-c) 10%, transparent);
+}
+
+.lyrics-align-left {
+  --lyrics-text-align: left;
+  --lyrics-line-transform-origin: 0%;
+}
+
+.lyrics-align-center {
+  --lyrics-text-align: center;
+  --lyrics-line-transform-origin: 50%;
+}
+
+.lyrics-align-right {
+  --lyrics-text-align: right;
+  --lyrics-line-transform-origin: 100%;
+}
+
+.desktop-empty-state {
+  color: var(--desktop-text-secondary);
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 16px color-mix(in srgb, var(--desktop-accent-a) 12%, transparent);
+}
+
+.desktop-block-enter-active,
+.desktop-block-leave-active {
+  transition: opacity 180ms ease, transform 220ms ease, filter 220ms ease;
+}
+
+.desktop-block-enter-from,
+.desktop-block-leave-to {
+  opacity: 0;
+  transform: translateY(12px) scale(0.985);
+  filter: blur(8px);
+}
+
+.desktop-system-hide-indicator {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+}
+</style>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { usePlayer } from '../../composables/player';
+import { useLibraryCollections } from '../../features/collections/useLibraryCollections';
 import { useLyrics } from '../../composables/lyrics';
-import DesktopLyrics from "../player/DesktopLyrics.vue";
+import { usePlaybackController } from '../../features/playback/usePlaybackController';
 import FooterContextMenu from "../overlays/FooterContextMenu.vue";
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 
@@ -9,15 +9,15 @@ const {
   currentSong,
   isPlaying, volume, currentTime, playMode, showPlaylist, showPlayerDetail,
   togglePlay, nextSong, prevSong, handleVolume, toggleMute, toggleMode, togglePlaylist,
-  isFavorite, toggleFavorite,
   togglePlayerDetail, seekTo, formatDuration
-} = usePlayer();
+} = usePlaybackController();
+const { isFavorite, toggleFavorite } = useLibraryCollections();
 
 const handleOpenDetail = () => {
   togglePlayerDetail();
 };
 
-const { showDesktopLyrics } = useLyrics();
+const { showDesktopLyrics, showLyricsPlayerSettingsPanel } = useLyrics();
 
 // --- Context Menu State ---
 const showContextMenu = ref(false);
@@ -33,6 +33,9 @@ const handleContextMenu = (e: MouseEvent) => {
 };
 
 const toggleLyrics = () => { showDesktopLyrics.value = !showDesktopLyrics.value; };
+const toggleLyricsPlayerSettings = () => {
+  showLyricsPlayerSettingsPanel.value = !showLyricsPlayerSettingsPanel.value;
+};
 
 // 不再使用单独的模糊样式 -> 全透明
 
@@ -137,13 +140,25 @@ const handleVolumeLeave = () => {
 };
 
 // --- Idle State for Auto-Hide ---
+const isPinned = ref(localStorage.getItem('footer_pinned') === 'true');
 const isIdle = ref(false);
 let idleTimer: any = null;
+
+const togglePin = () => {
+  isPinned.value = !isPinned.value;
+  localStorage.setItem('footer_pinned', isPinned.value.toString());
+  if (!isPinned.value) {
+    startIdleTimer();
+  } else {
+    isIdle.value = false;
+    if (idleTimer) clearTimeout(idleTimer);
+  }
+};
 
 const startIdleTimer = () => {
   if (idleTimer) clearTimeout(idleTimer);
   // Do not hide if context menu, dragging, or volume slider is active
-  if (showContextMenu.value || isDraggingProgress.value || isDraggingVolume.value || showVolumeSlider.value) return;
+  if (showContextMenu.value || isDraggingProgress.value || isDraggingVolume.value || showVolumeSlider.value || isPinned.value) return;
   
   idleTimer = setTimeout(() => {
     isIdle.value = true;
@@ -268,6 +283,19 @@ onUnmounted(() => {
       class="flex items-center justify-center flex-1 gap-6 transition-opacity duration-700"
       :class="{ 'opacity-0 pointer-events-none': isIdle }"
     >
+      <button
+        v-if="showPlayerDetail"
+        @mousedown.stop
+        @click.stop="toggleLyricsPlayerSettings"
+        class="flex items-center justify-center text-base font-semibold tracking-[0.02em] transition-colors"
+        :class="showLyricsPlayerSettingsPanel
+          ? 'text-white'
+          : 'text-white/60 hover:text-white'"
+        title="歌词样式"
+      >
+        A
+      </button>
+
       <button @click="toggleMode" class="transition-colors" 
         :class="showPlayerDetail ? 'text-white/60 hover:text-white' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white'"
         :title="['列表循环', '单曲循环', '随机播放'][playMode]">
@@ -300,16 +328,17 @@ onUnmounted(() => {
         <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></svg>
       </button>
 
-      <button 
-        @click="toggleLyrics"
-        :class="['text-sm font-bold transition-colors', showDesktopLyrics ? 'text-[#EC4141]' : (showPlayerDetail ? 'text-white/60 hover:text-white' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white')]"
+      <button @click="togglePlaylist" 
+        class="transition-colors hover:scale-110 transform duration-200"
+        :class="showPlaylist ? 'text-[#EC4141]' : (showPlayerDetail ? 'text-white/80 hover:text-white' : 'text-gray-700 dark:text-white/80 hover:text-black dark:hover:text-white')"
+        title="播放队列"
       >
-        词
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
       </button>
     </div>
 
     <div 
-      class="flex items-center justify-end w-1/3 min-w-[150px] space-x-5 pr-2 transition-opacity duration-700"
+      class="flex items-center justify-end w-1/3 min-w-[150px] gap-2 pr-2 transition-opacity duration-700"
       :class="{ 'opacity-0 pointer-events-none': isIdle }"
     > 
       <div 
@@ -340,25 +369,40 @@ onUnmounted(() => {
           </div>
         </div>
         <button @click="toggleMute" 
-          class="p-2 rounded-full transition-colors"
+          class="transition-colors flex items-center justify-center shrink-0 w-8 h-8 rounded-full"
           :class="showPlayerDetail ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'"
+          title="音量"
         > 
-          <svg v-if="volume === 0" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5z" /><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5z" /></svg>
+          <!-- 静音 -->
+          <svg v-if="volume === 0" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+          <!-- 弱音量 -->
+          <svg v-else-if="volume > 0 && volume < 30" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon></svg>
+          <!-- 中音量 -->
+          <svg v-else-if="volume >= 30 && volume < 70" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+          <!-- 大音量 -->
+          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
         </button>
       </div>
-      <button @click="togglePlaylist" 
-        class="relative transition-colors" 
-        :class="showPlaylist ? 'text-[#EC4141]' : (showPlayerDetail ? 'text-white/60 hover:text-white' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white')"
+      
+      <button 
+        @click="toggleLyrics"
+        :class="['text-[14px] font-bold transition-colors w-8 h-8 flex items-center justify-center rounded-full', showDesktopLyrics ? 'text-[#EC4141] bg-[#EC4141]/10' : (showPlayerDetail ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10')]"
+        title="桌面歌词"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+        词
+      </button>
+
+      <button @click="togglePin"
+        class="transition-colors w-8 h-8 flex items-center justify-center rounded-full"
+        :class="showPlayerDetail ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-gray-500 dark:text-white/60 hover:text-gray-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'"
+        :title="isPinned ? '取消固定 (当前已常驻)' : '固定状态栏 (当前离开后消失)'"
+      >
+        <!-- 已固定：完整图钉 -->
+        <svg v-if="isPinned" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
+        <!-- 未固定：带取消斜线的图钉 -->
+        <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-.82"/><path d="M12 17v5"/><path d="M15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0-1.16.37"/></svg>
       </button>
     </div>
-
-        <DesktopLyrics />
-
-    
-
         <FooterContextMenu 
 
           :visible="showContextMenu" 

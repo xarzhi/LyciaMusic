@@ -45,6 +45,8 @@ pub struct FolderNode {
     pub name: String,
     pub path: String,
     pub children: Vec<FolderNode>,
+    pub child_count: usize,
+    pub children_loaded: bool,
     pub song_count: usize,
     pub cover_song_path: Option<String>,
     pub is_expanded: bool,

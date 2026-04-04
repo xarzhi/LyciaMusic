@@ -1,6 +1,6 @@
 //负责显示“添加到歌单”的弹窗。
 <script setup lang="ts">
-import { usePlayer } from '../../composables/player';
+import { useLibraryCollections } from '../../features/collections/useLibraryCollections';
 import { ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -13,7 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits(['close', 'add']);
 
-const { playlists, createPlaylist } = usePlayer();
+const { playlists, createPlaylist } = useLibraryCollections();
 const playlistCoverCache = ref<Map<string, string>>(new Map());
 
 const loadPlaylistCover = async (id: string, path: string) => {
@@ -39,11 +39,10 @@ const handleCreateClick = () => {
 
 const handleConfirmCreate = (name: string) => {
   if (name) {
-    createPlaylist(name);
-    setTimeout(() => {
-      const newPl = playlists.value[playlists.value.length - 1];
-      if (newPl) emit('add', newPl.id);
-    }, 100);
+    const playlistId = createPlaylist(name);
+    if (playlistId) {
+      emit('add', playlistId);
+    }
   }
 };
 </script>

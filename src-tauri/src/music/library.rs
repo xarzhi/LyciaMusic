@@ -58,8 +58,7 @@ fn load_cached_songs(conn: &rusqlite::Connection) -> Result<Vec<Song>, String> {
             let added_at_i64 = row.get::<_, Option<i64>>(20)?;
             let file_modified_at_i64 = row.get::<_, Option<i64>>(21)?;
             let artist_names = deserialize_string_list(row.get::<_, Option<String>>(4)?);
-            let effective_artist_names =
-                deserialize_string_list(row.get::<_, Option<String>>(5)?);
+            let effective_artist_names = deserialize_string_list(row.get::<_, Option<String>>(5)?);
 
             let name = std::path::Path::new(&path)
                 .file_name()
@@ -194,9 +193,7 @@ pub async fn remove_library_folder(
 }
 
 #[tauri::command]
-pub async fn get_library_songs_cached(
-    db_state: State<'_, DbState>,
-) -> Result<Vec<Song>, String> {
+pub async fn get_library_songs_cached(db_state: State<'_, DbState>) -> Result<Vec<Song>, String> {
     let db_conn = db_state.conn.clone();
 
     let result = tauri::async_runtime::spawn_blocking(move || {
@@ -211,7 +208,7 @@ pub async fn get_library_songs_cached(
 
 #[tauri::command]
 pub async fn scan_library(
-    _app: AppHandle,
+    app: AppHandle,
     db_state: State<'_, DbState>,
 ) -> Result<Vec<Song>, String> {
     let db_conn = db_state.conn.clone();
@@ -232,8 +229,15 @@ pub async fn scan_library(
 
         let mut all_songs = Vec::new();
 
-        for folder in folder_paths {
-            if let Ok(songs) = scan_single_directory_internal(folder, db_conn.clone()) {
+        let folder_total = folder_paths.len();
+        for (index, folder) in folder_paths.into_iter().enumerate() {
+            if let Ok(songs) = scan_single_directory_internal(
+                folder,
+                db_conn.clone(),
+                Some(app.clone()),
+                index + 1,
+                folder_total.max(1),
+            ) {
                 all_songs.extend(songs);
             }
         }
@@ -276,12 +280,55 @@ pub async fn get_library_hierarchy(
 
         for root in roots {
             let root_path = PathBuf::from(&root);
-            if let Some(root_node) = scan_folder_recursive(root_path.clone(), 0, 3, &conn) {
+            if let Some(root_node) = scan_folder_recursive(root_path.clone(), 0, 1, &conn) {
                 tree.push(root_node);
             }
         }
 
         Ok::<Vec<FolderNode>, String>(tree)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn get_folder_children(
+    folder_path: String,
+    db_state: State<'_, DbState>,
+) -> Result<Vec<FolderNode>, String> {
+    let db_conn = db_state.conn.clone();
+    let normalized_folder = normalize_path(&folder_path);
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let conn = db_conn.lock().map_err(|e| e.to_string())?;
+        let root_path = PathBuf::from(&normalized_folder);
+        let read_dir = std::fs::read_dir(&root_path).map_err(|e| e.to_string())?;
+        let mut subdirs: Vec<PathBuf> = read_dir
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .filter(|path| path.is_dir())
+            .collect();
+
+        subdirs.sort_by(|left, right| {
+            let left_name = left
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| left.to_string_lossy().into_owned());
+            let right_name = right
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| right.to_string_lossy().into_owned());
+            left_name.cmp(&right_name)
+        });
+
+        let children = subdirs
+            .into_iter()
+            .filter_map(|path| scan_folder_recursive(path, 0, 0, &conn))
+            .collect();
+
+        Ok::<Vec<FolderNode>, String>(children)
     })
     .await
     .map_err(|e| e.to_string())??;

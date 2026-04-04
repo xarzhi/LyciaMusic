@@ -26,6 +26,7 @@ const emit = defineEmits([
 const coverUrl = ref('');
 const isLoading = ref(false);
 const artistName = computed(() => props.albumArtist || '未知歌手');
+const toCoverAssetUrl = (filePath: string) => `${convertFileSrc(filePath)}?v=${Date.now()}`;
 
 watch(() => props.songs, async (newSongs) => {
   if (!newSongs || newSongs.length === 0) {
@@ -53,7 +54,7 @@ watch(() => props.songs, async (newSongs) => {
     }
 
     if (filePath) {
-      const url = convertFileSrc(filePath);
+      const url = toCoverAssetUrl(filePath);
       coverUrl.value = url;
       albumCoverCache.set(props.albumName, url);
     } else {

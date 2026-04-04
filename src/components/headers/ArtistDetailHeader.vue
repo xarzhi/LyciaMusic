@@ -26,6 +26,7 @@ const emit = defineEmits([
 
 const coverUrl = ref<string>('');
 const isLoading = ref<boolean>(false);
+const toCoverAssetUrl = (filePath: string) => `${convertFileSrc(filePath)}?v=${Date.now()}`;
 
 watch(() => props.songs, async (newSongs) => {
   if (newSongs && newSongs.length > 0) {
@@ -44,7 +45,7 @@ watch(() => props.songs, async (newSongs) => {
            filePath = await invoke<string>('get_song_cover_thumbnail', { path: firstSongPath });
         }
         if (filePath) {
-          const url = convertFileSrc(filePath);
+          const url = toCoverAssetUrl(filePath);
           coverUrl.value = url;
           headerCoverCache.set(props.artistName, url);
         } else {

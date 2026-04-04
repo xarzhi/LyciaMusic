@@ -66,7 +66,7 @@ const {
             lyricsAlignmentClass,
             {
               'desktop-widget--dragging': showDragShadow,
-              'desktop-widget--surface-visible': showDragShadow,
+              'desktop-widget--surface-visible': showDragShadow || settings.alwaysShowShadowBackground,
             },
           ]"
           :style="widgetStyle"

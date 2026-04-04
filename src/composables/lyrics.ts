@@ -125,6 +125,7 @@ export interface LyricsSettings {
 
 export interface DesktopLyricsSettings {
   isAlwaysOnTop: boolean;
+  alwaysShowShadowBackground: boolean;
   autoHideWhenFullscreen: boolean;
   isLocked: boolean;
   persistLock: boolean;
@@ -150,6 +151,7 @@ const defaultLyricsSettings: LyricsSettings = {
 
 const defaultDesktopLyricsSettings: DesktopLyricsSettings = {
   isAlwaysOnTop: false,
+  alwaysShowShadowBackground: false,
   autoHideWhenFullscreen: true,
   isLocked: false,
   persistLock: false,
@@ -344,6 +346,9 @@ if (storedDesktopLyricsSettings || storedLyricsSettings) {
     Object.assign(desktopLyricsSettings, {
       ...defaultDesktopLyricsSettings,
       ...parsed,
+      alwaysShowShadowBackground: typeof parsed.alwaysShowShadowBackground === 'boolean'
+        ? parsed.alwaysShowShadowBackground
+        : false,
       autoHideWhenFullscreen: typeof parsed.autoHideWhenFullscreen === 'boolean'
         ? parsed.autoHideWhenFullscreen
         : true,

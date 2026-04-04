@@ -176,6 +176,26 @@ onMounted(() => {
         <button
           type="button"
           class="desktop-setting-row"
+          @click="desktopLyricsSettings.alwaysShowShadowBackground = !desktopLyricsSettings.alwaysShowShadowBackground"
+        >
+          <div>
+            <div class="text-sm font-medium text-gray-800 dark:text-gray-200">始终显示阴影背景</div>
+            <div class="mt-0.5 text-xs text-gray-600 dark:text-white/60">开启后，桌面歌词会持续显示底板阴影，不再只在显示或拖动时临时出现</div>
+          </div>
+          <span
+            class="desktop-switch"
+            :class="desktopLyricsSettings.alwaysShowShadowBackground ? 'desktop-switch--on' : ''"
+          >
+            <span
+              class="desktop-switch-thumb"
+              :class="desktopLyricsSettings.alwaysShowShadowBackground ? 'translate-x-5' : ''"
+            />
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="desktop-setting-row"
           @click="desktopLyricsSettings.autoHideWhenFullscreen = !desktopLyricsSettings.autoHideWhenFullscreen"
         >
           <div>

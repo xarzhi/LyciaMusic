@@ -62,6 +62,7 @@ export function useDesktopLyricsDisplay(showDragShadow: Ref<boolean>) {
     showTranslation: true,
     showRomaji: false,
     isAlwaysOnTop: false,
+    alwaysShowShadowBackground: false,
     autoHideWhenFullscreen: true,
     isLocked: false,
     persistLock: false,
@@ -215,6 +216,8 @@ export function useDesktopLyricsDisplay(showDragShadow: Ref<boolean>) {
     return [...FIXED_PALETTES[settings.value.colorScheme]];
   });
   const widgetStyle = computed(() => {
+    const shouldShowSurface = showDragShadow.value || settings.value.alwaysShowShadowBackground;
+
     return {
       '--desktop-accent-a': resolvedPalette.value[0],
       '--desktop-accent-b': resolvedPalette.value[1],
@@ -223,7 +226,7 @@ export function useDesktopLyricsDisplay(showDragShadow: Ref<boolean>) {
       '--desktop-text-primary': 'rgba(255, 255, 255, 0.98)',
       '--desktop-text-secondary': 'rgba(255, 255, 255, 0.88)',
       '--desktop-text-tertiary': 'rgba(255, 255, 255, 0.76)',
-      outline: showDragShadow.value ? '1px solid rgba(255, 255, 255, 0.16)' : 'none',
+      outline: shouldShowSurface ? '1px solid rgba(255, 255, 255, 0.16)' : 'none',
     } as Record<string, string>;
   });
   const activeLyricIndex = computed(() => {

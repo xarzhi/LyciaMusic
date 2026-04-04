@@ -154,15 +154,16 @@ const {
 
 .desktop-widget {
   position: absolute;
-  inset: 50px 0 0;
+  inset: 0;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 0;
   background-color: rgba(0, 0, 0, 0.4);
   box-shadow:
     0 22px 56px rgba(0, 0, 0, 0.18),
     0 6px 18px rgba(0, 0, 0, 0.08);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  overflow: visible;
 }
 
 .desktop-widget::before {
@@ -178,37 +179,26 @@ const {
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
-  padding: 14px 24px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 24px;
+  box-sizing: border-box;
+}
+
+.desktop-lyrics-host {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .desktop-lyrics-mask-shell {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   isolation: isolate;
-  --lyrics-edge-fade: 12%;
-  --lyrics-edge-softness: 8%;
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgba(0, 0, 0, 0.24) var(--lyrics-edge-softness),
-    black var(--lyrics-edge-fade),
-    black calc(100% - var(--lyrics-edge-fade)),
-    rgba(0, 0, 0, 0.24) calc(100% - var(--lyrics-edge-softness)),
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgba(0, 0, 0, 0.24) var(--lyrics-edge-softness),
-    black var(--lyrics-edge-fade),
-    black calc(100% - var(--lyrics-edge-fade)),
-    rgba(0, 0, 0, 0.24) calc(100% - var(--lyrics-edge-softness)),
-    transparent 100%
-  );
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .desktop-lyrics-position-frame {
@@ -216,15 +206,16 @@ const {
   transition: transform 180ms ease;
   will-change: transform;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding-top: clamp(18px, 7.5vh, 52px);
-  padding-bottom: clamp(18px, 7vh, 52px);
+  min-height: 100%;
+  padding: 16px 0;
   box-sizing: border-box;
 }
 
 .desktop-lyric-block {
   width: min(100%, 1180px);
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -242,6 +233,7 @@ const {
   line-height: 1.18;
   letter-spacing: 0.01em;
   color: rgba(255, 255, 255, 1);
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -255,6 +247,7 @@ const {
   font-size: calc(max(14px, min(2.25vw, 2.75vh)) * var(--desktop-font-scale, 1));
   line-height: 1.36;
   letter-spacing: 0.03em;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 

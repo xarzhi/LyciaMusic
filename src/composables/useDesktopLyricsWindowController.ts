@@ -25,7 +25,6 @@ export function useDesktopLyricsWindowController(options: {
   isPlaying: Ref<boolean>;
   handlePayload: (payload: DesktopLyricsStatePayload) => void;
   handlePlaybackPayload: (payload: DesktopLyricsPlaybackPayload) => void;
-  toolbarMenuVisible: Ref<boolean>;
 }) {
   const {
     showDragShadow,
@@ -34,7 +33,6 @@ export function useDesktopLyricsWindowController(options: {
     isPlaying,
     handlePayload,
     handlePlaybackPayload,
-    toolbarMenuVisible,
   } = options;
 
   const appWindow = getCurrentWindow();
@@ -121,7 +119,7 @@ export function useDesktopLyricsWindowController(options: {
   function queueHoverDim() {
     clearHoverDimTimer();
 
-    if (settings.value.isLocked || toolbarMenuVisible.value || isSystemHidden.value) {
+    if (settings.value.isLocked || isSystemHidden.value) {
       return;
     }
 
@@ -252,16 +250,6 @@ export function useDesktopLyricsWindowController(options: {
       }
     },
   );
-
-  watch(toolbarMenuVisible, (visible) => {
-    if (visible) {
-      clearHoverDimTimer();
-      isHoverDimmed.value = false;
-      return;
-    }
-
-    queueHoverDim();
-  });
 
   return {
     showDragShadow,

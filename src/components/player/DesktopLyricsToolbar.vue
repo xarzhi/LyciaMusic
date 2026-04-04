@@ -1,156 +1,22 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-
-import type { LyricsFontOption } from '../../composables/lyrics';
-import type {
-  DesktopLyricsAction,
-  DesktopLyricsSettingsPatch,
-  DesktopLyricsWindowSettings,
-} from '../../features/desktopLyrics/shared';
-import DesktopLyricsSettingsMenu from './DesktopLyricsSettingsMenu.vue';
+import type { DesktopLyricsAction } from '../../features/desktopLyrics/shared';
 
 const props = defineProps<{
   isPlaying: boolean;
-  offsetLabel: string;
-  settings: DesktopLyricsWindowSettings;
-  availableFontOptions: LyricsFontOption[];
-  selectedFontLabel: string;
-  fontScaleLabel: string;
-  lineGapLabel: string;
-  offsetXLabel: string;
-  offsetYLabel: string;
-  alignmentOptions: Array<{ value: DesktopLyricsWindowSettings['playerAlignment']; label: string }>;
 }>();
 
 const emit = defineEmits<{
   (e: 'action', action: DesktopLyricsAction): void;
-  (e: 'patch-settings', patch: DesktopLyricsSettingsPatch): void;
-  (e: 'menu-visibility-change', visible: boolean): void;
 }>();
-
-const showSettings = ref(false);
-const settingsTriggerRef = ref<HTMLElement | null>(null);
-const settingsMenuRef = ref<{ $el?: HTMLElement } | null>(null);
-const settingsMenuStyle = ref<Record<string, string>>({});
-
-let closeTimer: ReturnType<typeof setTimeout> | null = null;
 
 function emitAction(action: DesktopLyricsAction) {
   emit('action', action);
 }
-
-function patchSettings(patch: DesktopLyricsSettingsPatch) {
-  emit('patch-settings', patch);
-}
-
-function openSettings() {
-  if (closeTimer) {
-    clearTimeout(closeTimer);
-    closeTimer = null;
-  }
-  showSettings.value = true;
-  void nextTick(updateSettingsMenuPosition);
-}
-
-function closeSettings() {
-  if (closeTimer) {
-    clearTimeout(closeTimer);
-  }
-
-  closeTimer = setTimeout(() => {
-    showSettings.value = false;
-  }, 220);
-}
-
-function keepSettingsOpen() {
-  if (closeTimer) {
-    clearTimeout(closeTimer);
-    closeTimer = null;
-  }
-}
-
-function updateSettingsMenuPosition() {
-  const trigger = settingsTriggerRef.value;
-  if (!trigger) return;
-
-  const rect = trigger.getBoundingClientRect();
-  const menuWidth = 320;
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  let left = rect.left + rect.width / 2 - menuWidth / 2;
-  left = Math.max(12, Math.min(left, viewportWidth - menuWidth - 12));
-
-  const top = rect.bottom + 12;
-  const maxHeight = Math.max(180, viewportHeight - top - 12);
-
-  settingsMenuStyle.value = {
-    position: 'fixed',
-    left: `${Math.round(left)}px`,
-    top: `${Math.round(top)}px`,
-    width: `${menuWidth}px`,
-    maxHeight: `${Math.round(maxHeight)}px`,
-    zIndex: '140',
-  };
-}
-
-function handleClickOutside(event: MouseEvent) {
-  const target = event.target as Node | null;
-  if (!target) return;
-  if (settingsTriggerRef.value?.contains(target)) return;
-  if (settingsMenuRef.value?.$el?.contains?.(target)) return;
-
-  showSettings.value = false;
-}
-
-onMounted(() => {
-  window.addEventListener('mousedown', handleClickOutside);
-  window.addEventListener('resize', updateSettingsMenuPosition);
-});
-
-onUnmounted(() => {
-  window.removeEventListener('mousedown', handleClickOutside);
-  window.removeEventListener('resize', updateSettingsMenuPosition);
-  if (closeTimer) {
-    clearTimeout(closeTimer);
-    closeTimer = null;
-  }
-});
-
-watch(showSettings, (visible) => {
-  emit('menu-visibility-change', visible);
-  if (visible) {
-    void nextTick(updateSettingsMenuPosition);
-  }
-});
 </script>
 
 <template>
   <div class="desktop-toolbar" @mousedown.stop>
     <div class="desktop-toolbar-track">
-      <button
-        class="desktop-toolbar-button"
-        :title="`歌词提前 0.5s（当前 ${props.offsetLabel}）`"
-        @click="emitAction({ type: 'adjust-offset', delta: -0.5 })"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
-          <path stroke-linecap="round" stroke-linejoin="round" d="m11 7-5 5 5 5" />
-          <path stroke-linecap="round" stroke-linejoin="round" d="m18 7-5 5 5 5" />
-        </svg>
-      </button>
-
-      <button
-        class="desktop-toolbar-button"
-        :title="`歌词延后 0.5s（当前 ${props.offsetLabel}）`"
-        @click="emitAction({ type: 'adjust-offset', delta: 0.5 })"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
-          <path stroke-linecap="round" stroke-linejoin="round" d="m6 7 5 5-5 5" />
-          <path stroke-linecap="round" stroke-linejoin="round" d="m13 7 5 5-5 5" />
-        </svg>
-      </button>
-
-      <span class="desktop-toolbar-divider" aria-hidden="true"></span>
-
       <button class="desktop-toolbar-button" title="上一首" @click="emitAction({ type: 'prev-song' })">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
           <path stroke-linecap="round" stroke-linejoin="round" d="M7 6v12" />
@@ -179,45 +45,6 @@ watch(showSettings, (visible) => {
       </button>
 
       <span class="desktop-toolbar-divider" aria-hidden="true"></span>
-
-      <div class="relative" @mouseenter="openSettings" @mouseleave="closeSettings">
-        <button ref="settingsTriggerRef" class="desktop-toolbar-button" title="设置">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.36 6.36-2.12-2.12M8.76 8.76 5.64 5.64m12.72 0-2.12 2.12M8.76 15.24l-3.12 3.12" />
-            <circle cx="12" cy="12" r="3.25" />
-          </svg>
-        </button>
-
-        <DesktopLyricsSettingsMenu
-          v-show="showSettings"
-          ref="settingsMenuRef"
-          :menu-style="settingsMenuStyle"
-          :settings="props.settings"
-          :available-font-options="props.availableFontOptions"
-          :selected-font-label="props.selectedFontLabel"
-          :font-scale-label="props.fontScaleLabel"
-          :line-gap-label="props.lineGapLabel"
-          :offset-x-label="props.offsetXLabel"
-          :offset-y-label="props.offsetYLabel"
-          :alignment-options="props.alignmentOptions"
-          @patch-settings="patchSettings"
-          @keep-open="keepSettingsOpen"
-        />
-      </div>
-
-      <span class="desktop-toolbar-divider" aria-hidden="true"></span>
-
-      <button
-        class="desktop-toolbar-button"
-        :class="{ 'desktop-toolbar-button--active': props.settings.isLocked }"
-        :title="props.settings.isLocked ? '已锁定位置并启用鼠标穿透' : '锁定位置并启用鼠标穿透'"
-        @click="patchSettings({ isLocked: !props.settings.isLocked })"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 10V7.5a4 4 0 1 1 8 0V10m-9 0h10a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z" />
-          <path v-if="!props.settings.isLocked" stroke-linecap="round" stroke-linejoin="round" d="M12 14v3" />
-        </svg>
-      </button>
 
       <button class="desktop-toolbar-button" title="关闭桌面歌词" @click="emitAction({ type: 'close' })">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-[16px] w-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
@@ -274,11 +101,6 @@ watch(showSettings, (visible) => {
 
 .desktop-toolbar-button--primary:hover {
   transform: scale(1.04);
-}
-
-.desktop-toolbar-button--active {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
 }
 
 .desktop-toolbar-divider {

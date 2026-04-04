@@ -2,26 +2,15 @@
 import { ref } from 'vue';
 
 import DesktopLyricsToolbar from './DesktopLyricsToolbar.vue';
-import {
-  DESKTOP_LYRICS_ALIGNMENT_OPTIONS,
-  useDesktopLyricsDisplay,
-} from '../../composables/useDesktopLyricsDisplay';
+import { useDesktopLyricsDisplay } from '../../composables/useDesktopLyricsDisplay';
 import { useDesktopLyricsWindowController } from '../../composables/useDesktopLyricsWindowController';
 
 const showDragShadow = ref(false);
-const toolbarMenuVisible = ref(false);
 
 const {
   playbackTime,
   isPlaying,
   settings,
-  availableFontOptions,
-  offsetLabel,
-  fontScaleLabel,
-  lineGapLabel,
-  offsetXLabel,
-  offsetYLabel,
-  selectedFontLabel,
   lyricsAlignmentClass,
   fallbackStateText,
   lyricsPlayerStyle,
@@ -32,7 +21,6 @@ const {
   blockStyle,
   handlePayload,
   handlePlaybackPayload,
-  patchSettings,
   emitAction,
   getWordStyle,
 } = useDesktopLyricsDisplay(showDragShadow);
@@ -51,12 +39,7 @@ const {
   isPlaying,
   handlePayload,
   handlePlaybackPayload,
-  toolbarMenuVisible,
 });
-
-function handleToolbarMenuVisibilityChange(visible: boolean) {
-  toolbarMenuVisible.value = visible;
-}
 </script>
 
 <template>
@@ -69,18 +52,7 @@ function handleToolbarMenuVisibilityChange(visible: boolean) {
         <DesktopLyricsToolbar
           class="desktop-widget-toolbar"
           :is-playing="isPlaying"
-          :offset-label="offsetLabel"
-          :settings="settings"
-          :available-font-options="availableFontOptions"
-          :selected-font-label="selectedFontLabel"
-          :font-scale-label="fontScaleLabel"
-          :line-gap-label="lineGapLabel"
-          :offset-x-label="offsetXLabel"
-          :offset-y-label="offsetYLabel"
-          :alignment-options="DESKTOP_LYRICS_ALIGNMENT_OPTIONS"
           @action="emitAction"
-          @patch-settings="patchSettings"
-          @menu-visibility-change="handleToolbarMenuVisibilityChange"
         />
 
         <div

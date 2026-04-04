@@ -38,8 +38,10 @@ export function useDesktopLyricsWindowController(options: {
   const appWindow = getCurrentWindow();
   const isSystemHidden = ref(false);
   const isHoverDimmed = ref(false);
+  const isToolbarVisible = ref(false);
 
   let hoverDimTimer: ReturnType<typeof setTimeout> | null = null;
+  let toolbarHideTimer: ReturnType<typeof setTimeout> | null = null;
   let autoHideTimer: ReturnType<typeof setInterval> | null = null;
   let frameId = 0;
   let dragShadowTimer: ReturnType<typeof setTimeout> | null = null;
@@ -116,6 +118,33 @@ export function useDesktopLyricsWindowController(options: {
     }
   }
 
+  function clearToolbarHideTimer() {
+    if (toolbarHideTimer) {
+      clearTimeout(toolbarHideTimer);
+      toolbarHideTimer = null;
+    }
+  }
+
+  function revealToolbar() {
+    clearToolbarHideTimer();
+
+    if (settings.value.isLocked || isSystemHidden.value) {
+      isToolbarVisible.value = false;
+      return;
+    }
+
+    isToolbarVisible.value = true;
+  }
+
+  function hideToolbar(delay = 140) {
+    clearToolbarHideTimer();
+
+    toolbarHideTimer = setTimeout(() => {
+      isToolbarVisible.value = false;
+      toolbarHideTimer = null;
+    }, delay);
+  }
+
   function queueHoverDim() {
     clearHoverDimTimer();
 
@@ -129,6 +158,7 @@ export function useDesktopLyricsWindowController(options: {
   }
 
   function handlePointerEnter() {
+    revealToolbar();
     isHoverDimmed.value = false;
     queueHoverDim();
   }
@@ -138,6 +168,7 @@ export function useDesktopLyricsWindowController(options: {
       return;
     }
 
+    revealToolbar();
     isHoverDimmed.value = false;
     queueHoverDim();
   }
@@ -145,6 +176,7 @@ export function useDesktopLyricsWindowController(options: {
   function handlePointerLeave() {
     clearHoverDimTimer();
     isHoverDimmed.value = false;
+    hideToolbar();
   }
 
   async function startWindowDrag(event: MouseEvent) {
@@ -222,6 +254,7 @@ export function useDesktopLyricsWindowController(options: {
     stopPlaybackClock();
     stopAutoHideLoop();
     clearHoverDimTimer();
+    clearToolbarHideTimer();
     unlistenState?.();
     unlistenPlayback?.();
     unlistenCloseRequested?.();
@@ -237,6 +270,10 @@ export function useDesktopLyricsWindowController(options: {
   watch(
     () => [settings.value.isLocked, isSystemHidden.value],
     () => {
+      if (settings.value.isLocked || isSystemHidden.value) {
+        clearToolbarHideTimer();
+        isToolbarVisible.value = false;
+      }
       void applyTransientWindowFlags();
     },
     { immediate: true },
@@ -254,6 +291,7 @@ export function useDesktopLyricsWindowController(options: {
   return {
     showDragShadow,
     isSystemHidden,
+    isToolbarVisible,
     widgetShellStyle,
     handlePointerEnter,
     handlePointerMove,

@@ -27,6 +27,7 @@ const {
 
 const {
   isSystemHidden,
+  isToolbarVisible,
   widgetShellStyle,
   handlePointerEnter,
   handlePointerMove,
@@ -48,9 +49,13 @@ const {
       <div
         class="desktop-widget-shell relative h-full w-full transition-all duration-300"
         :style="widgetShellStyle"
+        @mouseenter="handlePointerEnter"
+        @mousemove="handlePointerMove"
+        @mouseleave="handlePointerLeave"
       >
         <DesktopLyricsToolbar
           class="desktop-widget-toolbar"
+          :class="{ 'desktop-widget-toolbar--visible': isToolbarVisible }"
           :is-playing="isPlaying"
           @action="emitAction"
         />
@@ -59,9 +64,6 @@ const {
           class="desktop-widget relative flex h-full w-full select-none flex-col overflow-hidden"
           :class="[lyricsAlignmentClass, { 'desktop-widget--dragging': showDragShadow }]"
           :style="widgetStyle"
-          @mouseenter="handlePointerEnter"
-          @mousemove="handlePointerMove"
-          @mouseleave="handlePointerLeave"
           @mousedown="startWindowDrag"
         >
           <div class="desktop-lyrics-body" :style="lyricsPlayerStyle">
@@ -138,7 +140,16 @@ const {
   top: 8px;
   left: 50%;
   z-index: 20;
-  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -10px) scale(0.96);
+  transition: opacity 180ms ease, transform 220ms ease;
+}
+
+.desktop-widget-toolbar--visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0) scale(1);
 }
 
 .desktop-widget {
